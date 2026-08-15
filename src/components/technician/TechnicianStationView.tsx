@@ -251,13 +251,19 @@ export const TechnicianStationView: React.FC = () => {
                                 <View style={[styles.lockedTaskBadge, currentRole === 'supervisor' && styles.supervisorLockedBadge]}>
                                   <Lock size={12} color={task.is_completed ? "#10b981" : currentRole === 'supervisor' ? "#38bdf8" : "#64748b"} />
                                   <Text style={[styles.lockedTaskBadgeText, task.is_completed && styles.lockedTaskDoneText, currentRole === 'supervisor' && styles.supervisorLockedText]}>
-                                    {currentRole === 'supervisor' 
-                                      ? (task.is_completed ? 'DONE ✓' : 'READ-ONLY')
-                                      : (isVehicleInInspectionOrFinished 
-                                          ? (task.is_completed ? 'DONE ✓' : 'LOCKED') 
-                                          : (task.is_completed ? 'DONE ✓' : 'OTHER BAY')
-                                        )
-                                    }
+                                    {task.is_completed
+                                      ? 'DONE ✓'
+                                      : isVehicleInInspectionOrFinished
+                                      ? 'LOCKED'
+                                      : currentRole === 'supervisor'
+                                      ? 'READ-ONLY'
+                                      : task.task_type === 'general_service'
+                                      ? 'TECH 1 ONLY'
+                                      : task.task_type === 'wheel_alignment'
+                                      ? 'TECH 2 ONLY'
+                                      : task.task_type === 'hoist_service'
+                                      ? 'TECH 3 ONLY'
+                                      : 'OTHER TECH'}
                                   </Text>
                                 </View>
                               )}
