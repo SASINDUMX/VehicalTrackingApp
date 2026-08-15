@@ -211,7 +211,12 @@ export const TechnicianStationView: React.FC = () => {
                           return (
                             <TouchableOpacity
                               key={task.id}
-                              style={[styles.taskRow, (!isMyBayTask || isVehicleInInspectionOrFinished) && styles.otherBayTaskRow]}
+                              style={[
+                                styles.taskRow,
+                                (!isMyBayTask || isVehicleInInspectionOrFinished) && styles.otherBayTaskRow,
+                                !isEditable && styles.disabledTaskRow,
+                                Platform.OS === 'web' && !isEditable && ({ cursor: 'not-allowed' } as any),
+                              ]}
                               activeOpacity={isEditable ? 0.7 : 1}
                               onPress={() => {
                                 if (isEditable) {
@@ -417,7 +422,8 @@ const styles = StyleSheet.create({
   remarksBodyText: { color: '#e2e8f0', fontSize: 13, lineHeight: 18, fontStyle: 'italic' },
   tasksSection: { gap: 8, borderTopWidth: 1, borderTopColor: 'rgba(255, 255, 255, 0.05)', paddingTop: 12 },
   taskRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'rgba(255, 255, 255, 0.02)', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.06)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 },
-  otherBayTaskRow: { backgroundColor: 'rgba(255, 255, 255, 0.01)', borderColor: 'rgba(255, 255, 255, 0.04)', opacity: 0.8 },
+  otherBayTaskRow: { backgroundColor: 'rgba(255, 255, 255, 0.01)', borderColor: 'rgba(255, 255, 255, 0.04)' },
+  disabledTaskRow: { opacity: 0.5, backgroundColor: 'rgba(0, 0, 0, 0.2)' },
   taskLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   taskName: { color: '#f8fafc', fontSize: 13, fontWeight: '600' },
   otherBayTaskName: { color: '#94a3b8' },
