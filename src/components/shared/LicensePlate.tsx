@@ -29,13 +29,14 @@ const styles = StyleSheet.create({
   plateContainer: {
     flexDirection: "row",
     backgroundColor: "#facc15",
-    borderRadius: 4,
+    borderRadius: 5,
     borderWidth: 1,
     borderColor: "#eab308",
     overflow: "hidden",
+    alignSelf: "flex-start",
   },
   plateSm: {
-    borderRadius: 3,
+    borderRadius: 4,
   },
   plateLg: {
     borderRadius: 6,
@@ -43,18 +44,18 @@ const styles = StyleSheet.create({
   },
   leftBar: {
     backgroundColor: "#1d4ed8",
-    paddingHorizontal: 4,
-    paddingVertical: 2,
+    paddingHorizontal: 5,
+    paddingVertical: 3,
     alignItems: "center",
     justifyContent: "center",
   },
   leftBarSm: {
-    paddingHorizontal: 3,
-    paddingVertical: 1,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
   },
   leftBarLg: {
-    paddingHorizontal: 6,
-    paddingVertical: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 5,
   },
   flagText: {
     fontSize: 10,
@@ -68,27 +69,28 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontSize: 8,
     fontWeight: "800",
+    marginTop: 1,
   },
   countryCodeSm: {
     fontSize: 7,
   },
   rightArea: {
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     paddingVertical: 3,
     justifyContent: "center",
   },
   rightAreaSm: {
-    paddingHorizontal: 6,
+    paddingHorizontal: 7,
     paddingVertical: 2,
   },
   rightAreaLg: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 6,
   },
   plateNumberText: {
     color: "#000000",
     fontWeight: "800",
-    fontSize: 13,
+    fontSize: 14,
     fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
     letterSpacing: 0.5,
   },
@@ -96,7 +98,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   plateTextLg: {
-    fontSize: 16,
+    fontSize: 17,
     letterSpacing: 1,
   },
 });

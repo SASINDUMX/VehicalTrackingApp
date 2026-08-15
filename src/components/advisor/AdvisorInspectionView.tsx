@@ -6,6 +6,7 @@ import { Vehicle } from '../../types/vehicle';
 import { ShieldCheck, Clock, FileCheck, Sparkles, CheckCircle2, Clock3, ChevronDown, ChevronUp, History, XCircle } from 'lucide-react-native';
 import { LicensePlate } from '../shared/LicensePlate';
 import { EmptyStateCard } from '../shared/EmptyStateCard';
+import { TimerPill } from '../shared/TimerPill';
 
 export const AdvisorInspectionView: React.FC = () => {
   const { vehicles, finishVehicleJobSheet, setSelectedVehicle, searchQuery } = useVehicles();
@@ -78,12 +79,7 @@ export const AdvisorInspectionView: React.FC = () => {
                   <LicensePlate number={vehicle.vehicle_no} size="md" />
 
                   <View style={styles.headerRightGroup}>
-                    <View style={styles.tatBox}>
-                      <View style={styles.tatRow}>
-                        <Clock3 size={14} color="#fbbf24" />
-                        <Text style={styles.tatText}>{calculateTotalTAT(vehicle)}</Text>
-                      </View>
-                    </View>
+                    <TimerPill elapsedText={calculateTotalTAT(vehicle)} variant="amber" size="md" />
 
                     <View style={styles.chevronWrapper}>
                       {isExpanded ? <ChevronUp size={20} color="#94a3b8" /> : <ChevronDown size={20} color="#94a3b8" />}

@@ -7,6 +7,7 @@ import { Save, CheckSquare, Square, Pencil, CheckCircle2, Clock, Car, ChevronDow
 import { BayZone } from '../../types/vehicle';
 import { LicensePlate } from '../shared/LicensePlate';
 import { EmptyStateCard } from '../shared/EmptyStateCard';
+import { TimerPill } from '../shared/TimerPill';
 
 interface PendingTransfer {
   vehicleId: string;
@@ -158,12 +159,7 @@ export const TechnicianStationView: React.FC = () => {
 
                       <View style={styles.headerRightGroup}>
                         {/* Live Station Timer Pill */}
-                        <View style={styles.timerPill}>
-                          <Clock size={12} color="#22d3ee" />
-                          <Text style={styles.timerPillText}>
-                            {elapsedTimes[vehicle.id] || '0m 00s'}
-                          </Text>
-                        </View>
+                        <TimerPill elapsedText={elapsedTimes[vehicle.id] || '0m 00s'} variant="cyan" size="md" />
 
                         {/* Expand / Collapse Chevron Icon */}
                         <View style={styles.chevronWrapper}>

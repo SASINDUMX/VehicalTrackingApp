@@ -6,6 +6,7 @@ import { BayZone } from '../../types/vehicle';
 import { Wrench, ShieldAlert, Navigation, CheckCircle, Clock, Plus, Car, Radio, Search, X, FileCheck } from 'lucide-react-native';
 import { LicensePlate } from '../shared/LicensePlate';
 import { EmptyStateCard } from '../shared/EmptyStateCard';
+import { TimerPill } from '../shared/TimerPill';
 
 interface BayItem {
   id: BayZone;
@@ -166,13 +167,7 @@ export const FloorPlan2D: React.FC = () => {
                                 activeOpacity={0.8}
                               >
                               <LicensePlate number={vehicle.vehicle_no} size="sm" />
-
-                              <View style={styles.spatialTimerPill}>
-                                <Clock size={10} color="#22d3ee" />
-                                <Text style={styles.spatialTimerText}>
-                                  {elapsedTimes[vehicle.id] || '0m 00s'}
-                                </Text>
-                              </View>
+                              <TimerPill elapsedText={elapsedTimes[vehicle.id] || '0m 00s'} variant="cyan" size="sm" />
 
                               <View style={styles.spatialProgressBar}>
                                 <View
