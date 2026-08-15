@@ -7,13 +7,13 @@ import { ShieldCheck, Clock, FileCheck, Sparkles, CheckCircle2, Clock3, ChevronD
 import { LicensePlate } from '../shared/LicensePlate';
 import { EmptyStateCard } from '../shared/EmptyStateCard';
 import { TimerPill } from '../shared/TimerPill';
+import { matchesVehicleSearch } from '../../utils/searchUtils';
+import { formatTotalTATString } from '../../utils/vehicleUtils';
 
 export const AdvisorInspectionView: React.FC = () => {
   const { vehicles, finishVehicleJobSheet, setSelectedVehicle, searchQuery } = useVehicles();
   const { canFinishJob } = usePermissions();
   const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
-
-  const normalizeStr = (str: string) => str.toLowerCase().replace(/[^a-z0-9]/g, '');
 
   const toggleExpand = (id: string) => {
     setExpandedCards(prev => ({ ...prev, [id]: !prev[id] }));
@@ -22,12 +22,7 @@ export const AdvisorInspectionView: React.FC = () => {
   const readyVehicles = vehicles
     .filter(v => {
       const isReady = v.current_zone === 'inspection' || v.is_finished;
-      if (!searchQuery.trim()) return isReady;
-      const q = normalizeStr(searchQuery);
-      return isReady && (
-        normalizeStr(v.vehicle_no).includes(q) ||
-        normalizeStr(v.model).includes(q)
-      );
+      return isReady && matchesVehicleSearch(v.vehicle_no, v.model, searchQuery);
     });
 
   const calculateTotalTAT = (vehicle: Vehicle) => {
@@ -79,7 +74,7 @@ export const AdvisorInspectionView: React.FC = () => {
                   <LicensePlate number={vehicle.vehicle_no} size="md" />
 
                   <View style={styles.headerRightGroup}>
-                    <TimerPill elapsedText={calculateTotalTAT(vehicle)} variant="amber" size="md" />
+                    <TimerPill elapsedText={formatTotalTATString(vehicle)} variant="amber" size="md" />
 
                     <View style={styles.chevronWrapper}>
                       {isExpanded ? <ChevronUp size={20} color="#94a3b8" /> : <ChevronDown size={20} color="#94a3b8" />}

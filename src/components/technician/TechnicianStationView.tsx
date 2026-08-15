@@ -8,6 +8,7 @@ import { BayZone } from '../../types/vehicle';
 import { LicensePlate } from '../shared/LicensePlate';
 import { EmptyStateCard } from '../shared/EmptyStateCard';
 import { TimerPill } from '../shared/TimerPill';
+import { calculateJobSheetProgress } from '../../utils/vehicleUtils';
 
 interface PendingTransfer {
   vehicleId: string;
@@ -117,9 +118,7 @@ export const TechnicianStationView: React.FC = () => {
         ) : (
           <View style={styles.cardsGrid}>
             {bayVehicles.map((vehicle) => {
-              const completedCount = vehicle.tasks.filter(t => t.is_completed).length;
-              const totalReq = vehicle.tasks.filter(t => t.is_required).length;
-              const percent = totalReq ? Math.round((completedCount / totalReq) * 100) : 0;
+              const { completedCount, totalRequired: totalReq, percent } = calculateJobSheetProgress(vehicle.tasks);
               const isExpanded = Boolean(expandedCards[vehicle.id]);
 
               // Filter ONLY the task assigned to this active bay

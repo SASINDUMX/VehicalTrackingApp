@@ -7,6 +7,7 @@ import { Wrench, ShieldAlert, Navigation, CheckCircle, Clock, Plus, Car, Radio, 
 import { LicensePlate } from '../shared/LicensePlate';
 import { EmptyStateCard } from '../shared/EmptyStateCard';
 import { TimerPill } from '../shared/TimerPill';
+import { calculateJobSheetProgress, getTaskTypeForBay } from '../../utils/vehicleUtils';
 
 interface BayItem {
   id: BayZone;
@@ -143,19 +144,8 @@ export const FloorPlan2D: React.FC = () => {
                       ) : (
                         <View style={styles.bayVehicleContainer}>
                           {bayVehicles.map((vehicle) => {
-                            const completedCount = vehicle.tasks.filter(t => t.is_completed).length;
-                            const totalReq = vehicle.tasks.filter(t => t.is_required).length;
-                            const percent = totalReq ? Math.round((completedCount / totalReq) * 100) : 0;
-
-                            const getBayTaskType = (zone: string) => {
-                              switch (zone) {
-                                case 'workshop': return 'general_service';
-                                case 'hoist': return 'hoist_service';
-                                case 'alignment': return 'wheel_alignment';
-                                default: return 'general_service';
-                              }
-                            };
-                            const currentBayTaskType = getBayTaskType(vehicle.current_zone);
+                            const { completedCount, totalRequired: totalReq, percent } = calculateJobSheetProgress(vehicle.tasks);
+                            const currentBayTaskType = getTaskTypeForBay(vehicle.current_zone);
                             const currentTask = vehicle.tasks.find(t => t.task_type === currentBayTaskType);
                             const isCurrentTaskDone = Boolean(currentTask && currentTask.is_completed);
 
