@@ -236,7 +236,7 @@ export const TechnicianStationView: React.FC = () => {
                                 </Text>
                               </View>
 
-                              {isMyBayTask && !isVehicleInInspectionOrFinished ? (
+                              {isEditable ? (
                                 <View
                                   style={[
                                     styles.taskDoneBtn,
@@ -248,10 +248,16 @@ export const TechnicianStationView: React.FC = () => {
                                   </Text>
                                 </View>
                               ) : (
-                                <View style={styles.lockedTaskBadge}>
-                                  <Lock size={12} color={task.is_completed ? "#10b981" : "#64748b"} />
-                                  <Text style={[styles.lockedTaskBadgeText, task.is_completed && styles.lockedTaskDoneText]}>
-                                    {isVehicleInInspectionOrFinished ? (task.is_completed ? 'DONE ✓' : 'LOCKED') : (task.is_completed ? 'DONE ✓' : 'OTHER BAY')}
+                                <View style={[styles.lockedTaskBadge, currentRole === 'supervisor' && styles.supervisorLockedBadge]}>
+                                  <Lock size={12} color={task.is_completed ? "#10b981" : currentRole === 'supervisor' ? "#38bdf8" : "#64748b"} />
+                                  <Text style={[styles.lockedTaskBadgeText, task.is_completed && styles.lockedTaskDoneText, currentRole === 'supervisor' && styles.supervisorLockedText]}>
+                                    {currentRole === 'supervisor' 
+                                      ? (task.is_completed ? 'DONE ✓' : 'READ-ONLY')
+                                      : (isVehicleInInspectionOrFinished 
+                                          ? (task.is_completed ? 'DONE ✓' : 'LOCKED') 
+                                          : (task.is_completed ? 'DONE ✓' : 'OTHER BAY')
+                                        )
+                                    }
                                   </Text>
                                 </View>
                               )}
@@ -431,7 +437,9 @@ const styles = StyleSheet.create({
   taskDoneBtn: { backgroundColor: '#0ea5e9', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
   taskDoneBtnText: { color: '#ffffff', fontSize: 11, fontWeight: '700' },
   lockedTaskBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255, 255, 255, 0.03)', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.08)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  supervisorLockedBadge: { backgroundColor: 'rgba(14, 165, 233, 0.12)', borderColor: 'rgba(14, 165, 233, 0.3)' },
   lockedTaskBadgeText: { color: '#64748b', fontSize: 10, fontWeight: '800' },
+  supervisorLockedText: { color: '#38bdf8' },
   lockedTaskDoneText: { color: '#10b981' },
   taskFinishedBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(16, 185, 129, 0.15)', borderWidth: 1, borderColor: 'rgba(16, 185, 129, 0.3)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
   taskFinishedText: { color: '#10b981', fontSize: 10, fontWeight: '800' },
