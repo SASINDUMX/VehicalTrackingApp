@@ -8,6 +8,8 @@ import {
   Clock, CheckCircle2, Circle, ArrowRight, UserCheck, Calendar
 } from 'lucide-react-native';
 
+import { LicensePlate } from './LicensePlate';
+
 const STAGE_ORDER: { zone: BayZone; name: string; code: string; icon: any; color: string }[] = [
   { zone: 'workshop', name: 'General Workshop Bay', code: 'BAY 01', icon: Wrench, color: '#06b6d4' },
   { zone: 'alignment', name: 'Wheel Alignment Bay', code: 'BAY 03', icon: Navigation, color: '#10b981' },
@@ -145,9 +147,7 @@ export const VehicleDetailsModal: React.FC = () => {
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerLeftRow}>
-              <View style={styles.plateBadge}>
-                <Text style={styles.plateText}>{selectedVehicle.vehicle_no}</Text>
-              </View>
+              <LicensePlate number={selectedVehicle.vehicle_no} size="md" />
             </View>
 
             <View style={styles.headerRightRow}>

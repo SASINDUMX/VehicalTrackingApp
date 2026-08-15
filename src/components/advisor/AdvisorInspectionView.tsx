@@ -4,6 +4,8 @@ import { useVehicles } from '../../context/VehicleContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { Vehicle } from '../../types/vehicle';
 import { ShieldCheck, Clock, FileCheck, Sparkles, CheckCircle2, Clock3, ChevronDown, ChevronUp, History, XCircle } from 'lucide-react-native';
+import { LicensePlate } from '../shared/LicensePlate';
+import { EmptyStateCard } from '../shared/EmptyStateCard';
 
 export const AdvisorInspectionView: React.FC = () => {
   const { vehicles, finishVehicleJobSheet, setSelectedVehicle, searchQuery } = useVehicles();
@@ -18,30 +20,24 @@ export const AdvisorInspectionView: React.FC = () => {
 
   const readyVehicles = vehicles
     .filter(v => {
-      const matchesInspection = v.current_zone === 'inspection' && !v.is_finished;
-      if (!searchQuery.trim()) return matchesInspection;
-      const normQ = normalizeStr(searchQuery);
-      const matchesPlate = normalizeStr(v.vehicle_no).includes(normQ) || v.vehicle_no.toLowerCase().includes(searchQuery.toLowerCase().trim());
-      return matchesInspection && matchesPlate;
-    })
-    .sort((a, b) => {
-      const lastLogA = a.stage_logs[a.stage_logs.length - 1];
-      const lastLogB = b.stage_logs[b.stage_logs.length - 1];
-      const timeA = lastLogA?.entered_at ? new Date(lastLogA.entered_at).getTime() : new Date(a.intake_at).getTime();
-      const timeB = lastLogB?.entered_at ? new Date(lastLogB.entered_at).getTime() : new Date(b.intake_at).getTime();
-      return timeA - timeB; // Earliest station arrival first (FIFO)
+      const isReady = v.current_zone === 'inspection' || v.is_finished;
+      if (!searchQuery.trim()) return isReady;
+      const q = normalizeStr(searchQuery);
+      return isReady && (
+        normalizeStr(v.vehicle_no).includes(q) ||
+        normalizeStr(v.model).includes(q)
+      );
     });
 
-  const calculateTotalTAT = (v: Vehicle) => {
-    const start = new Date(v.intake_at).getTime();
-    const end = v.completed_at ? new Date(v.completed_at).getTime() : Date.now();
+  const calculateTotalTAT = (vehicle: Vehicle) => {
+    const start = new Date(vehicle.intake_at).getTime();
+    const end = vehicle.completed_at ? new Date(vehicle.completed_at).getTime() : Date.now();
     const diffSec = Math.max(0, Math.floor((end - start) / 1000));
-    const hrs = Math.floor(diffSec / 3600);
+
+    const hours = Math.floor(diffSec / 3600);
     const mins = Math.floor((diffSec % 3600) / 60);
-    if (hrs > 0) {
-      return `${hrs}h ${mins}m`;
-    }
-    return `${mins}m`;
+
+    return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
   };
 
   const formatDurationStr = (sec: number) => {
@@ -61,15 +57,11 @@ export const AdvisorInspectionView: React.FC = () => {
       showsHorizontalScrollIndicator={false}
     >
       {readyVehicles.length === 0 ? (
-        <View style={styles.emptyCard}>
-          <FileCheck size={48} color="#475569" />
-          <Text style={styles.emptyTitle}>
-            {searchQuery.trim() ? `No matching vehicles for "${searchQuery}"` : 'All Job Sheets Cleared'}
-          </Text>
-          <Text style={styles.emptySub}>
-            {searchQuery.trim() ? 'Try searching another license plate number.' : 'No vehicles currently pending advisor final inspection or delivery.'}
-          </Text>
-        </View>
+        <EmptyStateCard
+          icon={FileCheck}
+          title={searchQuery.trim() ? `No matching vehicles for "${searchQuery}"` : 'All Job Sheets Cleared'}
+          subtitle={searchQuery.trim() ? 'Try searching another license plate number.' : 'No vehicles currently pending advisor final inspection or delivery.'}
+        />
       ) : (
         <View style={styles.cardsGrid}>
           {readyVehicles.map((vehicle) => {
@@ -83,15 +75,7 @@ export const AdvisorInspectionView: React.FC = () => {
                   onPress={() => toggleExpand(vehicle.id)}
                   activeOpacity={0.8}
                 >
-                  <View style={styles.licensePlateContainer}>
-                    <View style={styles.plateLeftBar}>
-                      <Text style={styles.plateFlag}>🇱🇰</Text>
-                      <Text style={styles.plateCountryCode}>LK</Text>
-                    </View>
-                    <View style={styles.plateRightArea}>
-                      <Text style={styles.plateText}>{vehicle.vehicle_no}</Text>
-                    </View>
-                  </View>
+                  <LicensePlate number={vehicle.vehicle_no} size="md" />
 
                   <View style={styles.headerRightGroup}>
                     <View style={styles.tatBox}>

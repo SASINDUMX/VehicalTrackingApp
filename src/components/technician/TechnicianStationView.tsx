@@ -5,6 +5,8 @@ import { usePermissions } from '../../hooks/usePermissions';
 import { getRoleBay, getTechName } from '../../constants/bays';
 import { Save, CheckSquare, Square, Pencil, CheckCircle2, Clock, Car, ChevronDown, ChevronUp, History, AlertTriangle, Lock, MessageSquare } from 'lucide-react-native';
 import { BayZone } from '../../types/vehicle';
+import { LicensePlate } from '../shared/LicensePlate';
+import { EmptyStateCard } from '../shared/EmptyStateCard';
 
 interface PendingTransfer {
   vehicleId: string;
@@ -106,15 +108,11 @@ export const TechnicianStationView: React.FC = () => {
             <Text style={[styles.emptyTitle, { marginTop: 8 }]}>Syncing Workshop Telemetry...</Text>
           </View>
         ) : bayVehicles.length === 0 ? (
-          <View style={styles.emptyCard}>
-            <Car size={36} color="#334155" />
-            <Text style={styles.emptyTitle}>
-              {searchQuery.trim() ? `No matching vehicles for "${searchQuery}"` : 'Bay Currently Clear'}
-            </Text>
-            <Text style={styles.emptySub}>
-              {searchQuery.trim() ? 'Try searching another license plate number.' : 'No vehicles currently assigned to this station.'}
-            </Text>
-          </View>
+          <EmptyStateCard
+            icon={Car}
+            title={searchQuery.trim() ? `No matching vehicles for "${searchQuery}"` : 'Bay Currently Clear'}
+            subtitle={searchQuery.trim() ? 'Try searching another license plate number.' : 'No vehicles currently assigned to this station.'}
+          />
         ) : (
           <View style={styles.cardsGrid}>
             {bayVehicles.map((vehicle) => {
@@ -156,15 +154,7 @@ export const TechnicianStationView: React.FC = () => {
                   >
                     <View style={styles.cardTopRow}>
                       {/* Sri Lankan License Plate Badge */}
-                      <View style={styles.plateWrapper}>
-                        <View style={styles.plateLeftBar}>
-                          <Text style={styles.plateFlag}>🇱🇰</Text>
-                          <Text style={styles.plateCountryCode}>LK</Text>
-                        </View>
-                        <View style={styles.plateRightArea}>
-                          <Text style={styles.plateText}>{vehicle.vehicle_no}</Text>
-                        </View>
-                      </View>
+                      <LicensePlate number={vehicle.vehicle_no} size="md" />
 
                       <View style={styles.headerRightGroup}>
                         {/* Live Station Timer Pill */}

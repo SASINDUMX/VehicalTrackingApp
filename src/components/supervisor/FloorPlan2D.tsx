@@ -4,6 +4,8 @@ import { useVehicles } from '../../context/VehicleContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { BayZone } from '../../types/vehicle';
 import { Wrench, ShieldAlert, Navigation, CheckCircle, Clock, Plus, Car, Radio, Search, X, FileCheck } from 'lucide-react-native';
+import { LicensePlate } from '../shared/LicensePlate';
+import { EmptyStateCard } from '../shared/EmptyStateCard';
 
 interface BayItem {
   id: BayZone;
@@ -97,11 +99,11 @@ export const FloorPlan2D: React.FC = () => {
           {/* Spatial 2D Workshop Bays */}
           <View style={styles.spatialGrid}>
             {isSearchActive && totalMatchingVehicles === 0 ? (
-              <View style={styles.noSearchMatchCard}>
-                <FileCheck size={48} color="#475569" />
-                <Text style={styles.noSearchMatchTitle}>No matching vehicles for "{searchQuery}"</Text>
-                <Text style={styles.noSearchMatchSub}>Try searching another license plate number.</Text>
-              </View>
+              <EmptyStateCard
+                icon={FileCheck}
+                title={`No matching vehicles for "${searchQuery}"`}
+                subtitle="Try searching another license plate number."
+              />
             ) : (
               bays.map((bay) => {
                 const IconComp = bay.icon;
@@ -163,15 +165,7 @@ export const FloorPlan2D: React.FC = () => {
                                 onPress={() => setSelectedVehicle(vehicle)}
                                 activeOpacity={0.8}
                               >
-                              <View style={styles.plateWrapper}>
-                                <View style={styles.plateLeftBar}>
-                                  <Text style={styles.plateFlag}>🇱🇰</Text>
-                                  <Text style={styles.plateCountryCode}>LK</Text>
-                                </View>
-                                <View style={styles.plateRightArea}>
-                                  <Text style={styles.plateText}>{vehicle.vehicle_no}</Text>
-                                </View>
-                              </View>
+                              <LicensePlate number={vehicle.vehicle_no} size="sm" />
 
                               <View style={styles.spatialTimerPill}>
                                 <Clock size={10} color="#22d3ee" />
