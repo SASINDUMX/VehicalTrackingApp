@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import { supabase, isSupabaseConnected } from '../lib/supabase';
 import { UserRole } from '../types/vehicle';
 
@@ -24,7 +24,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
 
-  const fetchProfile = async (userId: string) => {
+  const fetchProfile = useCallback(async (userId: string) => {
     if (!supabase) return null;
     try {
       const { data, error } = await supabase
@@ -42,7 +42,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       console.warn('Profile fetch failed:', err);
       return null;
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (!supabase || !isSupabaseConnected) {
@@ -75,9 +75,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return () => {
       subscription.unsubscribe();
     };
-  }, []);
+  }, [fetchProfile]);
 
-  const signIn = async (email: string, password: string): Promise<{ error: string | null }> => {
+  const signIn = useCallback(async (email: string, password: string): Promise<{ error: string | null }> => {
     if (!supabase) {
       return { error: 'Supabase is not connected. Check your configuration.' };
     }
@@ -105,27 +105,27 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (err: any) {
       return { error: err.message || 'Sign in failed' };
     }
-  };
+  }, [fetchProfile]);
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     if (supabase) {
       await supabase.auth.signOut();
     }
     setUser(null);
     setUserProfile(null);
-  };
+  }, []);
+
+  const value = useMemo(() => ({
+    user,
+    userProfile,
+    isAuthenticated: Boolean(user && userProfile),
+    isAuthLoading,
+    signIn,
+    signOut,
+  }), [user, userProfile, isAuthLoading, signIn, signOut]);
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        userProfile,
-        isAuthenticated: Boolean(user && userProfile),
-        isAuthLoading,
-        signIn,
-        signOut,
-      }}
-    >
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

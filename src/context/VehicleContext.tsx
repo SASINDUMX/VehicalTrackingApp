@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import { Platform } from 'react-native';
 import { Vehicle, UserRole, BayZone, TaskType, VehicleTask } from '../types/vehicle';
 import { INITIAL_MOCK_VEHICLES } from '../lib/mockData';
@@ -508,30 +508,48 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
     );
   };
 
+  const value = useMemo(
+    () => ({
+      vehicles,
+      currentRole,
+      setCurrentRole,
+      selectedVehicle,
+      setSelectedVehicle,
+      isAddModalOpen,
+      setIsAddModalOpen,
+      isConfigModalOpen,
+      setIsConfigModalOpen,
+      searchQuery,
+      setSearchQuery,
+      addVehicle,
+      updateVehicleJobOrder,
+      toggleTaskCompletion,
+      transferVehicleZone,
+      finishVehicleJobSheet,
+      refreshVehicles: fetchSupabaseData,
+      isLoading,
+      isRealtimeConnected,
+    }),
+    [
+      vehicles,
+      currentRole,
+      selectedVehicle,
+      isAddModalOpen,
+      isConfigModalOpen,
+      searchQuery,
+      addVehicle,
+      updateVehicleJobOrder,
+      toggleTaskCompletion,
+      transferVehicleZone,
+      finishVehicleJobSheet,
+      fetchSupabaseData,
+      isLoading,
+      isRealtimeConnected,
+    ]
+  );
+
   return (
-    <VehicleContext.Provider
-      value={{
-        vehicles,
-        currentRole,
-        setCurrentRole,
-        selectedVehicle,
-        setSelectedVehicle,
-        isAddModalOpen,
-        setIsAddModalOpen,
-        isConfigModalOpen,
-        setIsConfigModalOpen,
-        searchQuery,
-        setSearchQuery,
-        addVehicle,
-        updateVehicleJobOrder,
-        toggleTaskCompletion,
-        transferVehicleZone,
-        finishVehicleJobSheet,
-        refreshVehicles: fetchSupabaseData,
-        isLoading,
-        isRealtimeConnected
-      }}
-    >
+    <VehicleContext.Provider value={value}>
       {children}
     </VehicleContext.Provider>
   );

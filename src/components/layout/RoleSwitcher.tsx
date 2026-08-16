@@ -104,7 +104,7 @@ export const SegmentedTabs: React.FC = () => {
           activeOpacity={0.7}
         >
           <Text style={[styles.segmentBtnText, currentRole === 'supervisor' && styles.activeBtnText]}>
-            Floor
+            Overview
           </Text>
         </TouchableOpacity>
 

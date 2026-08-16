@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { ShieldCheck, Clock, FileCheck, Sparkles, CheckCircle2, Clock3, ChevronDown, ChevronUp, History, XCircle } from 'lucide-react-native';
 import { LicensePlate } from '../shared/LicensePlate';
 import { EmptyStateCard } from '../shared/EmptyStateCard';
@@ -7,7 +7,7 @@ import { TimerPill } from '../shared/TimerPill';
 import { formatTotalTATString } from '../../utils/vehicleUtils';
 import { useAdvisorInspection } from '../../hooks/useAdvisorInspection';
 
-export const AdvisorInspectionView: React.FC = () => {
+export const AdvisorInspectionView: React.FC = React.memo(() => {
   const {
     readyVehicles,
     expandedCards,
@@ -17,104 +17,110 @@ export const AdvisorInspectionView: React.FC = () => {
     finishVehicleJobSheet,
     setSelectedVehicle,
   } = useAdvisorInspection();
+
+  const renderVehicleCard = ({ item: vehicle }: { item: any }) => {
+    const isExpanded = Boolean(expandedCards[vehicle.id]);
+
+    return (
+      <View key={vehicle.id} style={styles.mainCard}>
+        {/* Clickable Header Area to Expand / Collapse */}
+        <TouchableOpacity
+          style={styles.cardHeader}
+          onPress={() => toggleExpand(vehicle.id)}
+          activeOpacity={0.8}
+        >
+          <LicensePlate number={vehicle.vehicle_no} size="md" />
+
+          <View style={styles.headerRightGroup}>
+            <TimerPill elapsedText={formatTotalTATString(vehicle)} variant="amber" size="md" />
+
+            <View style={styles.chevronWrapper}>
+              {isExpanded ? <ChevronUp size={20} color="#94a3b8" /> : <ChevronDown size={20} color="#94a3b8" />}
+            </View>
+          </View>
+        </TouchableOpacity>
+
+        {/* EXPANDED DETAILS CONTENT */}
+        {isExpanded && (
+          <>
+            {/* Task Audit Summary */}
+            <View style={styles.section}>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionTitle}>TASK AUDIT LOG</Text>
+                <TouchableOpacity
+                  style={styles.auditLogLink}
+                  onPress={() => setSelectedVehicle(vehicle)}
+                >
+                  <History size={12} color="#38bdf8" />
+                  <Text style={styles.auditLogLinkText}>Full Audit Log</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.auditList}>
+                {vehicle.tasks.filter((t: any) => t.is_required).map((t: any) => (
+                  <View key={t.id} style={styles.taskAuditRow}>
+                    <Text style={[styles.taskName, !t.is_completed && styles.taskNameCancelled]}>
+                      {t.task_name}
+                    </Text>
+                    {t.is_completed ? (
+                      <View style={[styles.statusPill, styles.statusDoneBg]}>
+                        <CheckCircle2 size={12} color="#10b981" />
+                        <Text style={[styles.statusText, styles.statusDone]}>DONE</Text>
+                      </View>
+                    ) : (
+                      <View style={[styles.statusPill, styles.statusCancelledBg]}>
+                        <XCircle size={12} color="#ef4444" />
+                        <Text style={[styles.statusText, styles.statusCancelled]}>CANCELLED</Text>
+                      </View>
+                    )}
+                  </View>
+                ))}
+              </View>
+            </View>
+
+            {/* Finish & Deliver Action */}
+            <TouchableOpacity
+              style={[styles.deliverBtn, !canFinishJob && { opacity: 0.4, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }]}
+              onPress={() => {
+                if (canFinishJob) finishVehicleJobSheet(vehicle.id, 'Service Advisor');
+              }}
+              activeOpacity={canFinishJob ? 0.7 : 1}
+            >
+              <Sparkles size={18} color="#ffffff" />
+              <Text style={styles.deliverText}>
+                {canFinishJob ? 'FINISH JOB & HANDOVER VEHICLE ✓' : 'ADVISOR ACCESS REQUIRED'}
+              </Text>
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
+    );
+  };
+
+  if (readyVehicles.length === 0) {
+    return (
+      <EmptyStateCard
+        icon={FileCheck}
+        title={searchQuery.trim() ? `No matching vehicles for "${searchQuery}"` : 'All Job Sheets Cleared'}
+        subtitle={searchQuery.trim() ? 'Try searching another license plate number.' : 'No vehicles currently pending advisor final inspection or delivery.'}
+      />
+    );
+  }
+
   return (
-    <ScrollView
+    <FlatList
+      data={readyVehicles}
+      keyExtractor={(item) => item.id}
+      renderItem={renderVehicleCard}
+      initialNumToRender={8}
+      maxToRenderPerBatch={10}
+      windowSize={5}
       style={styles.container}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
-      showsHorizontalScrollIndicator={false}
-    >
-      {readyVehicles.length === 0 ? (
-        <EmptyStateCard
-          icon={FileCheck}
-          title={searchQuery.trim() ? `No matching vehicles for "${searchQuery}"` : 'All Job Sheets Cleared'}
-          subtitle={searchQuery.trim() ? 'Try searching another license plate number.' : 'No vehicles currently pending advisor final inspection or delivery.'}
-        />
-      ) : (
-        <View style={styles.cardsGrid}>
-          {readyVehicles.map((vehicle) => {
-            const isExpanded = Boolean(expandedCards[vehicle.id]);
-
-            return (
-              <View key={vehicle.id} style={styles.mainCard}>
-                {/* Clickable Header Area to Expand / Collapse */}
-                <TouchableOpacity
-                  style={styles.cardHeader}
-                  onPress={() => toggleExpand(vehicle.id)}
-                  activeOpacity={0.8}
-                >
-                  <LicensePlate number={vehicle.vehicle_no} size="md" />
-
-                  <View style={styles.headerRightGroup}>
-                    <TimerPill elapsedText={formatTotalTATString(vehicle)} variant="amber" size="md" />
-
-                    <View style={styles.chevronWrapper}>
-                      {isExpanded ? <ChevronUp size={20} color="#94a3b8" /> : <ChevronDown size={20} color="#94a3b8" />}
-                    </View>
-                  </View>
-                </TouchableOpacity>
-
-                {/* EXPANDED DETAILS CONTENT */}
-                {isExpanded && (
-                  <>
-                    {/* Task Audit Summary */}
-                    <View style={styles.section}>
-                      <View style={styles.sectionHeaderRow}>
-                        <Text style={styles.sectionTitle}>TASK AUDIT LOG</Text>
-                        <TouchableOpacity
-                          style={styles.auditLogLink}
-                          onPress={() => setSelectedVehicle(vehicle)}
-                        >
-                          <History size={12} color="#38bdf8" />
-                          <Text style={styles.auditLogLinkText}>Full Audit Log</Text>
-                        </TouchableOpacity>
-                      </View>
-
-                      <View style={styles.auditList}>
-                        {vehicle.tasks.filter(t => t.is_required).map(t => (
-                          <View key={t.id} style={styles.taskAuditRow}>
-                            <Text style={[styles.taskName, !t.is_completed && styles.taskNameCancelled]}>
-                              {t.task_name}
-                            </Text>
-                            {t.is_completed ? (
-                              <View style={[styles.statusPill, styles.statusDoneBg]}>
-                                <CheckCircle2 size={12} color="#10b981" />
-                                <Text style={[styles.statusText, styles.statusDone]}>DONE</Text>
-                              </View>
-                            ) : (
-                              <View style={[styles.statusPill, styles.statusCancelledBg]}>
-                                <XCircle size={12} color="#ef4444" />
-                                <Text style={[styles.statusText, styles.statusCancelled]}>CANCELLED</Text>
-                              </View>
-                            )}
-                          </View>
-                        ))}
-                      </View>
-                    </View>
-
-                    {/* Finish & Deliver Action */}
-                    <TouchableOpacity
-                      style={[styles.deliverBtn, !canFinishJob && { opacity: 0.4, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }]}
-                      onPress={() => {
-                        if (canFinishJob) finishVehicleJobSheet(vehicle.id, 'Service Advisor');
-                      }}
-                      activeOpacity={canFinishJob ? 0.7 : 1}
-                    >
-                      <Sparkles size={18} color="#ffffff" />
-                      <Text style={styles.deliverText}>
-                        {canFinishJob ? 'FINISH JOB & HANDOVER VEHICLE ✓' : 'ADVISOR ACCESS REQUIRED'}
-                      </Text>
-                    </TouchableOpacity>
-                  </>
-                )}
-              </View>
-            );
-          })}
-        </View>
-      )}
-    </ScrollView>
+    />
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: { flex: 1 },

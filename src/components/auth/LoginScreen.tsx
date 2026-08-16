@@ -145,7 +145,7 @@ export const LoginScreen: React.FC = () => {
             ) : (
               <>
                 <LogIn size={18} color="#ffffff" />
-                <Text style={styles.signInText}>Secure Login</Text>
+                <Text style={styles.signInText}>Login</Text>
               </>
             )}
           </TouchableOpacity>
@@ -185,7 +185,7 @@ export const LoginScreen: React.FC = () => {
 
         {/* Footer */}
         <Text style={styles.footer}>
-          Secure Automotive Dashboard v2.0
+          v1.0
         </Text>
       </ScrollView>
     </KeyboardAvoidingView>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet, Platform, ActivityIndicator } from 'react-native';
 import { Save, CheckSquare, Square, Pencil, CheckCircle2, Clock, Car, ChevronDown, ChevronUp, History, AlertTriangle, Lock, MessageSquare } from 'lucide-react-native';
 import { LicensePlate } from '../shared/LicensePlate';
 import { EmptyStateCard } from '../shared/EmptyStateCard';
@@ -7,7 +7,7 @@ import { TimerPill } from '../shared/TimerPill';
 import { calculateJobSheetProgress } from '../../utils/vehicleUtils';
 import { useTechnicianStation } from '../../hooks/useTechnicianStation';
 
-export const TechnicianStationView: React.FC = () => {
+export const TechnicianStationView: React.FC = React.memo(() => {
   const {
     activeBay,
     techName,
@@ -29,62 +29,41 @@ export const TechnicianStationView: React.FC = () => {
     handleConfirmTransfer,
   } = useTechnicianStation();
 
-  return (
-    <View style={styles.rootView}>
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-        showsHorizontalScrollIndicator={false}
-      >
-        {isLoading ? (
-          <View style={styles.emptyCard}>
-            <ActivityIndicator size="small" color="#06b6d4" />
-            <Text style={[styles.emptyTitle, { marginTop: 8 }]}>Syncing Workshop Telemetry...</Text>
-          </View>
-        ) : bayVehicles.length === 0 ? (
-          <EmptyStateCard
-            icon={Car}
-            title={searchQuery.trim() ? `No matching vehicles for "${searchQuery}"` : 'Bay Currently Clear'}
-            subtitle={searchQuery.trim() ? 'Try searching another license plate number.' : 'No vehicles currently assigned to this station.'}
-          />
-        ) : (
-          <View style={styles.cardsGrid}>
-            {bayVehicles.map((vehicle) => {
-              const { completedCount, totalRequired: totalReq, percent } = calculateJobSheetProgress(vehicle.tasks);
-              const isExpanded = Boolean(expandedCards[vehicle.id]);
+  const renderVehicleItem = ({ item: vehicle }: { item: any }) => {
+    const { completedCount, totalRequired: totalReq, percent } = calculateJobSheetProgress(vehicle.tasks);
+    const isExpanded = Boolean(expandedCards[vehicle.id]);
 
-              // Filter ONLY the task assigned to this active bay
-              const bayTask = vehicle.tasks.find(t => t.task_type === activeTaskType && t.is_required) || vehicle.tasks.find(t => t.task_type === activeTaskType);
-              const isCurrentTaskDone = Boolean(bayTask && bayTask.is_completed);
+    // Filter ONLY the task assigned to this active bay
+    const bayTask = vehicle.tasks.find((t: any) => t.task_type === activeTaskType && t.is_required) || vehicle.tasks.find((t: any) => t.task_type === activeTaskType);
+    const isCurrentTaskDone = Boolean(bayTask && bayTask.is_completed);
 
-              // Required tasks for this vehicle's job sheet
-              const requiredTaskTypes = vehicle.tasks.filter(t => t.is_required).map(t => t.task_type);
-              const isHoistRequired = requiredTaskTypes.includes('hoist_service');
-              const isAlignmentRequired = requiredTaskTypes.includes('wheel_alignment');
-              const isWorkshopRequired = requiredTaskTypes.includes('general_service');
+    // Required tasks for this vehicle's job sheet
+    const requiredTaskTypes = vehicle.tasks.filter((t: any) => t.is_required).map((t: any) => t.task_type);
+    const isHoistRequired = requiredTaskTypes.includes('hoist_service');
+    const isAlignmentRequired = requiredTaskTypes.includes('wheel_alignment');
+    const isWorkshopRequired = requiredTaskTypes.includes('general_service');
 
-              // Completed status for each bay task
-              const isWorkshopDone = Boolean(vehicle.tasks.find(t => t.task_type === 'general_service')?.is_completed);
-              const isHoistDone = Boolean(vehicle.tasks.find(t => t.task_type === 'hoist_service')?.is_completed);
-              const isAlignmentDone = Boolean(vehicle.tasks.find(t => t.task_type === 'wheel_alignment')?.is_completed);
+    // Completed status for each bay task
+    const isWorkshopDone = Boolean(vehicle.tasks.find((t: any) => t.task_type === 'general_service')?.is_completed);
+    const isHoistDone = Boolean(vehicle.tasks.find((t: any) => t.task_type === 'hoist_service')?.is_completed);
+    const isAlignmentDone = Boolean(vehicle.tasks.find((t: any) => t.task_type === 'wheel_alignment')?.is_completed);
 
-              const isCanDispatch = canTransferVehicle && isCurrentTaskDone;
+    const isCanDispatch = canTransferVehicle && isCurrentTaskDone;
 
-              const canShowAlignmentBtn = activeBay !== 'alignment' && isAlignmentRequired && !isAlignmentDone;
-              const canShowHoistBtn = activeBay !== 'hoist' && isHoistRequired && !isHoistDone;
-              const canShowWorkshopBtn = activeBay !== 'workshop' && isWorkshopRequired && !isWorkshopDone;
-              const canShowAdvisorBtn = activeBay !== 'inspection' && !vehicle.is_finished;
-              const hasAnyDispatchBtn = canShowAlignmentBtn || canShowHoistBtn || canShowWorkshopBtn || canShowAdvisorBtn;
+    const canShowAlignmentBtn = activeBay !== 'alignment' && isAlignmentRequired && !isAlignmentDone;
+    const canShowHoistBtn = activeBay !== 'hoist' && isHoistRequired && !isHoistDone;
+    const canShowWorkshopBtn = activeBay !== 'workshop' && isWorkshopRequired && !isWorkshopDone;
+    const canShowAdvisorBtn = activeBay !== 'inspection' && !vehicle.is_finished;
+    const hasAnyDispatchBtn = canShowAlignmentBtn || canShowHoistBtn || canShowWorkshopBtn || canShowAdvisorBtn;
 
-              return (
-                <View key={vehicle.id} style={styles.vehicleCardWrapper}>
-                  {/* Header Card Area (Clickable to Expand / Collapse Card) */}
-                  <TouchableOpacity
-                    style={styles.cardHeaderArea}
-                    onPress={() => toggleExpand(vehicle.id)}
-                    activeOpacity={0.8}
-                  >
+    return (
+      <View key={vehicle.id} style={styles.vehicleCardWrapper}>
+        {/* Header Card Area (Clickable to Expand / Collapse Card) */}
+        <TouchableOpacity
+          style={styles.cardHeaderArea}
+          onPress={() => toggleExpand(vehicle.id)}
+          activeOpacity={0.8}
+        >
                     <View style={styles.cardTopRow}>
                       {/* Sri Lankan License Plate Badge */}
                       <LicensePlate number={vehicle.vehicle_no} size="md" />
@@ -276,11 +255,34 @@ export const TechnicianStationView: React.FC = () => {
                     </>
                   )}
                 </View>
-              );
-            })}
-          </View>
-        )}
-      </ScrollView>
+    );
+  };
+
+  return (
+    <View style={styles.rootView}>
+      {isLoading ? (
+        <View style={styles.emptyCard}>
+          <ActivityIndicator size="small" color="#06b6d4" />
+          <Text style={[styles.emptyTitle, { marginTop: 8 }]}>Syncing Workshop Telemetry...</Text>
+        </View>
+      ) : bayVehicles.length === 0 ? (
+        <EmptyStateCard
+          icon={Car}
+          title={searchQuery.trim() ? `No matching vehicles for "${searchQuery}"` : 'Bay Currently Clear'}
+          subtitle={searchQuery.trim() ? 'Try searching another license plate number.' : 'No vehicles currently assigned to this station.'}
+        />
+      ) : (
+        <FlatList
+          data={bayVehicles}
+          keyExtractor={(item) => item.id}
+          renderItem={renderVehicleItem}
+          initialNumToRender={8}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
 
       {/* CONFIRMATION MODAL BEFORE DISPATCHING (Viewport Centered) */}
       {pendingTransfer && (
@@ -319,7 +321,7 @@ export const TechnicianStationView: React.FC = () => {
       )}
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   rootView: { flex: 1, position: 'relative' },

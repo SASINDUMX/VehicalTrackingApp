@@ -6,7 +6,7 @@ interface LicensePlateProps {
   size?: "sm" | "md" | "lg";
 }
 
-export const LicensePlate: React.FC<LicensePlateProps> = ({ number, size = "md" }) => {
+export const LicensePlate: React.FC<LicensePlateProps> = React.memo(({ number, size = "md" }) => {
   const isSm = size === "sm";
   const isLg = size === "lg";
 
@@ -17,7 +17,7 @@ export const LicensePlate: React.FC<LicensePlateProps> = ({ number, size = "md" 
       </Text>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   plateContainer: {

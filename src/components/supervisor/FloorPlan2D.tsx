@@ -7,7 +7,7 @@ import { TimerPill } from '../shared/TimerPill';
 import { calculateJobSheetProgress, getTaskTypeForBay } from '../../utils/vehicleUtils';
 import { useFloorPlan } from '../../hooks/useFloorPlan';
 
-export const FloorPlan2D: React.FC = () => {
+export const FloorPlan2D: React.FC = React.memo(() => {
   const {
     bays,
     elapsedTimes,
@@ -122,7 +122,7 @@ export const FloorPlan2D: React.FC = () => {
         </ScrollView>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {

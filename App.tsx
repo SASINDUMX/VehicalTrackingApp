@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { StyleSheet, View, Text, SafeAreaView, StatusBar, Platform, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Text, SafeAreaView, StatusBar, Platform, ActivityIndicator, Animated, Easing } from 'react-native';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { VehicleProvider, useVehicles } from './src/context/VehicleContext';
 import { LoginScreen } from './src/components/auth/LoginScreen';
@@ -13,6 +13,37 @@ import { VehicleDetailsModal } from './src/components/shared/VehicleDetailsModal
 import { UserRole } from './src/types/vehicle';
 
 const rolesList: UserRole[] = ['supervisor', 'tech_workshop', 'tech_alignment', 'tech_hoist', 'advisor'];
+
+const TabTransitionWrapper: React.FC<{ activeKey: string; children: React.ReactNode }> = ({ activeKey, children }) => {
+  const fadeAnim = React.useRef(new Animated.Value(0.3)).current;
+
+  useEffect(() => {
+    fadeAnim.setValue(0.3);
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 150,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: Platform.OS !== 'web',
+    }).start();
+  }, [activeKey]);
+
+  return (
+    <Animated.View
+      style={[
+        {
+          flex: 1,
+          opacity: fadeAnim,
+        },
+        Platform.OS === 'web' && ({
+          transition: 'opacity 150ms cubic-bezier(0.16, 1, 0.3, 1)',
+          willChange: 'opacity',
+        } as any),
+      ]}
+    >
+      {children}
+    </Animated.View>
+  );
+};
 
 const AppContent: React.FC = () => {
   const { userProfile } = useAuth();
@@ -94,11 +125,13 @@ const AppContent: React.FC = () => {
           onTouchStart={handleTouchStart}
           onTouchEnd={handleTouchEnd}
         >
-          {currentRole === 'supervisor' && <FloorPlan2D />}
-          {(currentRole === 'tech_workshop' || currentRole === 'tech_hoist' || currentRole === 'tech_alignment') && (
-            <TechnicianStationView />
-          )}
-          {currentRole === 'advisor' && <AdvisorInspectionView />}
+          <TabTransitionWrapper activeKey={currentRole}>
+            {currentRole === 'supervisor' && <FloorPlan2D />}
+            {(currentRole === 'tech_workshop' || currentRole === 'tech_hoist' || currentRole === 'tech_alignment') && (
+              <TechnicianStationView />
+            )}
+            {currentRole === 'advisor' && <AdvisorInspectionView />}
+          </TabTransitionWrapper>
         </View>
         <AddVehicleModal />
         <VehicleDetailsModal />
