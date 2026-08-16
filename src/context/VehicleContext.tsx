@@ -430,7 +430,7 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
       })
     );
 
-    // 2. Server-side RPC (atomic, with row locking)
+    // 2. Server-side RPC with direct table fallback
     const client = supabase;
     if (client && isSupabaseConnected) {
       try {
@@ -439,7 +439,21 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
           p_completed_by: completedBy
         });
 
-        if (error) throw error;
+        if (error) {
+          console.warn('RPC toggle_task_completion failed, attempting direct table update:', error.message);
+          const targetVehicle = vehicles.find(v => v.id === vehicleId);
+          const targetTask = targetVehicle?.tasks.find(t => t.id === taskId);
+          const nextState = targetTask ? !targetTask.is_completed : true;
+          const { error: directErr } = await client
+            .from('vehicle_tasks')
+            .update({
+              is_completed: nextState,
+              completed_at: nextState ? now : null,
+              completed_by: nextState ? completedBy : null
+            })
+            .eq('id', taskId);
+          if (directErr) throw directErr;
+        }
       } catch (err) {
         console.error('Supabase task toggle error:', err);
         if (isMountedRef.current) {
@@ -450,7 +464,7 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
     }
   }, [vehicles]);
 
-  // 3. TRANSFER VEHICLE ZONE (Optimistic + RPC + Rollback)
+  // 3. TRANSFER VEHICLE ZONE (Optimistic + RPC + Fallback + Rollback)
   const transferVehicleZone = useCallback(async (vehicleId: string, toZone: BayZone, movedBy: string) => {
     try { chimeService.playChime(); } catch { /* ignore audio error */ }
     const now = new Date().toISOString();
@@ -488,7 +502,7 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
       })
     );
 
-    // 2. Server-side RPC (atomic transaction)
+    // 2. Server-side RPC with direct table fallback
     const client = supabase;
     if (client && isSupabaseConnected) {
       try {
@@ -498,7 +512,39 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
           p_moved_by: movedBy
         });
 
-        if (error) throw error;
+        if (error) {
+          console.warn('RPC transfer_vehicle_zone failed, attempting direct table update:', error.message);
+          const { data: dbLogs } = await client
+            .from('stage_logs')
+            .select('*')
+            .eq('vehicle_id', vehicleId)
+            .is('exited_at', null)
+            .order('entered_at', { ascending: false });
+
+          if (dbLogs && dbLogs.length > 0) {
+            const activeLog = dbLogs[0];
+            const entered = new Date(activeLog.entered_at).getTime();
+            const duration = Math.floor((new Date(now).getTime() - entered) / 1000);
+            await client
+              .from('stage_logs')
+              .update({ exited_at: now, duration_seconds: duration })
+              .eq('id', activeLog.id);
+          }
+
+          await client.from('stage_logs').insert({
+            vehicle_id: vehicleId,
+            to_zone: toZone,
+            entered_at: now,
+            moved_by: movedBy
+          });
+
+          const { error: directErr } = await client
+            .from('vehicles')
+            .update({ current_zone: toZone })
+            .eq('id', vehicleId);
+
+          if (directErr) throw directErr;
+        }
       } catch (err) {
         console.error('Supabase zone transfer error:', err);
         if (isMountedRef.current) {
@@ -509,7 +555,7 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
     }
   }, [vehicles]);
 
-  // 4. FINISH VEHICLE JOB SHEET (Service Advisor — RPC)
+  // 4. FINISH VEHICLE JOB SHEET (Service Advisor — RPC + Fallback)
   const finishVehicleJobSheet = useCallback(async (vehicleId: string, advisorName: string) => {
     const now = new Date().toISOString();
     const prevVehicles = vehicles;
@@ -530,7 +576,18 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
           p_advisor_name: advisorName
         });
 
-        if (error) throw error;
+        if (error) {
+          console.warn('RPC finish_vehicle_job failed, attempting direct table update:', error.message);
+          const { error: directErr } = await client
+            .from('vehicles')
+            .update({
+              current_zone: 'completed',
+              is_finished: true,
+              completed_at: now
+            })
+            .eq('id', vehicleId);
+          if (directErr) throw directErr;
+        }
       } catch (err) {
         console.error('Supabase finish job error:', err);
         if (isMountedRef.current) {

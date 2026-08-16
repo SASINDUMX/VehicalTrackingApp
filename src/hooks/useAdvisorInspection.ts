@@ -14,7 +14,7 @@ export const useAdvisorInspection = () => {
 
   const readyVehicles = vehicles
     .filter(v => {
-      const isReady = v.current_zone === "inspection" || v.is_finished;
+      const isReady = v.current_zone === "inspection" && !v.is_finished;
       return isReady && matchesVehicleSearch(v.vehicle_no, searchQuery);
     });
 
