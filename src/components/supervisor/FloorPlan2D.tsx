@@ -156,8 +156,10 @@ export const FloorPlan2D: React.FC = () => {
                                 onPress={() => setSelectedVehicle(vehicle)}
                                 activeOpacity={0.8}
                               >
-                              <LicensePlate number={vehicle.vehicle_no} size="sm" />
-                              <TimerPill elapsedText={elapsedTimes[vehicle.id] || '0m 00s'} variant="cyan" size="sm" />
+                              <View style={styles.cardHeaderTopRow}>
+                                <LicensePlate number={vehicle.vehicle_no} size="sm" />
+                                <TimerPill elapsedText={elapsedTimes[vehicle.id] || '0m 00s'} variant="cyan" size="sm" />
+                              </View>
 
                               <View style={styles.spatialProgressBar}>
                                 <View
@@ -305,6 +307,13 @@ const styles = StyleSheet.create({
     padding: 10,
     gap: 6,
     ...(Platform.OS === 'web' ? { transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)' } as any : {}),
+  },
+  cardHeaderTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    gap: 6,
   },
   spatialProgressRow: {
     flexDirection: 'row',
