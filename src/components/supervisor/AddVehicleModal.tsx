@@ -176,7 +176,7 @@ export const AddVehicleModal: React.FC = () => {
                   >
                     <Wrench size={16} color={targetZone === 'workshop' ? '#0ea5e9' : '#64748b'} />
                     <Text style={[styles.dispatchText, targetZone === 'workshop' && styles.activeDispatchText]}>
-                      TO Workshop {recommendedStation === 'workshop' ? '★' : ''}
+                      TO Workshop
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -192,7 +192,7 @@ export const AddVehicleModal: React.FC = () => {
                   >
                     <Navigation size={16} color={targetZone === 'alignment' ? '#10b981' : '#64748b'} />
                     <Text style={[styles.dispatchText, targetZone === 'alignment' && styles.activeDispatchTextAl]}>
-                      TO Alignment {recommendedStation === 'alignment' ? '★' : ''}
+                      TO Alignment
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -208,7 +208,7 @@ export const AddVehicleModal: React.FC = () => {
                   >
                     <Shield size={16} color={targetZone === 'hoist' ? '#f59e0b' : '#64748b'} />
                     <Text style={[styles.dispatchText, targetZone === 'hoist' && styles.activeDispatchTextHo]}>
-                      TO Hoist {recommendedStation === 'hoist' ? '★' : ''}
+                      TO Hoist
                     </Text>
                   </TouchableOpacity>
                 )}

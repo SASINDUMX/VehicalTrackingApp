@@ -86,8 +86,8 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
               }}
               activeOpacity={canFinishJob ? 0.7 : 1}
             >
-              <Sparkles size={18} color="#ffffff" />
-              <Text style={styles.deliverText}>
+              <Sparkles size={16} color="#ffffff" />
+              <Text style={styles.deliverText} numberOfLines={1}>
                 {canFinishJob ? 'FINISH JOB & HANDOVER VEHICLE ✓' : 'ADVISOR ACCESS REQUIRED'}
               </Text>
             </TouchableOpacity>
@@ -170,7 +170,23 @@ const styles = StyleSheet.create({
   statusDone: { color: '#10b981' },
   statusPending: { color: '#fbbf24' },
   statusCancelled: { color: '#fca5a5' },
-  deliverBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: '#10b981', padding: 16, borderRadius: 12, ...(Platform.OS === 'web' ? ({ boxShadow: '0px 4px 8px rgba(16, 185, 129, 0.4)' } as any) : { shadowColor: '#10b981', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 5 }) },
-  deliverText: { color: '#ffffff', fontWeight: '800', fontSize: 15, letterSpacing: 0.5 },
+  deliverBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#10b981',
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    ...(Platform.OS === 'web' ? ({ boxShadow: '0px 4px 8px rgba(16, 185, 129, 0.4)' } as any) : { shadowColor: '#10b981', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 5 }),
+  },
+  deliverText: {
+    color: '#ffffff',
+    fontWeight: '800',
+    fontSize: 13.5,
+    letterSpacing: 0.3,
+    ...(Platform.OS === 'web' ? ({ whiteSpace: 'nowrap' } as any) : {}),
+  },
 });
 
