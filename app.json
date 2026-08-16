@@ -5,12 +5,32 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
-    "newArchEnabled": true,
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0b0f19"
+    },
     "ios": {
       "supportsTablet": true
     },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0b0f19"
+      }
+    },
     "web": {
-      "bundler": "metro"
+      "bundler": "metro",
+      "favicon": "./assets/favicon.png",
+      "name": "United Motors Vehicle Tracking",
+      "shortName": "UM Tracking",
+      "display": "standalone",
+      "orientation": "portrait",
+      "backgroundColor": "#0b0f19",
+      "themeColor": "#0b0f19",
+      "description": "United Motors Automotive Workshop Telemetry & Vehicle Tracking System",
+      "startUrl": "/"
     }
   }
 }
