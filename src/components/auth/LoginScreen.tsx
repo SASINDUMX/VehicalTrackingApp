@@ -136,9 +136,9 @@ export const LoginScreen: React.FC = () => {
 
           {/* Sign In Button */}
           <TouchableOpacity
-            style={[styles.signInBtn, isLoading && styles.signInBtnDisabled]}
-            onPress={handleSignIn}
-            disabled={isLoading}
+            style={[styles.signInBtn, isLoading && styles.signInBtnDisabled, isLoading && (Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {})]}
+            onPress={() => { if (!isLoading) handleSignIn(); }}
+            activeOpacity={isLoading ? 1 : 0.7}
           >
             {isLoading ? (
               <ActivityIndicator color="#ffffff" size="small" />
@@ -159,23 +159,23 @@ export const LoginScreen: React.FC = () => {
             </View>
             
             <View style={styles.pillsContainer}>
-              <TouchableOpacity style={styles.pill} onPress={() => fillQuickAccount('supervisor')} disabled={isLoading}>
+              <TouchableOpacity style={styles.pill} onPress={() => { if (!isLoading) fillQuickAccount('supervisor'); }} activeOpacity={isLoading ? 1 : 0.7}>
                 <Shield size={13} color="#0ea5e9" />
                 <Text style={styles.pillText}>Supervisor</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.pill} onPress={() => fillQuickAccount('tech1')} disabled={isLoading}>
+              <TouchableOpacity style={styles.pill} onPress={() => { if (!isLoading) fillQuickAccount('tech1'); }} activeOpacity={isLoading ? 1 : 0.7}>
                 <Wrench size={13} color="#06b6d4" />
                 <Text style={styles.pillText}>Tech 1 (General)</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.pill} onPress={() => fillQuickAccount('tech2')} disabled={isLoading}>
+              <TouchableOpacity style={styles.pill} onPress={() => { if (!isLoading) fillQuickAccount('tech2'); }} activeOpacity={isLoading ? 1 : 0.7}>
                 <UserCheck size={13} color="#10b981" />
                 <Text style={styles.pillText}>Tech 2 (Alignment)</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.pill} onPress={() => fillQuickAccount('tech3')} disabled={isLoading}>
+              <TouchableOpacity style={styles.pill} onPress={() => { if (!isLoading) fillQuickAccount('tech3'); }} activeOpacity={isLoading ? 1 : 0.7}>
                 <Shield size={13} color="#f59e0b" />
                 <Text style={styles.pillText}>Tech 3 (Hoist)</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.pill} onPress={() => fillQuickAccount('advisor')} disabled={isLoading}>
+              <TouchableOpacity style={styles.pill} onPress={() => { if (!isLoading) fillQuickAccount('advisor'); }} activeOpacity={isLoading ? 1 : 0.7}>
                 <Headphones size={13} color="#a855f7" />
                 <Text style={styles.pillText}>Advisor</Text>
               </TouchableOpacity>

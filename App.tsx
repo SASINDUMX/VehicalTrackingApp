@@ -94,8 +94,9 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       const styleId = 'hide-scrollbar-style';
-      if (!document.getElementById(styleId)) {
-        const style = document.createElement('style');
+      let style = document.getElementById(styleId);
+      if (!style) {
+        style = document.createElement('style');
         style.id = styleId;
         style.innerHTML = `
           ::-webkit-scrollbar {
@@ -110,6 +111,11 @@ const AppContent: React.FC = () => {
         `;
         document.head.appendChild(style);
       }
+      return () => {
+        if (style && style.parentNode) {
+          style.parentNode.removeChild(style);
+        }
+      };
     }
   }, []);
 

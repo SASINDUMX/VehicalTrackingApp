@@ -184,8 +184,8 @@ export const VehicleDetailsModal: React.FC = () => {
                     return (
                       <TouchableOpacity
                         style={[styles.taskChip, isSelected && styles.activeTaskChip, isCompleted && styles.completedLockedChip]}
-                        onPress={() => toggleTask('general_service')}
-                        disabled={isCompleted}
+                        onPress={() => { if (!isCompleted) toggleTask('general_service'); }}
+                        activeOpacity={isCompleted ? 1 : 0.7}
                       >
                         {isCompleted ? (
                           <>
@@ -210,8 +210,8 @@ export const VehicleDetailsModal: React.FC = () => {
                     return (
                       <TouchableOpacity
                         style={[styles.taskChip, isSelected && styles.activeTaskChip, isCompleted && styles.completedLockedChip]}
-                        onPress={() => toggleTask('wheel_alignment')}
-                        disabled={isCompleted}
+                        onPress={() => { if (!isCompleted) toggleTask('wheel_alignment'); }}
+                        activeOpacity={isCompleted ? 1 : 0.7}
                       >
                         {isCompleted ? (
                           <>
@@ -236,8 +236,8 @@ export const VehicleDetailsModal: React.FC = () => {
                     return (
                       <TouchableOpacity
                         style={[styles.taskChip, isSelected && styles.activeTaskChip, isCompleted && styles.completedLockedChip]}
-                        onPress={() => toggleTask('hoist_service')}
-                        disabled={isCompleted}
+                        onPress={() => { if (!isCompleted) toggleTask('hoist_service'); }}
+                        activeOpacity={isCompleted ? 1 : 0.7}
                       >
                         {isCompleted ? (
                           <>
@@ -428,9 +428,9 @@ export const VehicleDetailsModal: React.FC = () => {
                   <Text style={styles.cancelEditText}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.saveEditBtn, isSubmitting && { opacity: 0.5 }]}
-                  onPress={handleSaveJobOrder}
-                  disabled={isSubmitting}
+                  style={[styles.saveEditBtn, isSubmitting && { opacity: 0.5, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }]}
+                  onPress={() => { if (!isSubmitting) handleSaveJobOrder(); }}
+                  activeOpacity={isSubmitting ? 1 : 0.7}
                 >
                   <Save size={16} color="#ffffff" />
                   <Text style={styles.saveEditText}>{isSubmitting ? 'Saving...' : 'Save Job Order'}</Text>

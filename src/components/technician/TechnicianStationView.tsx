@@ -279,7 +279,7 @@ export const TechnicianStationView: React.FC = React.memo(() => {
           initialNumToRender={8}
           maxToRenderPerBatch={10}
           windowSize={5}
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[styles.content, { gap: 16 }]}
           showsVerticalScrollIndicator={false}
         />
       )}

@@ -116,7 +116,7 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
       maxToRenderPerBatch={10}
       windowSize={5}
       style={styles.container}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, { gap: 16 }]}
       showsVerticalScrollIndicator={false}
     />
   );

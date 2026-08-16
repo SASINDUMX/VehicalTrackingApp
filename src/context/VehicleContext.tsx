@@ -1,8 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
-import { Platform } from 'react-native';
-import { Vehicle, UserRole, BayZone, TaskType, VehicleTask } from '../types/vehicle';
-import { INITIAL_MOCK_VEHICLES } from '../lib/mockData';
-import { supabase, isSupabaseConnected } from '../lib/supabase';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, ReactNode } from 'react';
+import { Platform, Alert } from 'react-native';
+import { Vehicle, UserRole, BayZone, TaskType, VehicleTask, StageLog } from '../types/vehicle';
+import { supabase, isSupabaseConnected, safeStorage } from '../lib/supabase';
 import { chimeService } from '../lib/chime';
 
 interface VehicleContextType {
@@ -29,20 +28,32 @@ interface VehicleContextType {
 
 const VehicleContext = createContext<VehicleContextType | undefined>(undefined);
 
+// Helper: show error to user
+const showError = (title: string, message: string) => {
+  if (Platform.OS === 'web') {
+    try { window.alert(`${title}: ${message}`); } catch { /* fallback */ }
+  } else {
+    Alert.alert(title, message);
+  }
+};
+
 export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  // Track mounted state to prevent setState on unmounted component
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => { isMountedRef.current = false; };
+  }, []);
+
   const [vehicles, setVehicles] = useState<Vehicle[]>(() => {
-    if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
-      const saved = localStorage.getItem('um_cached_vehicles') || localStorage.getItem('um_local_vehicles');
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            // Remove legacy dummy vehicles starting with v-10
-            const clean = parsed.filter((v: any) => v && v.id && !v.id.startsWith('v-10'));
-            return clean;
-          }
-        } catch (e) { /* fallback */ }
-      }
+    const saved = safeStorage.getItem('um_cached_vehicles') || safeStorage.getItem('um_local_vehicles');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.filter((v: Vehicle) => v && v.id && !v.id.startsWith('v-10'));
+        }
+      } catch { /* fallback */ }
     }
     return [];
   });
@@ -53,16 +64,13 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
   const [isConfigModalOpen, setIsConfigModalOpen] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(() => {
-    // Only show loading spinner if connected to Supabase AND no cached vehicles exist yet
     if (isSupabaseConnected) {
-      if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
-        const saved = localStorage.getItem('um_cached_vehicles');
-        if (saved) {
-          try {
-            const parsed = JSON.parse(saved);
-            if (Array.isArray(parsed) && parsed.length > 0) return false;
-          } catch (e) {}
-        }
+      const saved = safeStorage.getItem('um_cached_vehicles');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) return false;
+        } catch {}
       }
       return true;
     }
@@ -70,21 +78,23 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
   });
   const [isRealtimeConnected, setIsRealtimeConnected] = useState<boolean>(isSupabaseConnected);
 
+  // Debounce ref for realtime events
+  const realtimeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Sync to local storage on web
   useEffect(() => {
-    if (Platform.OS === 'web' && typeof localStorage !== 'undefined' && vehicles.length > 0) {
-      localStorage.setItem('um_cached_vehicles', JSON.stringify(vehicles));
+    if (vehicles.length > 0) {
+      safeStorage.setItem('um_cached_vehicles', JSON.stringify(vehicles));
     }
   }, [vehicles]);
 
-  // Fetch from Supabase with parallel Promise.all (3x faster)
-  const fetchSupabaseData = async (isInitialLoad: boolean = false) => {
+  // Fetch from Supabase with parallel Promise.all
+  const fetchSupabaseData = useCallback(async (isInitialLoad: boolean = false) => {
     const client = supabase;
     if (!client || !isSupabaseConnected) return;
     if (isInitialLoad && vehicles.length === 0) setIsLoading(true);
 
     try {
-      // Execute all 3 queries in parallel to cut network roundtrip time by 3x
       const [vRes, tRes, lRes] = await Promise.all([
         client.from('vehicles').select('*').order('created_at', { ascending: false }),
         client.from('vehicle_tasks').select('*'),
@@ -99,47 +109,54 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
       const dbTasks = tRes.data || [];
       const dbLogs = lRes.data || [];
 
-      // Create quick lookup maps for fast sub-millisecond assembly
-      const taskMap = new Map<string, any[]>();
-      dbTasks.forEach((t: any) => {
+      const taskMap = new Map<string, VehicleTask[]>();
+      dbTasks.forEach((t: VehicleTask) => {
         if (!taskMap.has(t.vehicle_id)) taskMap.set(t.vehicle_id, []);
         taskMap.get(t.vehicle_id)!.push(t);
       });
 
-      const logMap = new Map<string, any[]>();
-      dbLogs.forEach((l: any) => {
+      const logMap = new Map<string, StageLog[]>();
+      dbLogs.forEach((l: StageLog) => {
         if (!logMap.has(l.vehicle_id)) logMap.set(l.vehicle_id, []);
         logMap.get(l.vehicle_id)!.push(l);
       });
 
-      const formatted: Vehicle[] = dbVehicles.map((v: any) => ({
-        id: v.id,
-        vehicle_no: v.vehicle_no,
-        current_zone: v.current_zone,
-        assigned_tech: v.assigned_tech || 'Unassigned',
-        remarks: v.remarks || '',
-        intake_at: v.intake_at,
-        completed_at: v.completed_at,
-        is_finished: v.is_finished,
-        created_at: v.created_at,
-        tasks: taskMap.get(v.id) || [],
-        stage_logs: logMap.get(v.id) || []
+      const formatted: Vehicle[] = dbVehicles.map((v: Record<string, unknown>) => ({
+        id: v.id as string,
+        vehicle_no: v.vehicle_no as string,
+        current_zone: v.current_zone as BayZone,
+        assigned_tech: (v.assigned_tech as string) || 'Unassigned',
+        remarks: (v.remarks as string) || '',
+        intake_at: v.intake_at as string,
+        completed_at: v.completed_at as string | null,
+        is_finished: v.is_finished as boolean,
+        created_at: v.created_at as string,
+        tasks: taskMap.get(v.id as string) || [],
+        stage_logs: logMap.get(v.id as string) || []
       }));
 
-      setVehicles(formatted);
-      if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
-        localStorage.setItem('um_cached_vehicles', JSON.stringify(formatted));
+      if (isMountedRef.current) {
+        setVehicles(formatted);
+        safeStorage.setItem('um_cached_vehicles', JSON.stringify(formatted));
+        setIsRealtimeConnected(true);
       }
-      setIsRealtimeConnected(true);
     } catch (err) {
       console.warn('Supabase fetch error, fallback to local state:', err);
-      setIsRealtimeConnected(false);
+      if (isMountedRef.current) setIsRealtimeConnected(false);
     } finally {
-      if (isInitialLoad) setIsLoading(false);
+      if (isInitialLoad && isMountedRef.current) setIsLoading(false);
     }
-  };
+  }, []);
 
-  // Realtime channel subscriptions
+  // Debounced refetch — collapses rapid realtime events into one fetch
+  const debouncedRefetch = useCallback(() => {
+    if (realtimeDebounceRef.current) clearTimeout(realtimeDebounceRef.current);
+    realtimeDebounceRef.current = setTimeout(() => {
+      fetchSupabaseData(false);
+    }, 300);
+  }, [fetchSupabaseData]);
+
+  // Realtime channel subscriptions with targeted payload merging
   useEffect(() => {
     fetchSupabaseData(true);
 
@@ -147,21 +164,64 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
     if (client && isSupabaseConnected) {
       const channel = client
         .channel('public:vehicle_changes')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'vehicles' }, () => fetchSupabaseData(false))
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'vehicle_tasks' }, () => fetchSupabaseData(false))
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'stage_logs' }, () => fetchSupabaseData(false))
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'vehicles' }, (payload) => {
+          if (payload.new && isMountedRef.current) {
+            const newV = payload.new as Record<string, unknown>;
+            setVehicles(prev => {
+              if (prev.some(v => v.id === newV.id)) return prev;
+              const vehicle: Vehicle = {
+                id: newV.id as string,
+                vehicle_no: newV.vehicle_no as string,
+                current_zone: newV.current_zone as BayZone,
+                assigned_tech: (newV.assigned_tech as string) || 'Unassigned',
+                remarks: (newV.remarks as string) || '',
+                intake_at: newV.intake_at as string,
+                completed_at: newV.completed_at as string | null,
+                is_finished: newV.is_finished as boolean,
+                created_at: newV.created_at as string,
+                tasks: [],
+                stage_logs: []
+              };
+              return [vehicle, ...prev];
+            });
+            debouncedRefetch();
+          }
+        })
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'vehicles' }, (payload) => {
+          if (payload.new && isMountedRef.current) {
+            const updated = payload.new as Record<string, unknown>;
+            setVehicles(prev => prev.map(v => {
+              if (v.id !== updated.id) return v;
+              return {
+                ...v,
+                current_zone: updated.current_zone as BayZone,
+                assigned_tech: (updated.assigned_tech as string) || v.assigned_tech,
+                remarks: (updated.remarks as string) ?? v.remarks,
+                is_finished: updated.is_finished as boolean,
+                completed_at: updated.completed_at as string | null,
+              };
+            }));
+          }
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'vehicle_tasks' }, () => {
+          debouncedRefetch();
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'stage_logs' }, () => {
+          debouncedRefetch();
+        })
         .subscribe((status) => {
-          setIsRealtimeConnected(status === 'SUBSCRIBED');
+          if (isMountedRef.current) setIsRealtimeConnected(status === 'SUBSCRIBED');
         });
 
       return () => {
+        if (realtimeDebounceRef.current) clearTimeout(realtimeDebounceRef.current);
         client.removeChannel(channel);
       };
     }
-  }, []);
+  }, [fetchSupabaseData, debouncedRefetch]);
 
   // 1. ADD VEHICLE (Job Supervisor)
-  const addVehicle = async (
+  const addVehicle = useCallback(async (
     vehicleNo: string,
     tasksTypes: TaskType[],
     targetZone: BayZone,
@@ -186,7 +246,7 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
       is_completed: false
     }));
 
-    const initialLog = {
+    const initialLog: StageLog = {
       id: `log-${newId}-1`,
       vehicle_id: newId,
       from_zone: null,
@@ -246,14 +306,16 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
         return;
       } catch (err) {
         console.error('Supabase insert failed:', err);
+        showError('Failed to Create Vehicle', 'The vehicle could not be saved to the server. Please try again.');
+        throw err;
       }
     }
 
     setVehicles(prev => [newVehicle, ...prev]);
-  };
+  }, [fetchSupabaseData]);
 
   // 1.5 UPDATE VEHICLE JOB ORDER (Supervisor Edit)
-  const updateVehicleJobOrder = async (
+  const updateVehicleJobOrder = useCallback(async (
     vehicleId: string,
     updatedTaskTypes: TaskType[],
     updatedRemarks: string
@@ -261,7 +323,6 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
     const targetVehicle = vehicles.find(v => v.id === vehicleId);
     if (!targetVehicle) return;
 
-    // Completed tasks CANNOT be removed or edited by supervisor
     const completedTaskTypes = targetVehicle.tasks
       .filter(t => t.is_completed)
       .map(t => t.task_type);
@@ -308,6 +369,8 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
         return;
       } catch (err) {
         console.error('Supabase Job Order update error:', err);
+        showError('Update Failed', 'Could not save job order changes. Please try again.');
+        throw err;
       }
     }
 
@@ -338,17 +401,14 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
         };
       });
 
-      return {
-        ...v,
-        remarks: updatedRemarks,
-        tasks: updatedTasks
-      };
+      return { ...v, remarks: updatedRemarks, tasks: updatedTasks };
     }));
-  };
+  }, [vehicles, fetchSupabaseData]);
 
-  // 2. TOGGLE TASK COMPLETION (Optimistic Instant Update)
-  const toggleTaskCompletion = async (vehicleId: string, taskId: string, completedBy: string) => {
+  // 2. TOGGLE TASK COMPLETION (Optimistic + RPC + Rollback)
+  const toggleTaskCompletion = useCallback(async (vehicleId: string, taskId: string, completedBy: string) => {
     const now = new Date().toISOString();
+    const prevVehicles = vehicles;
 
     // 1. Instant local update (0ms lag)
     setVehicles(prev =>
@@ -370,33 +430,31 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
       })
     );
 
-    // 2. Silent background Supabase sync
+    // 2. Server-side RPC (atomic, with row locking)
     const client = supabase;
     if (client && isSupabaseConnected) {
       try {
-        const targetVehicle = vehicles.find(v => v.id === vehicleId);
-        const targetTask = targetVehicle?.tasks.find(t => t.id === taskId);
-        if (targetTask) {
-          const nextState = !targetTask.is_completed;
-          await client
-            .from('vehicle_tasks')
-            .update({
-              is_completed: nextState,
-              completed_at: nextState ? now : null,
-              completed_by: nextState ? completedBy : null
-            })
-            .eq('id', taskId);
-        }
+        const { error } = await client.rpc('toggle_task_completion', {
+          p_task_id: taskId,
+          p_completed_by: completedBy
+        });
+
+        if (error) throw error;
       } catch (err) {
-        console.error('Supabase task update error:', err);
+        console.error('Supabase task toggle error:', err);
+        if (isMountedRef.current) {
+          setVehicles(prevVehicles);
+          showError('Task Update Failed', 'Could not save the task change. It has been reverted.');
+        }
       }
     }
-  };
+  }, [vehicles]);
 
-  // 3. TRANSFER VEHICLE ZONE (Smooth Instant Transfer)
-  const transferVehicleZone = async (vehicleId: string, toZone: BayZone, movedBy: string) => {
-    try { chimeService.playChime(); } catch (e) { /* ignore audio error */ }
+  // 3. TRANSFER VEHICLE ZONE (Optimistic + RPC + Rollback)
+  const transferVehicleZone = useCallback(async (vehicleId: string, toZone: BayZone, movedBy: string) => {
+    try { chimeService.playChime(); } catch { /* ignore audio error */ }
     const now = new Date().toISOString();
+    const prevVehicles = vehicles;
 
     // 1. Instant Optimistic Local Update (0ms lag)
     setVehicles(prev =>
@@ -426,87 +484,62 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
           moved_by: movedBy
         });
 
-        return {
-          ...v,
-          current_zone: toZone,
-          stage_logs: updatedLogs
-        };
+        return { ...v, current_zone: toZone, stage_logs: updatedLogs };
       })
     );
 
-    // 2. Silent Background Supabase Sync (no re-fetch or loader flash!)
+    // 2. Server-side RPC (atomic transaction)
     const client = supabase;
     if (client && isSupabaseConnected) {
       try {
-        const { data: dbLogs } = await client
-          .from('stage_logs')
-          .select('*')
-          .eq('vehicle_id', vehicleId)
-          .is('exited_at', null)
-          .order('entered_at', { ascending: false });
-
-        if (dbLogs && dbLogs.length > 0) {
-          const activeLog = dbLogs[0];
-          const entered = new Date(activeLog.entered_at).getTime();
-          const duration = Math.floor((new Date(now).getTime() - entered) / 1000);
-          await client
-            .from('stage_logs')
-            .update({ exited_at: now, duration_seconds: duration })
-            .eq('id', activeLog.id);
-        }
-
-        await client.from('stage_logs').insert({
-          vehicle_id: vehicleId,
-          to_zone: toZone,
-          entered_at: now,
-          moved_by: movedBy
+        const { error } = await client.rpc('transfer_vehicle_zone', {
+          p_vehicle_id: vehicleId,
+          p_to_zone: toZone,
+          p_moved_by: movedBy
         });
 
-        await client
-          .from('vehicles')
-          .update({ current_zone: toZone })
-          .eq('id', vehicleId);
+        if (error) throw error;
       } catch (err) {
-        console.error('Supabase transfer error:', err);
+        console.error('Supabase zone transfer error:', err);
+        if (isMountedRef.current) {
+          setVehicles(prevVehicles);
+          showError('Transfer Failed', 'Could not move the vehicle. The change has been reverted.');
+        }
       }
     }
-  };
+  }, [vehicles]);
 
-  // 4. FINISH VEHICLE JOB SHEET (Service Advisor)
-  const finishVehicleJobSheet = async (vehicleId: string, advisorName: string) => {
+  // 4. FINISH VEHICLE JOB SHEET (Service Advisor — RPC)
+  const finishVehicleJobSheet = useCallback(async (vehicleId: string, advisorName: string) => {
     const now = new Date().toISOString();
+    const prevVehicles = vehicles;
     const client = supabase;
 
-    if (client && isSupabaseConnected) {
-      try {
-        await client
-          .from('vehicles')
-          .update({
-            current_zone: 'completed',
-            is_finished: true,
-            completed_at: now
-          })
-          .eq('id', vehicleId);
-
-        await fetchSupabaseData();
-        return;
-      } catch (err) {
-        console.error('Supabase finish job error:', err);
-      }
-    }
-
+    // Optimistic update
     setVehicles(prev =>
       prev.map(v => {
         if (v.id !== vehicleId) return v;
-        return {
-          ...v,
-          current_zone: 'completed',
-          is_finished: true,
-          completed_at: now
-        };
+        return { ...v, current_zone: 'completed' as BayZone, is_finished: true, completed_at: now };
       })
     );
-  };
+
+    if (client && isSupabaseConnected) {
+      try {
+        const { error } = await client.rpc('finish_vehicle_job', {
+          p_vehicle_id: vehicleId,
+          p_advisor_name: advisorName
+        });
+
+        if (error) throw error;
+      } catch (err) {
+        console.error('Supabase finish job error:', err);
+        if (isMountedRef.current) {
+          setVehicles(prevVehicles);
+          showError('Finish Failed', 'Could not complete the vehicle job sheet. Please try again.');
+        }
+      }
+    }
+  }, [vehicles]);
 
   const value = useMemo(
     () => ({

@@ -145,7 +145,11 @@ export const AddVehicleScreen: React.FC<AddVehicleScreenProps> = ({ onBack }) =>
         <TouchableOpacity style={styles.bottomBackBtn} onPress={onBack}>
           <Text style={styles.bottomBackBtnText}>Back</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.createBtn} onPress={handleSubmit} disabled={isSubmitting}>
+        <TouchableOpacity
+          style={[styles.createBtn, isSubmitting && (Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {})]}
+          onPress={() => { if (!isSubmitting) handleSubmit(); }}
+          activeOpacity={isSubmitting ? 1 : 0.7}
+        >
           <Text style={styles.createBtnText}>{isSubmitting ? 'Sending...' : 'Create & Send'}</Text>
         </TouchableOpacity>
       </View>

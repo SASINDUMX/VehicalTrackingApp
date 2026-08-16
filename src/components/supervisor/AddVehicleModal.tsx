@@ -235,9 +235,9 @@ export const AddVehicleModal: React.FC = () => {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.submitBtn, (!vehicleNo.trim() || isSubmitting) && styles.disabledBtn]}
-              onPress={handleSubmit}
-              disabled={!vehicleNo.trim() || isSubmitting}
+              style={[styles.submitBtn, (!vehicleNo.trim() || isSubmitting) && styles.disabledBtn, (!vehicleNo.trim() || isSubmitting) && (Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {})]}
+              onPress={() => { if (vehicleNo.trim() && !isSubmitting) handleSubmit(); }}
+              activeOpacity={(!vehicleNo.trim() || isSubmitting) ? 1 : 0.7}
             >
               <Send size={16} color="#ffffff" />
               <Text style={styles.submitBtnText}>{isSubmitting ? 'Creating...' : 'Create & Send'}</Text>
