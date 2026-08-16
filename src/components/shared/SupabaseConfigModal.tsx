@@ -69,8 +69,8 @@ export const SupabaseConfigModal: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', padding: 16, ...(Platform.OS === 'web' ? { backdropFilter: 'blur(8px)' } as any : {}) },
-  modalCard: { backgroundColor: '#111827', borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', padding: 16, ...(Platform.OS === 'web' ? { backdropFilter: 'blur(8px)', transition: 'opacity 100ms ease-out', animationDuration: '100ms' } as any : {}) },
+  modalCard: { backgroundColor: '#111827', borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', ...(Platform.OS === 'web' ? { transition: 'transform 100ms ease-out, opacity 100ms ease-out', animationDuration: '100ms' } as any : {}) },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)' },
   headerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerTitle: { color: '#ffffff', fontWeight: '700', fontSize: 16 },

@@ -31,17 +31,20 @@ const VehicleContext = createContext<VehicleContextType | undefined>(undefined);
 
 export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [vehicles, setVehicles] = useState<Vehicle[]>(() => {
-    // Stale-While-Revalidate: Instant load from local cache if present (0ms latency)
     if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
       const saved = localStorage.getItem('um_cached_vehicles') || localStorage.getItem('um_local_vehicles');
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            // Remove legacy dummy vehicles starting with v-10
+            const clean = parsed.filter((v: any) => v && v.id && !v.id.startsWith('v-10'));
+            return clean;
+          }
         } catch (e) { /* fallback */ }
       }
     }
-    return isSupabaseConnected ? [] : INITIAL_MOCK_VEHICLES;
+    return [];
   });
 
   const [currentRole, setCurrentRole] = useState<UserRole>('supervisor');

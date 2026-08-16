@@ -215,12 +215,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 20,
-    // Multi-shadow glow
-    shadowColor: '#06b6d4',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 20,
-    elevation: 12,
+    ...(Platform.OS === 'web'
+      ? ({ boxShadow: '0px 0px 20px rgba(6, 182, 212, 0.8)' } as any)
+      : {
+          shadowColor: '#06b6d4',
+          shadowOffset: { width: 0, height: 0 },
+          shadowOpacity: 0.8,
+          shadowRadius: 20,
+          elevation: 12,
+        }),
   },
   logoCircleInner: {
     width: 64,
@@ -251,12 +254,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.12)', // Border
     padding: 28,
-    // Shadow for depth
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.5,
-    shadowRadius: 16,
-    elevation: 10,
+    ...(Platform.OS === 'web'
+      ? ({ boxShadow: '0px 8px 16px rgba(0, 0, 0, 0.5)' } as any)
+      : {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 8 },
+          shadowOpacity: 0.5,
+          shadowRadius: 16,
+          elevation: 10,
+        }),
   },
   cardHeader: {
     marginBottom: 24,
@@ -318,11 +324,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#06b6d4',
     paddingVertical: 16,
     borderRadius: 12,
-    shadowColor: '#06b6d4',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
+    ...(Platform.OS === 'web'
+      ? ({ boxShadow: '0px 4px 8px rgba(6, 182, 212, 0.3)' } as any)
+      : {
+          shadowColor: '#06b6d4',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.3,
+          shadowRadius: 8,
+          elevation: 6,
+        }),
   },
   signInBtnDisabled: {
     opacity: 0.6,

@@ -1,50 +1,22 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform } from 'react-native';
-import { useVehicles } from '../../context/VehicleContext';
-import { usePermissions } from '../../hooks/usePermissions';
-import { Vehicle } from '../../types/vehicle';
 import { ShieldCheck, Clock, FileCheck, Sparkles, CheckCircle2, Clock3, ChevronDown, ChevronUp, History, XCircle } from 'lucide-react-native';
 import { LicensePlate } from '../shared/LicensePlate';
 import { EmptyStateCard } from '../shared/EmptyStateCard';
 import { TimerPill } from '../shared/TimerPill';
-import { matchesVehicleSearch } from '../../utils/searchUtils';
 import { formatTotalTATString } from '../../utils/vehicleUtils';
+import { useAdvisorInspection } from '../../hooks/useAdvisorInspection';
 
 export const AdvisorInspectionView: React.FC = () => {
-  const { vehicles, finishVehicleJobSheet, setSelectedVehicle, searchQuery } = useVehicles();
-  const { canFinishJob } = usePermissions();
-  const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
-
-  const toggleExpand = (id: string) => {
-    setExpandedCards(prev => ({ ...prev, [id]: !prev[id] }));
-  };
-
-  const readyVehicles = vehicles
-    .filter(v => {
-      const isReady = v.current_zone === 'inspection' || v.is_finished;
-      return isReady && matchesVehicleSearch(v.vehicle_no, v.model, searchQuery);
-    });
-
-  const calculateTotalTAT = (vehicle: Vehicle) => {
-    const start = new Date(vehicle.intake_at).getTime();
-    const end = vehicle.completed_at ? new Date(vehicle.completed_at).getTime() : Date.now();
-    const diffSec = Math.max(0, Math.floor((end - start) / 1000));
-
-    const hours = Math.floor(diffSec / 3600);
-    const mins = Math.floor((diffSec % 3600) / 60);
-
-    return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
-  };
-
-  const formatDurationStr = (sec: number) => {
-    if (!sec || sec <= 0) return '0m 00s';
-    const h = Math.floor(sec / 3600);
-    const m = Math.floor((sec % 3600) / 60);
-    const s = sec % 60;
-    const padS = s < 10 ? `0${s}` : `${s}`;
-    return h > 0 ? `${h}h ${m}m ${padS}s` : `${m}m ${padS}s`;
-  };
-
+  const {
+    readyVehicles,
+    expandedCards,
+    searchQuery,
+    canFinishJob,
+    toggleExpand,
+    finishVehicleJobSheet,
+    setSelectedVehicle,
+  } = useAdvisorInspection();
   return (
     <ScrollView
       style={styles.container}
@@ -155,7 +127,7 @@ const styles = StyleSheet.create({
   emptyTitle: { color: '#ffffff', fontWeight: '700', fontSize: 16 },
   emptySub: { color: '#64748b', fontSize: 13 },
   cardsGrid: { gap: 16 },
-  mainCard: { backgroundColor: '#0f172a', borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)', padding: 20, gap: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 5, elevation: 5 },
+  mainCard: { backgroundColor: '#0f172a', borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)', padding: 20, gap: 20, ...(Platform.OS === 'web' ? ({ boxShadow: '0px 4px 10px rgba(0, 0, 0, 0.3)' } as any) : { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 5, elevation: 5 }) },
   cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   licensePlateContainer: { flexDirection: 'row', backgroundColor: '#facc15', borderRadius: 4, borderWidth: 1, borderColor: '#eab308', overflow: 'hidden' },
   plateLeftBar: { backgroundColor: '#1d4ed8', paddingHorizontal: 4, paddingVertical: 2, alignItems: 'center', justifyContent: 'center' },
@@ -192,7 +164,7 @@ const styles = StyleSheet.create({
   statusDone: { color: '#10b981' },
   statusPending: { color: '#fbbf24' },
   statusCancelled: { color: '#fca5a5' },
-  deliverBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: '#10b981', padding: 16, borderRadius: 12, shadowColor: '#10b981', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 5 },
+  deliverBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: '#10b981', padding: 16, borderRadius: 12, ...(Platform.OS === 'web' ? ({ boxShadow: '0px 4px 8px rgba(16, 185, 129, 0.4)' } as any) : { shadowColor: '#10b981', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 5 }) },
   deliverText: { color: '#ffffff', fontWeight: '800', fontSize: 15, letterSpacing: 0.5 },
 });
 

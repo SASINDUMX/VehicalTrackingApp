@@ -255,7 +255,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.75)',
     justifyContent: 'center',
     padding: 16,
-    ...(Platform.OS === 'web' ? { backdropFilter: 'blur(8px)' } as any : {}),
+    ...(Platform.OS === 'web' ? {
+      backdropFilter: 'blur(8px)',
+      transition: 'opacity 100ms ease-out',
+      animationDuration: '100ms',
+    } as any : {}),
   },
   modalCard: {
     backgroundColor: '#0f172a',
@@ -263,11 +267,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
     maxHeight: '90%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.5,
-    shadowRadius: 20,
-    elevation: 10,
+    ...(Platform.OS === 'web' ? {
+      boxShadow: '0px 10px 20px rgba(0, 0, 0, 0.5)',
+      transition: 'transform 100ms ease-out, opacity 100ms ease-out',
+      animationDuration: '100ms',
+    } as any : {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.5,
+      shadowRadius: 20,
+      elevation: 10,
+    }),
   },
   header: {
     flexDirection: 'row',
@@ -421,11 +431,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 12,
-    shadowColor: '#0ea5e9',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
+    ...(Platform.OS === 'web'
+      ? ({ boxShadow: '0px 4px 8px rgba(14, 165, 233, 0.3)' } as any)
+      : {
+          shadowColor: '#0ea5e9',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.3,
+          shadowRadius: 8,
+          elevation: 5,
+        }),
   },
   disabledBtn: {
     opacity: 0.4,

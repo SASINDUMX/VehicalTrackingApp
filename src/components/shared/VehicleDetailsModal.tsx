@@ -346,7 +346,7 @@ export const VehicleDetailsModal: React.FC = () => {
                       const spentStr = isCurrent ? activeStageDuration : formatSpentTime(totalSpentSec);
 
                       const isInspectionOrFinished = currentZone === 'inspection' || selectedVehicle.is_finished;
-                      const isCancelled = !isCurrent && !isCompleted && isInspectionOrFinished;
+                      const isCancelled = stageDef.zone !== 'inspection' && !isCurrent && !isCompleted && isInspectionOrFinished;
 
                       return (
                         <View key={stageDef.zone} style={styles.timelineItem}>
@@ -456,14 +456,13 @@ export const VehicleDetailsModal: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', padding: 16, ...(Platform.OS === 'web' ? { backdropFilter: 'blur(8px)' } as any : {}) },
-  modalCard: { backgroundColor: '#0f172a', borderRadius: 24, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', maxHeight: '90%', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.5, shadowRadius: 20, elevation: 10 },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', padding: 16, ...(Platform.OS === 'web' ? { backdropFilter: 'blur(8px)', transition: 'opacity 100ms ease-out', animationDuration: '100ms' } as any : {}) },
+  modalCard: { backgroundColor: '#0f172a', borderRadius: 24, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', maxHeight: '90%', ...(Platform.OS === 'web' ? { boxShadow: '0px 10px 20px rgba(0, 0, 0, 0.5)', transition: 'transform 100ms ease-out, opacity 100ms ease-out', animationDuration: '100ms' } as any : { shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.5, shadowRadius: 20, elevation: 10 }) },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
   headerLeftRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   headerRightRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   plateBadge: { backgroundColor: '#facc15', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: '#eab308' },
   plateText: { color: '#000000', fontWeight: '800', fontSize: 16, letterSpacing: 0.5 },
-  footer: { padding: 20, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)' },
   footerStandardRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' },
   totalTimePill: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(14, 165, 233, 0.12)', borderWidth: 1, borderColor: 'rgba(14, 165, 233, 0.3)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 },
   totalTimeText: { color: '#38bdf8', fontSize: 12, fontWeight: '700' },

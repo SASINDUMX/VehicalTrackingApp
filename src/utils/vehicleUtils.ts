@@ -1,4 +1,4 @@
-import { Vehicle, Task, BayZone, TaskType } from "../types/vehicle";
+import { Vehicle, VehicleTask, BayZone, TaskType } from "../types/vehicle";
 
 export interface ProgressResult {
   completedCount: number;
@@ -6,7 +6,7 @@ export interface ProgressResult {
   percent: number;
 }
 
-export const calculateJobSheetProgress = (tasks: Task[] = []): ProgressResult => {
+export const calculateJobSheetProgress = (tasks: VehicleTask[] = []): ProgressResult => {
   const completedCount = tasks.filter(t => t.is_completed).length;
   const totalRequired = tasks.filter(t => t.is_required).length;
   const percent = totalRequired ? Math.round((completedCount / totalRequired) * 100) : 0;

@@ -196,18 +196,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
-  logoIcon: {
+  logoBox: {
     width: 40,
     height: 40,
     borderRadius: 10,
     backgroundColor: '#0ea5e9',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#0ea5e9',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 4,
+    ...(Platform.OS === 'web'
+      ? ({ boxShadow: '0px 2px 6px rgba(14, 165, 233, 0.3)' } as any)
+      : {
+          shadowColor: '#0ea5e9',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.3,
+          shadowRadius: 6,
+          elevation: 4,
+        }),
   },
   brandTextContainer: {
     gap: 2,
@@ -259,20 +263,6 @@ const styles = StyleSheet.create({
     gap: 10,
     position: 'relative',
   },
-  addBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#06b6d4',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  addBtnText: {
-    color: '#ffffff',
-    fontWeight: '700',
-    fontSize: 13,
-  },
   avatarCircleBtn: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -282,25 +272,20 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(14, 165, 233, 0.15)',
     borderWidth: 1.5,
     borderColor: 'rgba(14, 165, 233, 0.5)',
-    shadowColor: '#0ea5e9',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 4,
+    ...(Platform.OS === 'web'
+      ? ({ boxShadow: '0px 2px 6px rgba(14, 165, 233, 0.3)' } as any)
+      : {
+          shadowColor: '#0ea5e9',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.3,
+          shadowRadius: 6,
+          elevation: 4,
+        }),
   },
   avatarCircleBtnActive: {
     borderColor: '#38bdf8',
     backgroundColor: 'rgba(14, 165, 233, 0.3)',
     transform: [{ scale: 1.05 }],
-  },
-  backdropOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    ...(Platform.OS === 'web' ? { position: 'fixed' as any } : {}),
-    zIndex: 998,
   },
   dropdownPopover: {
     position: 'absolute',
@@ -313,11 +298,15 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.15)',
     padding: 12,
     gap: 8,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.5,
-    shadowRadius: 16,
-    elevation: 12,
+    ...(Platform.OS === 'web'
+      ? ({ boxShadow: '0px 8px 16px rgba(0, 0, 0, 0.5)' } as any)
+      : {
+          shadowColor: '#000000',
+          shadowOffset: { width: 0, height: 8 },
+          shadowOpacity: 0.5,
+          shadowRadius: 16,
+          elevation: 12,
+        }),
     zIndex: 999,
   },
   dropdownUserHeader: {

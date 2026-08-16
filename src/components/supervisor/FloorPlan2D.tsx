@@ -1,93 +1,23 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform, ActivityIndicator, TextInput } from 'react-native';
-import { useVehicles } from '../../context/VehicleContext';
-import { usePermissions } from '../../hooks/usePermissions';
-import { BayZone } from '../../types/vehicle';
-import { Wrench, ShieldAlert, Navigation, CheckCircle, Clock, Plus, Car, Radio, Search, X, FileCheck } from 'lucide-react-native';
+import React from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform, ActivityIndicator } from 'react-native';
+import { Car, FileCheck, CheckCircle } from 'lucide-react-native';
 import { LicensePlate } from '../shared/LicensePlate';
 import { EmptyStateCard } from '../shared/EmptyStateCard';
 import { TimerPill } from '../shared/TimerPill';
 import { calculateJobSheetProgress, getTaskTypeForBay } from '../../utils/vehicleUtils';
-
-interface BayItem {
-  id: BayZone;
-  name: string;
-  code: string;
-  icon: any;
-  color: string;
-}
+import { useFloorPlan } from '../../hooks/useFloorPlan';
 
 export const FloorPlan2D: React.FC = () => {
-  const { vehicles, setSelectedVehicle, setIsAddModalOpen, isAddModalOpen, isLoading, searchQuery } = useVehicles();
-  const { canAddVehicle } = usePermissions();
-  const [elapsedTimes, setElapsedTimes] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    const updateTimers = () => {
-      const newTimes: Record<string, string> = {};
-      const now = Date.now();
-
-      vehicles.forEach((v) => {
-        const lastLog = v.stage_logs[v.stage_logs.length - 1];
-        if (lastLog && !lastLog.exited_at) {
-          const start = new Date(lastLog.entered_at).getTime();
-          const diffSec = Math.max(0, Math.floor((now - start) / 1000));
-          const hours = Math.floor(diffSec / 3600);
-          const mins = Math.floor((diffSec % 3600) / 60);
-          const secs = diffSec % 60;
-          const padSec = secs < 10 ? `0${secs}` : `${secs}`;
-          newTimes[v.id] = hours > 0 ? `${hours}h ${mins}m ${padSec}s` : `${mins}m ${padSec}s`;
-        } else {
-          newTimes[v.id] = '0m 00s';
-        }
-      });
-      setElapsedTimes(newTimes);
-    };
-
-    updateTimers();
-    const interval = setInterval(updateTimers, 1000);
-    return () => clearInterval(interval);
-  }, [vehicles]);
-
-  const bays: BayItem[] = [
-    { id: 'workshop', name: 'General Workshop Bay', code: 'BAY 01', icon: Wrench, color: '#06b6d4' },
-    { id: 'alignment', name: 'Wheel Alignment Bay', code: 'BAY 02', icon: Navigation, color: '#10b981' },
-    { id: 'hoist', name: 'Hoist Service Bay', code: 'BAY 03', icon: ShieldAlert, color: '#f59e0b' },
-    { id: 'inspection', name: 'Advisor Inspection Zone', code: 'FINAL', icon: CheckCircle, color: '#a855f7' },
-  ];
-
-  const normalizeStr = (str: string) => str.toLowerCase().replace(/[^a-z0-9]/g, '');
-
-  const getVehiclesInZone = (zoneId: BayZone) => {
-    const list = vehicles.filter(v => {
-      const matchesZone = v.current_zone === zoneId && !v.is_finished;
-      if (!searchQuery.trim()) return matchesZone;
-      const q = searchQuery.trim();
-      const normQ = normalizeStr(q);
-      const matchesPlate = normalizeStr(v.vehicle_no).includes(normQ) || v.vehicle_no.toLowerCase().includes(q.toLowerCase());
-      const matchesTech = v.assigned_tech.toLowerCase().includes(q.toLowerCase());
-      return matchesZone && (matchesPlate || matchesTech);
-    });
-
-    // STRICT FIFO (First Come, First Served): Earliest arrival at current station comes FIRST!
-    return list.sort((a, b) => {
-      const lastLogA = a.stage_logs[a.stage_logs.length - 1];
-      const lastLogB = b.stage_logs[b.stage_logs.length - 1];
-      const timeA = lastLogA?.entered_at ? new Date(lastLogA.entered_at).getTime() : new Date(a.intake_at).getTime();
-      const timeB = lastLogB?.entered_at ? new Date(lastLogB.entered_at).getTime() : new Date(b.intake_at).getTime();
-      return timeA - timeB;
-    });
-  };
-
-  const isSearchActive = searchQuery.trim() !== '';
-  const normSearchQ = normalizeStr(searchQuery);
-
-  const totalMatchingVehicles = vehicles.filter(v => {
-    if (v.is_finished) return false;
-    const matchesPlate = normalizeStr(v.vehicle_no).includes(normSearchQ) || v.vehicle_no.toLowerCase().includes(searchQuery.toLowerCase().trim());
-    const matchesTech = v.assigned_tech.toLowerCase().includes(searchQuery.toLowerCase().trim());
-    return matchesPlate || matchesTech;
-  }).length;
+  const {
+    bays,
+    elapsedTimes,
+    isLoading,
+    searchQuery,
+    isSearchActive,
+    totalMatchingVehicles,
+    setSelectedVehicle,
+    getVehiclesInZone,
+  } = useFloorPlan();
 
   return (
     <View style={styles.container}>
@@ -123,10 +53,9 @@ export const FloorPlan2D: React.FC = () => {
                         <IconComp size={16} color={bay.color} />
                         <Text style={styles.spatialBayName}>{bay.name}</Text>
                       </View>
-                      <View style={[styles.spatialBayCodeBadge, { backgroundColor: `${bay.color}30` }]}>
-                        <Text style={[styles.spatialBayCodeText, { color: bay.color }]}>
-                          {bayVehicles.length} {bayVehicles.length === 1 ? 'Vehicle' : 'Vehicles'}
-                        </Text>
+                      <View style={[styles.vehicleCountPill, { backgroundColor: `${bay.color}18`, borderColor: `${bay.color}50` }]}>
+                        <Car size={13} color={bay.color} />
+                        <Text style={[styles.vehicleCountPillText, { color: bay.color }]}>{bayVehicles.length}</Text>
                       </View>
                     </View>
 
@@ -268,13 +197,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 13,
   },
-  spatialBayCodeBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+  vehicleCountPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 14,
+    borderWidth: 1,
   },
-  spatialBayCodeText: {
-    fontSize: 10,
+  vehicleCountPillText: {
+    fontSize: 12,
     fontWeight: '800',
   },
   spatialBayFloor: {

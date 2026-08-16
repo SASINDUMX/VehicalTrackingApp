@@ -10,7 +10,15 @@ export const formatDurationSec = (seconds: number): string => {
 };
 
 export const useElapsedTimer = (startDateStr?: string | null): string => {
-  const [elapsedStr, setElapsedStr] = useState<string>("0m 00s");
+  const computeCurrent = (): string => {
+    if (!startDateStr) return "0m 00s";
+    const start = new Date(startDateStr).getTime();
+    if (isNaN(start)) return "0m 00s";
+    const diffSec = Math.max(0, Math.floor((Date.now() - start) / 1000));
+    return formatDurationSec(diffSec);
+  };
+
+  const [elapsedStr, setElapsedStr] = useState<string>(computeCurrent);
 
   useEffect(() => {
     if (!startDateStr) {
@@ -19,14 +27,7 @@ export const useElapsedTimer = (startDateStr?: string | null): string => {
     }
 
     const updateTimer = () => {
-      const start = new Date(startDateStr).getTime();
-      if (isNaN(start)) {
-        setElapsedStr("0m 00s");
-        return;
-      }
-
-      const diffSec = Math.max(0, Math.floor((Date.now() - start) / 1000));
-      setElapsedStr(formatDurationSec(diffSec));
+      setElapsedStr(computeCurrent());
     };
 
     updateTimer();

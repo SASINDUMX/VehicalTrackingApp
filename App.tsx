@@ -10,6 +10,7 @@ import { TechnicianStationView } from './src/components/technician/TechnicianSta
 import { AdvisorInspectionView } from './src/components/advisor/AdvisorInspectionView';
 import { AddVehicleModal } from './src/components/supervisor/AddVehicleModal';
 import { VehicleDetailsModal } from './src/components/shared/VehicleDetailsModal';
+import { UserRole } from './src/types/vehicle';
 
 const rolesList: UserRole[] = ['supervisor', 'tech_workshop', 'tech_alignment', 'tech_hoist', 'advisor'];
 

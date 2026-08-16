@@ -1,100 +1,33 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform, ActivityIndicator } from 'react-native';
-import { useVehicles } from '../../context/VehicleContext';
-import { usePermissions } from '../../hooks/usePermissions';
-import { getRoleBay, getTechName } from '../../constants/bays';
 import { Save, CheckSquare, Square, Pencil, CheckCircle2, Clock, Car, ChevronDown, ChevronUp, History, AlertTriangle, Lock, MessageSquare } from 'lucide-react-native';
-import { BayZone } from '../../types/vehicle';
 import { LicensePlate } from '../shared/LicensePlate';
 import { EmptyStateCard } from '../shared/EmptyStateCard';
 import { TimerPill } from '../shared/TimerPill';
 import { calculateJobSheetProgress } from '../../utils/vehicleUtils';
-
-interface PendingTransfer {
-  vehicleId: string;
-  vehicleNo: string;
-  targetZone: BayZone;
-  targetZoneName: string;
-}
+import { useTechnicianStation } from '../../hooks/useTechnicianStation';
 
 export const TechnicianStationView: React.FC = () => {
-  const { vehicles, currentRole, toggleTaskCompletion, transferVehicleZone, isLoading, searchQuery, setSelectedVehicle } = useVehicles();
-  const { canMarkTaskDone, canTransferVehicle } = usePermissions();
-  const [elapsedTimes, setElapsedTimes] = useState<Record<string, string>>({});
-  const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
-  const [pendingTransfer, setPendingTransfer] = useState<PendingTransfer | null>(null);
-
-  const activeBay = getRoleBay(currentRole);
-  const techName = getTechName(currentRole);
-  const normalizeStr = (str: string) => str.toLowerCase().replace(/[^a-z0-9]/g, '');
-
-  const getBayTaskType = (bayZone: string) => {
-    switch (bayZone) {
-      case 'workshop': return 'general_service';
-      case 'hoist': return 'hoist_service';
-      case 'alignment': return 'wheel_alignment';
-      default: return 'general_service';
-    }
-  };
-  const activeTaskType = getBayTaskType(activeBay);
-
-  const toggleExpand = (id: string) => {
-    setExpandedCards(prev => ({ ...prev, [id]: !prev[id] }));
-  };
-
-  const handleRequestTransfer = (vehicleId: string, vehicleNo: string, targetZone: BayZone, targetZoneName: string) => {
-    setPendingTransfer({ vehicleId, vehicleNo, targetZone, targetZoneName });
-  };
-
-  const handleConfirmTransfer = () => {
-    if (pendingTransfer) {
-      transferVehicleZone(pendingTransfer.vehicleId, pendingTransfer.targetZone, techName);
-      setPendingTransfer(null);
-    }
-  };
-
-  const bayVehicles = vehicles
-    .filter(v => {
-      const matchesBay = v.current_zone === activeBay && !v.is_finished;
-      if (!searchQuery.trim()) return matchesBay;
-      const normQ = normalizeStr(searchQuery);
-      const matchesPlate = normalizeStr(v.vehicle_no).includes(normQ) || v.vehicle_no.toLowerCase().includes(searchQuery.toLowerCase().trim());
-      return matchesBay && matchesPlate;
-    })
-    .sort((a, b) => {
-      const lastLogA = a.stage_logs[a.stage_logs.length - 1];
-      const lastLogB = b.stage_logs[b.stage_logs.length - 1];
-      const timeA = lastLogA?.entered_at ? new Date(lastLogA.entered_at).getTime() : new Date(a.intake_at).getTime();
-      const timeB = lastLogB?.entered_at ? new Date(lastLogB.entered_at).getTime() : new Date(b.intake_at).getTime();
-      return timeA - timeB; // Earliest station arrival first (FIFO)
-    });
-
-  // Live timer tick for each vehicle in the bay
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const updated: Record<string, string> = {};
-      const now = Date.now();
-
-      bayVehicles.forEach((v) => {
-        const lastLog = v.stage_logs[v.stage_logs.length - 1];
-        if (lastLog && !lastLog.exited_at) {
-          const start = new Date(lastLog.entered_at).getTime();
-          const diffSec = Math.max(0, Math.floor((now - start) / 1000));
-          const hours = Math.floor(diffSec / 3600);
-          const mins = Math.floor((diffSec % 3600) / 60);
-          const secs = diffSec % 60;
-          const padSec = secs < 10 ? `0${secs}` : `${secs}`;
-          updated[v.id] = hours > 0 ? `${hours}h ${mins}m ${padSec}s` : `${mins}m ${padSec}s`;
-        } else {
-          updated[v.id] = '0m 00s';
-        }
-      });
-
-      setElapsedTimes(updated);
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [bayVehicles]);
+  const {
+    activeBay,
+    techName,
+    activeTaskType,
+    bayVehicles,
+    elapsedTimes,
+    expandedCards,
+    pendingTransfer,
+    isLoading,
+    searchQuery,
+    currentRole,
+    canMarkTaskDone,
+    canTransferVehicle,
+    toggleExpand,
+    toggleTaskCompletion,
+    setSelectedVehicle,
+    setPendingTransfer,
+    handleRequestTransfer,
+    handleConfirmTransfer,
+  } = useTechnicianStation();
 
   return (
     <View style={styles.rootView}>
@@ -401,7 +334,7 @@ const styles = StyleSheet.create({
   emptyTitle: { color: '#ffffff', fontWeight: '700', fontSize: 16 },
   emptySub: { color: '#64748b', fontSize: 13, textAlign: 'center' },
   cardsGrid: { gap: 16 },
-  vehicleCardWrapper: { backgroundColor: '#111827', borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)', padding: 16, gap: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  vehicleCardWrapper: { backgroundColor: '#111827', borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)', padding: 16, gap: 14, ...(Platform.OS === 'web' ? ({ boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)' } as any) : { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 }) },
   cardHeaderArea: { gap: 12 },
   cardTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   plateWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#facc15', borderRadius: 6, borderWidth: 1, borderColor: '#eab308', overflow: 'hidden' },
@@ -462,7 +395,7 @@ const styles = StyleSheet.create({
   // Confirmation Modal Styles
   confirmOverlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, justifyContent: 'center', alignItems: 'center', zIndex: 999 },
   confirmBackdrop: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0, 0, 0, 0.75)', ...(Platform.OS === 'web' ? { position: 'fixed' as any } : {}) },
-  confirmCard: { width: '90%', maxWidth: 400, backgroundColor: '#0f172a', borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)', padding: 20, gap: 16, zIndex: 1000, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.5, shadowRadius: 20, elevation: 12 },
+  confirmCard: { width: '90%', maxWidth: 400, backgroundColor: '#0f172a', borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)', padding: 20, gap: 16, zIndex: 1000, ...(Platform.OS === 'web' ? ({ boxShadow: '0px 10px 20px rgba(0, 0, 0, 0.5)' } as any) : { shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.5, shadowRadius: 20, elevation: 12 }) },
   confirmHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   confirmTitle: { color: '#ffffff', fontSize: 16, fontWeight: '800' },
   confirmBodyText: { color: '#cbd5e1', fontSize: 13, lineHeight: 20 },

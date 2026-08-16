@@ -47,10 +47,12 @@ export const SearchBarRow: React.FC = () => {
     <View style={styles.topSearchContainer}>
       <View style={styles.searchBarRow}>
         <View style={styles.searchBoxContainer}>
-          <Search size={16} color="#06b6d4" />
+          <View style={styles.searchIconWrapper}>
+            <Search size={16} color="#38bdf8" />
+          </View>
           <TextInput
             style={styles.searchInput}
-            placeholder="Search Vehicle NO (e.g. WP-CAB-9842)..."
+            placeholder="Search Vehicle"
             placeholderTextColor="#64748b"
             value={localSearch}
             onChangeText={setLocalSearch}
@@ -194,11 +196,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
+    height: 38,
     backgroundColor: 'rgba(255, 255, 255, 0.03)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.08)',
     paddingHorizontal: 14,
-    paddingVertical: 7,
     borderRadius: 10,
   },
   activeSingleBtn: {
@@ -213,6 +215,7 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    height: 38,
     backgroundColor: 'rgba(255, 255, 255, 0.03)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.08)',
@@ -225,22 +228,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 5,
-    paddingVertical: 5,
+    height: '100%',
     borderRadius: 7,
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   activeWorkshopStage: {
     backgroundColor: 'rgba(6, 182, 212, 0.15)',
-    borderWidth: 1,
     borderColor: 'rgba(6, 182, 212, 0.4)',
   },
   activeAlignmentStage: {
     backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    borderWidth: 1,
     borderColor: 'rgba(16, 185, 129, 0.4)',
   },
   activeHoistStage: {
     backgroundColor: 'rgba(245, 158, 11, 0.15)',
-    borderWidth: 1,
     borderColor: 'rgba(245, 158, 11, 0.4)',
   },
   stageDivider: {
@@ -356,7 +358,7 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderWidth: 1,
     borderColor: 'rgba(14, 165, 233, 0.3)',
@@ -364,12 +366,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
   },
+  searchIconWrapper: {
+    marginRight: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   searchInput: {
     flex: 1,
     color: '#ffffff',
     fontSize: 13,
     padding: 0,
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    ...(Platform.OS === 'web' ? { outlineStyle: 'none' } as any : {}),
   },
   clearSearchBtn: {
     padding: 2,
