@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { Modal, View, Text, TextInput, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { useVehicles } from '../../context/VehicleContext';
 import { saveSupabaseCredentials, isSupabaseConnected } from '../../lib/supabase';
 import { X, Database } from 'lucide-react-native';
@@ -17,7 +17,7 @@ export const SupabaseConfigModal: React.FC = () => {
   };
 
   return (
-    <Modal visible={isConfigModalOpen} animationType="slide" transparent>
+    <Modal visible={isConfigModalOpen} animationType="fade" transparent>
       <View style={styles.backdrop}>
         <View style={styles.modalCard}>
           <View style={styles.header}>
@@ -69,7 +69,7 @@ export const SupabaseConfigModal: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', padding: 16 },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', padding: 16, ...(Platform.OS === 'web' ? { backdropFilter: 'blur(8px)' } as any : {}) },
   modalCard: { backgroundColor: '#111827', borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)' },
   headerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },

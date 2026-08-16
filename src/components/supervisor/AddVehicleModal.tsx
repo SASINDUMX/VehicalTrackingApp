@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import { Modal, View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Platform } from 'react-native';
 import { useVehicles } from '../../context/VehicleContext';
 import { BayZone, TaskType } from '../../types/vehicle';
 import { X, Car, Wrench, Shield, Navigation, Send, CheckSquare, Square } from 'lucide-react-native';
@@ -87,7 +87,7 @@ export const AddVehicleModal: React.FC = () => {
   };
 
   return (
-    <Modal visible={isAddModalOpen} animationType="slide" transparent>
+    <Modal visible={isAddModalOpen} animationType="fade" transparent>
       <View style={styles.backdrop}>
         <View style={styles.modalCard}>
           <View style={styles.header}>
@@ -255,6 +255,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.75)',
     justifyContent: 'center',
     padding: 16,
+    ...(Platform.OS === 'web' ? { backdropFilter: 'blur(8px)' } as any : {}),
   },
   modalCard: {
     backgroundColor: '#0f172a',
