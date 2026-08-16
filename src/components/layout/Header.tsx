@@ -6,6 +6,8 @@ import { usePermissions } from '../../hooks/usePermissions';
 import { chimeService } from '../../lib/chime';
 import { Car, Plus, LogOut, User, Volume2, VolumeX, ChevronDown, Shield } from 'lucide-react-native';
 
+import { getCurrentActiveBreak } from '../../utils/workshopHoursUtils';
+
 const ROLE_LABELS: Record<string, string> = {
   supervisor: 'Supervisor',
   tech_workshop: 'Tech 1 · Workshop',
@@ -19,6 +21,7 @@ export const Header: React.FC = () => {
   const { signOut, user } = useAuth();
   const { canAddVehicle, displayName, currentRole } = usePermissions();
   const [timeStr, setTimeStr] = useState<string>('');
+  const [activeBreak, setActiveBreak] = useState<{ name: string; endStr: string } | null>(null);
   const [isAudioMuted, setIsAudioMuted] = useState<boolean>(chimeService.getMuted());
   const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
   
@@ -38,6 +41,7 @@ export const Header: React.FC = () => {
     const updateTime = () => {
       const d = new Date();
       setTimeStr(d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      setActiveBreak(getCurrentActiveBreak(d));
     };
     updateTime();
     const interval = setInterval(updateTime, 1000);
@@ -110,6 +114,9 @@ export const Header: React.FC = () => {
           </View>
           <Text style={styles.brandSub}>
             {timeStr}
+            {activeBreak && (
+              <Text style={styles.breakPillText}> · ☕ {activeBreak.name} (Until {activeBreak.endStr})</Text>
+            )}
           </Text>
         </View>
       </View>
@@ -256,6 +263,10 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 0.5,
+  },
+  breakPillText: {
+    color: '#fbbf24',
+    fontWeight: '700',
   },
   rightGroup: {
     flexDirection: 'row',

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { getNetWorkingSeconds, getCurrentActiveBreak } from "../utils/workshopHoursUtils";
 
 export const formatDurationSec = (seconds: number): string => {
   if (!seconds || seconds <= 0) return "0m 00s";
@@ -12,10 +13,14 @@ export const formatDurationSec = (seconds: number): string => {
 export const useElapsedTimer = (startDateStr?: string | null): string => {
   const computeCurrent = (): string => {
     if (!startDateStr) return "0m 00s";
-    const start = new Date(startDateStr).getTime();
-    if (isNaN(start)) return "0m 00s";
-    const diffSec = Math.max(0, Math.floor((Date.now() - start) / 1000));
-    return formatDurationSec(diffSec);
+    const now = new Date();
+    const netSec = getNetWorkingSeconds(startDateStr, now);
+    const timeStr = formatDurationSec(netSec);
+    const activeBreak = getCurrentActiveBreak(now);
+    if (activeBreak) {
+      return `⏸ ${timeStr} (${activeBreak.name})`;
+    }
+    return timeStr;
   };
 
   const [elapsedStr, setElapsedStr] = useState<string>(computeCurrent);

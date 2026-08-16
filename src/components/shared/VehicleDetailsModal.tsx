@@ -9,6 +9,8 @@ import {
 } from 'lucide-react-native';
 
 import { LicensePlate } from './LicensePlate';
+import { getStageDurationBreakdown, formatDurationString } from '../../utils/vehicleUtils';
+import { getNetWorkingSeconds, getCurrentActiveBreak } from '../../utils/workshopHoursUtils';
 
 const STAGE_ORDER: { zone: BayZone; name: string; code: string; icon: any; color: string }[] = [
   { zone: 'workshop', name: 'General Workshop Bay', code: 'BAY 01', icon: Wrench, color: '#06b6d4' },
@@ -27,6 +29,7 @@ export const VehicleDetailsModal: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [activeStageDuration, setActiveStageDuration] = useState<string>('0m 00s');
   const [totalElapsedStr, setTotalElapsedStr] = useState<string>('0m 00s');
+  const [grossElapsedStr, setGrossElapsedStr] = useState<string>('0m 00s');
 
   useEffect(() => {
     if (selectedVehicle) {
@@ -57,34 +60,22 @@ export const VehicleDetailsModal: React.FC = () => {
     if (!selectedVehicle) return;
 
     const updateTimers = () => {
-      const now = Date.now();
+      const now = new Date();
 
-      // Total Elapsed Time since Intake
-      const intakeStart = new Date(selectedVehicle.intake_at).getTime();
-      const totalSec = Math.max(0, Math.floor((now - intakeStart) / 1000));
-      const totalHrs = Math.floor(totalSec / 3600);
-      const totalMins = Math.floor((totalSec % 3600) / 60);
-      const totalSecs = totalSec % 60;
-      const padTotalSec = totalSecs < 10 ? `0${totalSecs}` : `${totalSecs}`;
-      setTotalElapsedStr(
-        totalHrs > 0
-          ? `${totalHrs}h ${totalMins}m ${padTotalSec}s`
-          : `${totalMins}m ${padTotalSec}s`
-      );
+      // Net & Gross Elapsed Time since Intake
+      const netSec = getNetWorkingSeconds(selectedVehicle.intake_at, now);
+      const grossSec = Math.max(0, Math.floor((now.getTime() - new Date(selectedVehicle.intake_at).getTime()) / 1000));
+      setTotalElapsedStr(formatDurationString(netSec, true));
+      setGrossElapsedStr(formatDurationString(grossSec, true));
 
       // Active Stage Duration
       const lastLog = selectedVehicle.stage_logs[selectedVehicle.stage_logs.length - 1];
       if (lastLog && !lastLog.exited_at) {
-        const stageStart = new Date(lastLog.entered_at).getTime();
-        const stageSec = Math.max(0, Math.floor((now - stageStart) / 1000));
-        const sHrs = Math.floor(stageSec / 3600);
-        const sMins = Math.floor((stageSec % 3600) / 60);
-        const sSecs = stageSec % 60;
-        const padSSecs = sSecs < 10 ? `0${sSecs}` : `${sSecs}`;
+        const stageNetSec = getNetWorkingSeconds(lastLog.entered_at, now);
+        const stageTimeStr = formatDurationString(stageNetSec, true);
+        const activeBreak = getCurrentActiveBreak(now);
         setActiveStageDuration(
-          sHrs > 0
-            ? `${sHrs}h ${sMins}m ${padSSecs}s`
-            : `${sMins}m ${padSSecs}s`
+          activeBreak ? `⏸ ${stageTimeStr} (${activeBreak.name})` : stageTimeStr
         );
       } else {
         setActiveStageDuration('0m 00s');
@@ -334,16 +325,20 @@ export const VehicleDetailsModal: React.FC = () => {
                       const isCompleted = hasExitedAll && !isCurrent;
                       const isLastInOrder = idx === orderedTimelineNodes.length - 1;
 
-                      const totalSpentSec = logsForZone.reduce((acc, log) => {
-                        if (log.duration_seconds) return acc + log.duration_seconds;
-                        if (!log.exited_at) {
-                          const start = new Date(log.entered_at).getTime();
-                          return acc + Math.max(0, Math.floor((Date.now() - start) / 1000));
-                        }
-                        return acc;
-                      }, 0);
+                      let totalNetSec = 0;
+                      let totalGrossSec = 0;
+                      const breakNotes: string[] = [];
 
-                      const spentStr = isCurrent ? activeStageDuration : formatSpentTime(totalSpentSec);
+                      logsForZone.forEach(l => {
+                        const breakdown = getStageDurationBreakdown(l.entered_at, l.exited_at);
+                        totalNetSec += breakdown.netSec;
+                        totalGrossSec += breakdown.grossSec;
+                        if (breakdown.breakNote) {
+                          breakNotes.push(breakdown.breakNote);
+                        }
+                      });
+
+                      const spentStr = isCurrent ? activeStageDuration : formatDurationString(totalNetSec, true);
 
                       const isInspectionOrFinished = currentZone === 'inspection' || selectedVehicle.is_finished;
                       const isCancelled = stageDef.zone !== 'inspection' && !isCurrent && !isCompleted && isInspectionOrFinished;
@@ -410,6 +405,13 @@ export const VehicleDetailsModal: React.FC = () => {
                                 {l.exited_at ? ` → Exited ${formatSLSTime(l.exited_at)}` : ' (Current)'}
                               </Text>
                             ))}
+
+                            {/* Break Time Deducted Subtext */}
+                            {breakNotes.map((note, nIdx) => (
+                              <Text key={`bn-${nIdx}`} style={styles.breakNoteSubText}>
+                                ☕ {note}
+                              </Text>
+                            ))}
                           </View>
                         </View>
                       );
@@ -440,7 +442,10 @@ export const VehicleDetailsModal: React.FC = () => {
               <View style={styles.footerStandardRow}>
                 <View style={styles.totalTimePill}>
                   <Clock size={14} color="#38bdf8" />
-                  <Text style={styles.totalTimeText}>Total Spent: {totalElapsedStr}</Text>
+                  <Text style={styles.totalTimeText}>Net Work: {totalElapsedStr}</Text>
+                  {grossElapsedStr !== totalElapsedStr && (
+                    <Text style={styles.grossTimeSubText}>· Total: {grossElapsedStr}</Text>
+                  )}
                 </View>
 
                 <TouchableOpacity style={styles.closeBtn} onPress={() => setSelectedVehicle(null)}>
@@ -466,6 +471,7 @@ const styles = StyleSheet.create({
   footerStandardRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' },
   totalTimePill: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(14, 165, 233, 0.12)', borderWidth: 1, borderColor: 'rgba(14, 165, 233, 0.3)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 },
   totalTimeText: { color: '#38bdf8', fontSize: 12, fontWeight: '700' },
+  grossTimeSubText: { color: '#94a3b8', fontSize: 11, fontWeight: '500' },
   editPencilBtn: { backgroundColor: 'rgba(14, 165, 233, 0.15)', borderWidth: 1, borderColor: 'rgba(14, 165, 233, 0.3)', padding: 8, borderRadius: 20 },
   closeBtnIcon: { backgroundColor: 'rgba(255, 255, 255, 0.05)', padding: 8, borderRadius: 20 },
   body: { padding: 20 },
@@ -507,6 +513,7 @@ const styles = StyleSheet.create({
   timeTagText: { color: '#94a3b8', fontSize: 12, fontWeight: '500' },
   bayCodeText: { color: '#475569', fontSize: 10, fontWeight: '700' },
   logSubText: { color: '#64748b', fontSize: 10, marginTop: 2 },
+  breakNoteSubText: { color: '#fbbf24', fontSize: 10.5, marginTop: 2, fontStyle: 'italic' },
   sectionTitle: { color: '#94a3b8', fontWeight: '700', fontSize: 11, letterSpacing: 1, marginTop: 8 },
   btnRow: { flexDirection: 'row', gap: 10 },
   relocateBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.05)', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },

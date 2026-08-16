@@ -6,6 +6,8 @@ import { BayZone, TaskType } from "../types/vehicle";
 import { matchesVehicleSearch } from "../utils/searchUtils";
 import { getTaskTypeForBay } from "../utils/vehicleUtils";
 
+import { getNetWorkingSeconds, getCurrentActiveBreak } from "../utils/workshopHoursUtils";
+
 export interface PendingTransfer {
   vehicleId: string;
   vehicleNo: string;
@@ -15,18 +17,23 @@ export interface PendingTransfer {
 
 const computeVehicleTimersMap = (vehicleList: any[]) => {
   const updated: Record<string, string> = {};
-  const now = Date.now();
+  const now = new Date();
+  const activeBreak = getCurrentActiveBreak(now);
 
   vehicleList.forEach((v) => {
     const lastLog = v.stage_logs[v.stage_logs.length - 1];
     if (lastLog && !lastLog.exited_at) {
-      const start = new Date(lastLog.entered_at).getTime();
-      const diffSec = Math.max(0, Math.floor((now - start) / 1000));
-      const hours = Math.floor(diffSec / 3600);
-      const mins = Math.floor((diffSec % 3600) / 60);
-      const secs = diffSec % 60;
+      const netSec = getNetWorkingSeconds(lastLog.entered_at, now);
+      const hours = Math.floor(netSec / 3600);
+      const mins = Math.floor((netSec % 3600) / 60);
+      const secs = netSec % 60;
       const padSec = secs < 10 ? `0${secs}` : `${secs}`;
-      updated[v.id] = hours > 0 ? `${hours}h ${mins}m ${padSec}s` : `${mins}m ${padSec}s`;
+      const timeStr = hours > 0 ? `${hours}h ${mins}m ${padSec}s` : `${mins}m ${padSec}s`;
+      if (activeBreak) {
+        updated[v.id] = `⏸ ${timeStr} (${activeBreak.name})`;
+      } else {
+        updated[v.id] = timeStr;
+      }
     } else {
       updated[v.id] = "0m 00s";
     }
