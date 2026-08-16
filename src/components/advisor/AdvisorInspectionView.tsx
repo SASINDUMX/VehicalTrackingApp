@@ -71,7 +71,7 @@ export const AdvisorInspectionView: React.FC = () => {
                       </View>
 
                       <View style={styles.auditList}>
-                        {vehicle.tasks.map(t => (
+                        {vehicle.tasks.filter(t => t.is_required).map(t => (
                           <View key={t.id} style={styles.taskAuditRow}>
                             <Text style={[styles.taskName, !t.is_completed && styles.taskNameCancelled]}>
                               {t.task_name}
@@ -94,11 +94,11 @@ export const AdvisorInspectionView: React.FC = () => {
 
                     {/* Finish & Deliver Action */}
                     <TouchableOpacity
-                      style={[styles.deliverBtn, !canFinishJob && { opacity: 0.4 }]}
+                      style={[styles.deliverBtn, !canFinishJob && { opacity: 0.4, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }]}
                       onPress={() => {
                         if (canFinishJob) finishVehicleJobSheet(vehicle.id, 'Service Advisor');
                       }}
-                      disabled={!canFinishJob}
+                      activeOpacity={canFinishJob ? 0.7 : 1}
                     >
                       <Sparkles size={18} color="#ffffff" />
                       <Text style={styles.deliverText}>

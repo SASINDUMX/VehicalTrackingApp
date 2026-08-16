@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useVehicles } from "../context/VehicleContext";
 import { usePermissions } from "./usePermissions";
 import { getRoleBay, getTechName } from "../constants/bays";
@@ -61,18 +61,20 @@ export const useTechnicianStation = () => {
     }
   };
 
-  const bayVehicles = vehicles
-    .filter(v => {
-      const matchesBay = v.current_zone === activeBay && !v.is_finished;
-      return matchesBay && matchesVehicleSearch(v.vehicle_no, searchQuery);
-    })
-    .sort((a, b) => {
-      const lastLogA = a.stage_logs[a.stage_logs.length - 1];
-      const lastLogB = b.stage_logs[b.stage_logs.length - 1];
-      const timeA = lastLogA?.entered_at ? new Date(lastLogA.entered_at).getTime() : new Date(a.intake_at).getTime();
-      const timeB = lastLogB?.entered_at ? new Date(lastLogB.entered_at).getTime() : new Date(b.intake_at).getTime();
-      return timeA - timeB;
-    });
+  const bayVehicles = useMemo(() => {
+    return vehicles
+      .filter(v => {
+        const matchesBay = v.current_zone === activeBay && !v.is_finished;
+        return matchesBay && matchesVehicleSearch(v.vehicle_no, searchQuery);
+      })
+      .sort((a, b) => {
+        const lastLogA = a.stage_logs[a.stage_logs.length - 1];
+        const lastLogB = b.stage_logs[b.stage_logs.length - 1];
+        const timeA = lastLogA?.entered_at ? new Date(lastLogA.entered_at).getTime() : new Date(a.intake_at).getTime();
+        const timeB = lastLogB?.entered_at ? new Date(lastLogB.entered_at).getTime() : new Date(b.intake_at).getTime();
+        return timeA - timeB;
+      });
+  }, [vehicles, activeBay, searchQuery]);
 
   const [elapsedTimes, setElapsedTimes] = useState<Record<string, string>>(() => computeVehicleTimersMap(bayVehicles));
 

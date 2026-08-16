@@ -156,7 +156,6 @@ export const TechnicianStationView: React.FC = () => {
                                   toggleTaskCompletion(vehicle.id, task.id, techName);
                                 }
                               }}
-                              disabled={!isEditable}
                             >
                               <View style={styles.taskLeft}>
                                 {task.is_completed ? (
@@ -226,11 +225,11 @@ export const TechnicianStationView: React.FC = () => {
                           <View style={styles.dispatchBtnGroup}>
                             {canShowAlignmentBtn && (
                               <TouchableOpacity
-                                style={[styles.dispatchBtn, styles.dispatchBtnAlignment, !isCanDispatch && { opacity: 0.35 }]}
+                                style={[styles.dispatchBtn, styles.dispatchBtnAlignment, !isCanDispatch && { opacity: 0.35, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }]}
                                 onPress={() => {
                                   if (isCanDispatch) handleRequestTransfer(vehicle.id, vehicle.vehicle_no, 'alignment', 'Wheel Alignment Bay');
                                 }}
-                                disabled={!isCanDispatch}
+                                activeOpacity={isCanDispatch ? 0.7 : 1}
                               >
                                 <Text style={styles.dispatchBtnText}>Alignment</Text>
                               </TouchableOpacity>
@@ -238,11 +237,11 @@ export const TechnicianStationView: React.FC = () => {
 
                             {canShowHoistBtn && (
                               <TouchableOpacity
-                                style={[styles.dispatchBtn, styles.dispatchBtnHoist, !isCanDispatch && { opacity: 0.35 }]}
+                                style={[styles.dispatchBtn, styles.dispatchBtnHoist, !isCanDispatch && { opacity: 0.35, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }]}
                                 onPress={() => {
                                   if (isCanDispatch) handleRequestTransfer(vehicle.id, vehicle.vehicle_no, 'hoist', 'Hoist Service Bay');
                                 }}
-                                disabled={!isCanDispatch}
+                                activeOpacity={isCanDispatch ? 0.7 : 1}
                               >
                                 <Text style={styles.dispatchBtnText}>Hoist</Text>
                               </TouchableOpacity>
@@ -250,11 +249,11 @@ export const TechnicianStationView: React.FC = () => {
 
                             {canShowWorkshopBtn && (
                               <TouchableOpacity
-                                style={[styles.dispatchBtn, styles.dispatchBtnWorkshop, !isCanDispatch && { opacity: 0.35 }]}
+                                style={[styles.dispatchBtn, styles.dispatchBtnWorkshop, !isCanDispatch && { opacity: 0.35, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }]}
                                 onPress={() => {
                                   if (isCanDispatch) handleRequestTransfer(vehicle.id, vehicle.vehicle_no, 'workshop', 'General Workshop Bay');
                                 }}
-                                disabled={!isCanDispatch}
+                                activeOpacity={isCanDispatch ? 0.7 : 1}
                               >
                                 <Text style={styles.dispatchBtnText}>Workshop</Text>
                               </TouchableOpacity>
@@ -262,11 +261,11 @@ export const TechnicianStationView: React.FC = () => {
 
                             {canShowAdvisorBtn && (
                               <TouchableOpacity
-                                style={[styles.dispatchBtn, styles.dispatchBtnAdvisor, !isCanDispatch && { opacity: 0.35 }]}
+                                style={[styles.dispatchBtn, styles.dispatchBtnAdvisor, !isCanDispatch && { opacity: 0.35, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }]}
                                 onPress={() => {
                                   if (isCanDispatch) handleRequestTransfer(vehicle.id, vehicle.vehicle_no, 'inspection', 'Advisor Inspection Zone');
                                 }}
-                                disabled={!isCanDispatch}
+                                activeOpacity={isCanDispatch ? 0.7 : 1}
                               >
                                 <Text style={styles.dispatchBtnText}>Final Inspection →</Text>
                               </TouchableOpacity>
