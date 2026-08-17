@@ -128,8 +128,12 @@ export const SegmentedTabs: React.FC = () => {
         >
           <Text style={[
             styles.segmentBtnText,
-            { color: isOverviewActive ? (isDark ? '#ffffff' : colors.primary) : colors.textSecondary },
-            isOverviewActive && styles.activeBtnText
+            {
+              color: isOverviewActive 
+                ? (isDark ? '#38bdf8' : colors.primary) 
+                : colors.textSecondary,
+              fontWeight: isOverviewActive ? '800' : '600',
+            }
           ]}>
             Overview
           </Text>
@@ -156,8 +160,12 @@ export const SegmentedTabs: React.FC = () => {
           >
             <Text style={[
               styles.segmentBtnText,
-              { color: isWorkshopActive ? (isDark ? '#ffffff' : colors.primary) : colors.textSecondary },
-              isWorkshopActive && styles.activeBtnText
+              {
+                color: isWorkshopActive 
+                  ? (isDark ? '#38bdf8' : colors.primary) 
+                  : colors.textSecondary,
+                fontWeight: isWorkshopActive ? '800' : '600',
+              }
             ]}>
               General
             </Text>
@@ -178,8 +186,12 @@ export const SegmentedTabs: React.FC = () => {
           >
             <Text style={[
               styles.segmentBtnText,
-              { color: isAlignmentActive ? (isDark ? '#ffffff' : colors.success) : colors.textSecondary },
-              isAlignmentActive && styles.activeBtnText
+              {
+                color: isAlignmentActive 
+                  ? (isDark ? '#34d399' : colors.success) 
+                  : colors.textSecondary,
+                fontWeight: isAlignmentActive ? '800' : '600',
+              }
             ]}>
               Alignment
             </Text>
@@ -200,8 +212,12 @@ export const SegmentedTabs: React.FC = () => {
           >
             <Text style={[
               styles.segmentBtnText,
-              { color: isHoistActive ? (isDark ? '#ffffff' : colors.warning) : colors.textSecondary },
-              isHoistActive && styles.activeBtnText
+              {
+                color: isHoistActive 
+                  ? (isDark ? '#fbbf24' : colors.warning) 
+                  : colors.textSecondary,
+                fontWeight: isHoistActive ? '800' : '600',
+              }
             ]}>
               Hoist
             </Text>
@@ -224,8 +240,12 @@ export const SegmentedTabs: React.FC = () => {
         >
           <Text style={[
             styles.segmentBtnText,
-            { color: isAdvisorActive ? (isDark ? '#ffffff' : colors.purple) : colors.textSecondary },
-            isAdvisorActive && styles.activeBtnText
+            {
+              color: isAdvisorActive 
+                ? (isDark ? '#c084fc' : colors.purple) 
+                : colors.textSecondary,
+              fontWeight: isAdvisorActive ? '800' : '600',
+            }
           ]}>
             Ready
           </Text>
@@ -319,7 +339,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   activeBtnText: {
-    color: '#ffffff',
     fontWeight: '800',
   },
   topSearchContainer: {
