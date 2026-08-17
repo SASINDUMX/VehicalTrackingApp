@@ -190,14 +190,14 @@ export const Header: React.FC = () => {
                   <>
                     <Moon size={16} color="#c084fc" />
                     <Text style={[styles.dropdownItemText, { color: '#c084fc' }]}>
-                      Theme: Carbon Dark {themeMode === 'system' ? '(Auto)' : ''}
+                      Theme: Dark
                     </Text>
                   </>
                 ) : (
                   <>
                     <Sun size={16} color="#d97706" />
                     <Text style={[styles.dropdownItemText, { color: '#d97706' }]}>
-                      Theme: Executive Light {themeMode === 'system' ? '(Auto)' : ''}
+                      Theme: Light
                     </Text>
                   </>
                 )}
