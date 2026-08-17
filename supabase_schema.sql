@@ -64,6 +64,7 @@ CREATE TABLE user_profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   display_name VARCHAR(100) NOT NULL,
   role user_role NOT NULL DEFAULT 'tech_workshop',
+  theme_preference VARCHAR(20) NOT NULL DEFAULT 'system',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

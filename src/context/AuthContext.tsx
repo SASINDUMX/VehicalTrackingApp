@@ -6,6 +6,7 @@ export interface UserProfile {
   id: string;
   display_name: string;
   role: UserRole;
+  theme_preference?: 'system' | 'dark' | 'light';
 }
 
 interface AuthContextType {
