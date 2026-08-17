@@ -4,6 +4,8 @@ import { useVehicles } from '../../context/VehicleContext';
 import { BayZone, TaskType } from '../../types/vehicle';
 import { X, Car, Wrench, Shield, Navigation, Send, CheckSquare, Square } from 'lucide-react-native';
 
+import { formatVehicleNoInput, isValidVehicleNo } from '../../utils/vehicleNumberUtils';
+
 export const AddVehicleModal: React.FC = () => {
   const { isAddModalOpen, setIsAddModalOpen, addVehicle } = useVehicles();
 
@@ -19,6 +21,9 @@ export const AddVehicleModal: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   if (!isAddModalOpen) return null;
+
+  const isNoValid = isValidVehicleNo(vehicleNo);
+  const isNoTouched = vehicleNo.length > 0;
 
   // Auto-determine recommended starting station based on shop flow (Workshop -> Alignment -> Hoist)
   const computeRecommendedStation = (tasks: TaskType[]): { zone: BayZone; tech: string } => {
@@ -54,11 +59,11 @@ export const AddVehicleModal: React.FC = () => {
   };
 
   const handleSubmit = async () => {
-    if (!vehicleNo.trim()) return;
+    if (!isNoValid || isSubmitting) return;
 
     setIsSubmitting(true);
     try {
-      await addVehicle(vehicleNo, selectedTasks, targetZone, assignedTech, remarks);
+      await addVehicle(vehicleNo.trim(), selectedTasks, targetZone, assignedTech, remarks);
       setIsAddModalOpen(false);
       setVehicleNo('');
       setRemarks('');
@@ -72,18 +77,8 @@ export const AddVehicleModal: React.FC = () => {
   const recommendedStation = computeRecommendedStation(selectedTasks).zone;
 
   const handleVehicleNoChange = (text: string) => {
-    // 1. Allow only letters, numbers, spaces, and hyphens (-)
-    let clean = text.replace(/[^a-zA-Z0-9\s-]/g, '').toUpperCase();
-
-    // 2. Auto-insert hyphen (-) when transitioning from letters to numbers (e.g. CAB7 -> CAB-7, WP CAB7 -> WP CAB-7)
-    if (text.length > vehicleNo.length) {
-      clean = clean.replace(/([A-Z])(?=\d)/g, '$1-');
-    }
-
-    // Clean up duplicate hyphens
-    clean = clean.replace(/-+/g, '-');
-
-    setVehicleNo(clean);
+    const formatted = formatVehicleNoInput(text, vehicleNo);
+    setVehicleNo(formatted);
   };
 
   return (
@@ -106,13 +101,28 @@ export const AddVehicleModal: React.FC = () => {
             <View style={styles.formGroup}>
               <Text style={styles.label}>VEHICLE NUMBER / REGISTRATION NO:</Text>
               <TextInput
-                style={styles.input}
-                placeholder="e.g. WP CAB-7712"
+                style={[
+                  styles.input,
+                  isNoValid && styles.inputValid
+                ]}
+                placeholder="e.g. CAB-7712, WP-1234, or 14-1234"
                 placeholderTextColor="#475569"
                 value={vehicleNo}
                 onChangeText={handleVehicleNoChange}
                 autoCapitalize="characters"
+                maxLength={8}
               />
+              <Text style={[
+                styles.helperText,
+                isNoValid && styles.helperTextValid,
+                isNoTouched && !isNoValid && styles.helperTextInvalid
+              ]}>
+                {isNoValid
+                  ? '✓ Valid registration format'
+                  : isNoTouched
+                  ? 'Format: 2-3 letters + 4 digits (e.g. CAB-1234) or 2 digits + 4 digits (e.g. 14-1234)'
+                  : 'Format: CAB-1234, WP-1234, or 14-1234'}
+              </Text>
             </View>
 
             <View style={styles.formGroup}>
@@ -235,9 +245,13 @@ export const AddVehicleModal: React.FC = () => {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.submitBtn, (!vehicleNo.trim() || isSubmitting) && styles.disabledBtn, (!vehicleNo.trim() || isSubmitting) && (Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {})]}
-              onPress={() => { if (vehicleNo.trim() && !isSubmitting) handleSubmit(); }}
-              activeOpacity={(!vehicleNo.trim() || isSubmitting) ? 1 : 0.7}
+              style={[
+                styles.submitBtn,
+                (!isNoValid || isSubmitting) && styles.disabledBtn,
+                (!isNoValid || isSubmitting) && (Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {})
+              ]}
+              onPress={() => { if (isNoValid && !isSubmitting) handleSubmit(); }}
+              activeOpacity={(!isNoValid || isSubmitting) ? 1 : 0.7}
             >
               <Send size={16} color="#ffffff" />
               <Text style={styles.submitBtnText}>{isSubmitting ? 'Creating...' : 'Create & Send'}</Text>
@@ -333,10 +347,30 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 15,
     fontWeight: '600',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    letterSpacing: 1,
+  },
+  inputValid: {
+    borderColor: 'rgba(16, 185, 129, 0.5)',
+    backgroundColor: 'rgba(16, 185, 129, 0.05)',
+  },
+  helperText: {
+    fontSize: 11,
+    color: '#64748b',
+    marginTop: 2,
+  },
+  helperTextValid: {
+    color: '#10b981',
+    fontWeight: '600',
+  },
+  helperTextInvalid: {
+    color: '#f59e0b',
   },
   textArea: {
     height: 80,
     textAlignVertical: 'top',
+    letterSpacing: 0,
+    fontFamily: undefined,
   },
   tasksRow: {
     gap: 10,
