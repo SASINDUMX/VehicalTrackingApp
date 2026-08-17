@@ -120,7 +120,7 @@ export const AddVehicleModal: React.FC = () => {
                 {isNoValid
                   ? '✓ Valid registration format'
                   : isNoTouched
-                  ? 'Format: 2-3 letters + 4 digits (e.g. CAB-1234) or 2 digits + 4 digits (e.g. 14-1234)'
+                  ? '✕ Invalid registration format'
                   : 'Format: CAB-1234, WP-1234, or 14-1234'}
               </Text>
             </View>
@@ -364,7 +364,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   helperTextInvalid: {
-    color: '#f59e0b',
+    color: '#ef4444',
+    fontWeight: '600',
   },
   textArea: {
     height: 80,
