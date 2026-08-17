@@ -24,13 +24,13 @@ class HapticFeedbackService {
   }
 
   /**
-   * Distinct two-pulse vibration when a vehicle arrives at the technician's bay
+   * Strong, punchy vibration pattern when a vehicle arrives at the technician's bay
    */
   public triggerArrivalHaptic() {
     if (this.getMuted()) return;
     try {
       if (Platform.OS === 'web' && typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-        navigator.vibrate([70, 50, 120]);
+        navigator.vibrate([200, 100, 200, 100, 450]);
       }
     } catch {
       // Graceful fallback for unsupported browsers
@@ -38,13 +38,13 @@ class HapticFeedbackService {
   }
 
   /**
-   * Subtle single-pulse vibration for task checkboxes and button taps
+   * Firm, solid physical click vibration for task checkboxes and button taps
    */
   public triggerLightHaptic() {
     if (this.getMuted()) return;
     try {
       if (Platform.OS === 'web' && typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-        navigator.vibrate(35);
+        navigator.vibrate(80);
       }
     } catch {
       // Graceful fallback
@@ -52,13 +52,13 @@ class HapticFeedbackService {
   }
 
   /**
-   * Success vibration pattern for vehicle handover and job completion
+   * Powerful celebratory vibration pattern for vehicle handover and job completion
    */
   public triggerSuccessHaptic() {
     if (this.getMuted()) return;
     try {
       if (Platform.OS === 'web' && typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-        navigator.vibrate([60, 40, 60, 40, 100]);
+        navigator.vibrate([150, 80, 150, 80, 300, 100, 500]);
       }
     } catch {
       // Graceful fallback
