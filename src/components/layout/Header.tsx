@@ -105,7 +105,7 @@ export const Header: React.FC = () => {
   return (
     <View style={styles.headerContainer}>
       <View style={styles.brandRow}>
-        <View style={styles.logoIcon}>
+        <View style={styles.logoBox}>
           <Car size={24} color="#ffffff" />
         </View>
         <View style={styles.brandTextContainer}>

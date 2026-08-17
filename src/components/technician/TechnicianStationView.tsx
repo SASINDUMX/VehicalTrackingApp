@@ -6,6 +6,7 @@ import { EmptyStateCard } from '../shared/EmptyStateCard';
 import { TimerPill } from '../shared/TimerPill';
 import { calculateJobSheetProgress } from '../../utils/vehicleUtils';
 import { useTechnicianStation } from '../../hooks/useTechnicianStation';
+import { Vehicle, VehicleTask } from '../../types/vehicle';
 
 export const TechnicianStationView: React.FC = React.memo(() => {
   const {
@@ -29,24 +30,24 @@ export const TechnicianStationView: React.FC = React.memo(() => {
     handleConfirmTransfer,
   } = useTechnicianStation();
 
-  const renderVehicleItem = ({ item: vehicle }: { item: any }) => {
+  const renderVehicleItem = ({ item: vehicle }: { item: Vehicle }) => {
     const { completedCount, totalRequired: totalReq, percent } = calculateJobSheetProgress(vehicle.tasks);
     const isExpanded = Boolean(expandedCards[vehicle.id]);
 
     // Filter ONLY the task assigned to this active bay
-    const bayTask = vehicle.tasks.find((t: any) => t.task_type === activeTaskType && t.is_required) || vehicle.tasks.find((t: any) => t.task_type === activeTaskType);
+    const bayTask = vehicle.tasks.find(t => t.task_type === activeTaskType && t.is_required) || vehicle.tasks.find(t => t.task_type === activeTaskType);
     const isCurrentTaskDone = Boolean(bayTask && bayTask.is_completed);
 
     // Required tasks for this vehicle's job sheet
-    const requiredTaskTypes = vehicle.tasks.filter((t: any) => t.is_required).map((t: any) => t.task_type);
+    const requiredTaskTypes = vehicle.tasks.filter(t => t.is_required).map(t => t.task_type);
     const isHoistRequired = requiredTaskTypes.includes('hoist_service');
     const isAlignmentRequired = requiredTaskTypes.includes('wheel_alignment');
     const isWorkshopRequired = requiredTaskTypes.includes('general_service');
 
     // Completed status for each bay task
-    const isWorkshopDone = Boolean(vehicle.tasks.find((t: any) => t.task_type === 'general_service')?.is_completed);
-    const isHoistDone = Boolean(vehicle.tasks.find((t: any) => t.task_type === 'hoist_service')?.is_completed);
-    const isAlignmentDone = Boolean(vehicle.tasks.find((t: any) => t.task_type === 'wheel_alignment')?.is_completed);
+    const isWorkshopDone = Boolean(vehicle.tasks.find(t => t.task_type === 'general_service')?.is_completed);
+    const isHoistDone = Boolean(vehicle.tasks.find(t => t.task_type === 'hoist_service')?.is_completed);
+    const isAlignmentDone = Boolean(vehicle.tasks.find(t => t.task_type === 'wheel_alignment')?.is_completed);
 
     const isCanDispatch = canTransferVehicle && isCurrentTaskDone;
 
