@@ -22,7 +22,7 @@ export const Header: React.FC = () => {
   const { setIsAddModalOpen, isRealtimeConnected } = useVehicles();
   const { signOut, user } = useAuth();
   const { canAddVehicle, displayName, currentRole } = usePermissions();
-  const { themeMode, isDark, colors, setThemeMode } = useTheme();
+  const { themeMode, isDark, colors, setThemeMode, toggleTheme } = useTheme();
   const [timeStr, setTimeStr] = useState<string>('');
   const [activeBreak, setActiveBreak] = useState<{ name: string; endStr: string } | null>(null);
   const [isAudioMuted, setIsAudioMuted] = useState<boolean>(chimeService.getMuted());
@@ -179,59 +179,55 @@ export const Header: React.FC = () => {
 
             <View style={[styles.dropdownDivider, { backgroundColor: colors.borderGlass }]} />
 
-            {/* Theme Selection Row with Dark / Light / Auto (System Default) */}
+            {/* Theme Toggle Option with tiny Auto button on the right */}
             <View style={styles.dropdownThemeRow}>
-              <View style={styles.dropdownThemeLeft}>
-                {themeMode === 'system' ? (
-                  <Monitor size={15} color={colors.primaryLight} />
-                ) : isDark ? (
-                  <Moon size={15} color="#c084fc" />
+              <TouchableOpacity
+                style={styles.dropdownThemeLeft}
+                onPress={toggleTheme}
+                activeOpacity={0.7}
+              >
+                {isDark ? (
+                  <>
+                    <Moon size={16} color="#c084fc" />
+                    <Text style={[styles.dropdownItemText, { color: '#c084fc' }]}>
+                      Theme: Carbon Dark {themeMode === 'system' ? '(Auto)' : ''}
+                    </Text>
+                  </>
                 ) : (
-                  <Sun size={15} color="#d97706" />
+                  <>
+                    <Sun size={16} color="#d97706" />
+                    <Text style={[styles.dropdownItemText, { color: '#d97706' }]}>
+                      Theme: Executive Light {themeMode === 'system' ? '(Auto)' : ''}
+                    </Text>
+                  </>
                 )}
-                <Text style={[styles.dropdownItemText, { color: colors.textPrimary }]}>Theme</Text>
-              </View>
+              </TouchableOpacity>
 
-              <View style={[styles.themePillsContainer, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)', borderColor: colors.borderGlass }]}>
-                {/* Dark Button */}
-                <TouchableOpacity
-                  style={[
-                    styles.themePillBtn,
-                    themeMode === 'dark' && { backgroundColor: colors.primaryDim, borderColor: colors.primary }
-                  ]}
-                  onPress={() => setThemeMode('dark')}
-                  activeOpacity={0.7}
-                >
-                  <Moon size={11} color={themeMode === 'dark' ? colors.primaryLight : colors.textMuted} />
-                  <Text style={[styles.themePillText, { color: themeMode === 'dark' ? colors.primaryLight : colors.textMuted, fontWeight: themeMode === 'dark' ? '800' : '600' }]}>Dark</Text>
-                </TouchableOpacity>
-
-                {/* Light Button */}
-                <TouchableOpacity
-                  style={[
-                    styles.themePillBtn,
-                    themeMode === 'light' && { backgroundColor: colors.primaryDim, borderColor: colors.primary }
-                  ]}
-                  onPress={() => setThemeMode('light')}
-                  activeOpacity={0.7}
-                >
-                  <Sun size={11} color={themeMode === 'light' ? colors.primaryLight : colors.textMuted} />
-                  <Text style={[styles.themePillText, { color: themeMode === 'light' ? colors.primaryLight : colors.textMuted, fontWeight: themeMode === 'light' ? '800' : '600' }]}>Light</Text>
-                </TouchableOpacity>
-
-                {/* Auto (System Default) Button */}
-                <TouchableOpacity
-                  style={[
-                    styles.themePillBtn,
-                    themeMode === 'system' && { backgroundColor: colors.primaryDim, borderColor: colors.primary }
-                  ]}
-                  onPress={() => setThemeMode('system')}
-                  activeOpacity={0.7}
-                >
-                  <Monitor size={11} color={themeMode === 'system' ? colors.primaryLight : colors.textMuted} />
-                  <Text style={[styles.themePillText, { color: themeMode === 'system' ? colors.primaryLight : colors.textMuted, fontWeight: themeMode === 'system' ? '800' : '600' }]}>Auto</Text>
-                </TouchableOpacity>
-              </View>
+              {/* Tiny Auto Button on Right */}
+              <TouchableOpacity
+                style={[
+                  styles.tinyAutoBtn,
+                  {
+                    backgroundColor: themeMode === 'system' 
+                      ? colors.primaryDim 
+                      : (isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)'),
+                    borderColor: themeMode === 'system' ? colors.primary : colors.borderGlass,
+                  }
+                ]}
+                onPress={() => setThemeMode(themeMode === 'system' ? (isDark ? 'dark' : 'light') : 'system')}
+                activeOpacity={0.7}
+              >
+                <Monitor size={11} color={themeMode === 'system' ? colors.primaryLight : colors.textMuted} />
+                <Text style={[
+                  styles.tinyAutoText,
+                  {
+                    color: themeMode === 'system' ? colors.primaryLight : colors.textMuted,
+                    fontWeight: themeMode === 'system' ? '800' : '600'
+                  }
+                ]}>
+                  Auto
+                </Text>
+              </TouchableOpacity>
             </View>
 
             {/* Sound & Chime Toggle Option */}
@@ -486,25 +482,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 8,
+    paddingVertical: 4,
     paddingHorizontal: 8,
   },
   dropdownThemeLeft: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
+    paddingVertical: 6,
   },
-  themePillsContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    padding: 2,
-    gap: 2,
-  },
-  themePillBtn: {
+  tinyAutoBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
@@ -512,11 +500,9 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: 'transparent',
   },
-  themePillText: {
+  tinyAutoText: {
     fontSize: 11,
-    fontWeight: '600',
   },
   dropdownSignOutItem: {
     backgroundColor: 'rgba(239, 68, 68, 0.1)',
