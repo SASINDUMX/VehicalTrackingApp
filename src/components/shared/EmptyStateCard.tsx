@@ -25,6 +25,7 @@ export const EmptyStateCard: React.FC<EmptyStateCardProps> = ({
 
 const styles = StyleSheet.create({
   emptyCard: {
+    width: "100%",
     backgroundColor: "#121a2b",
     borderRadius: 14,
     borderWidth: 1,

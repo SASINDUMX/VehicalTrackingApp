@@ -21,23 +21,21 @@ export const FloorPlan2D: React.FC = React.memo(() => {
 
   return (
     <View style={styles.container}>
-      {/* Main 2D Workshop Floor Map Area */}
-      <ScrollView
-        style={styles.mainLeftArea}
+        <ScrollView
+          style={styles.mainLeftArea}
           contentContainerStyle={styles.canvasContent}
           showsVerticalScrollIndicator={false}
           showsHorizontalScrollIndicator={false}
         >
-          {/* Spatial 2D Workshop Bays */}
-          <View style={styles.spatialGrid}>
-            {isSearchActive && totalMatchingVehicles === 0 ? (
-              <EmptyStateCard
-                icon={FileCheck}
-                title={`No matching vehicles for "${searchQuery}"`}
-                subtitle="Try searching another license plate number."
-              />
-            ) : (
-              bays.map((bay) => {
+          {isSearchActive && totalMatchingVehicles === 0 ? (
+            <EmptyStateCard
+              icon={FileCheck}
+              title={`No matching vehicles for "${searchQuery}"`}
+              subtitle="Try searching another license plate number."
+            />
+          ) : (
+            <View style={styles.spatialGrid}>
+              {bays.map((bay) => {
                 const IconComp = bay.icon;
                 const bayVehicles = getVehiclesInZone(bay.id);
 
@@ -117,9 +115,10 @@ export const FloorPlan2D: React.FC = React.memo(() => {
                   </View>
                 </View>
               );
-            }))}
+            })}
           </View>
-        </ScrollView>
+        )}
+      </ScrollView>
     </View>
   );
 });
