@@ -256,6 +256,13 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
     assignedTech: string,
     remarks: string
   ) => {
+    const cleanNo = vehicleNo.trim().toUpperCase();
+    const existing = vehicles.find(v => !v.is_finished && v.vehicle_no.trim().toUpperCase() === cleanNo);
+    if (existing) {
+      showError('Duplicate Vehicle', `Vehicle ${cleanNo} is already active in the workshop.`);
+      return;
+    }
+
     const now = new Date().toISOString();
     const newId = 'v-' + Date.now();
 

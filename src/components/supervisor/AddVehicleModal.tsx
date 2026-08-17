@@ -7,7 +7,7 @@ import { X, Car, Wrench, Shield, Navigation, Send, CheckSquare, Square } from 'l
 import { formatVehicleNoInput, isValidVehicleNo } from '../../utils/vehicleNumberUtils';
 
 export const AddVehicleModal: React.FC = () => {
-  const { isAddModalOpen, setIsAddModalOpen, addVehicle } = useVehicles();
+  const { isAddModalOpen, setIsAddModalOpen, addVehicle, vehicles } = useVehicles();
 
   const [vehicleNo, setVehicleNo] = useState<string>('');
   const [selectedTasks, setSelectedTasks] = useState<TaskType[]>([
@@ -22,7 +22,10 @@ export const AddVehicleModal: React.FC = () => {
 
   if (!isAddModalOpen) return null;
 
-  const isNoValid = isValidVehicleNo(vehicleNo);
+  const isDuplicate = vehicles.some(
+    v => !v.is_finished && v.vehicle_no.trim().toUpperCase() === vehicleNo.trim().toUpperCase()
+  );
+  const isNoValid = isValidVehicleNo(vehicleNo) && !isDuplicate;
   const isNoTouched = vehicleNo.length > 0;
 
   // Auto-determine recommended starting station based on shop flow (Workshop -> Alignment -> Hoist)
@@ -115,9 +118,11 @@ export const AddVehicleModal: React.FC = () => {
               <Text style={[
                 styles.helperText,
                 isNoValid && styles.helperTextValid,
-                isNoTouched && !isNoValid && styles.helperTextInvalid
+                (isDuplicate || (isNoTouched && !isNoValid)) && styles.helperTextInvalid
               ]}>
-                {isNoValid
+                {isDuplicate
+                  ? '✕ Vehicle is already active in workshop'
+                  : isNoValid
                   ? '✓ Valid registration format'
                   : isNoTouched
                   ? '✕ Invalid registration format'
