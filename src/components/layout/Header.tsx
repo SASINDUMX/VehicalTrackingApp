@@ -5,7 +5,8 @@ import { useAuth } from '../../context/AuthContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { chimeService } from '../../lib/chime';
 import { hapticService } from '../../lib/haptics';
-import { Car, Plus, LogOut, User, Volume2, VolumeX, ChevronDown, Shield, Smartphone } from 'lucide-react-native';
+import { Car, Plus, LogOut, User, Volume2, VolumeX, ChevronDown, Shield, Smartphone, Sun, Moon } from 'lucide-react-native';
+import { useTheme } from '../../context/ThemeContext';
 
 import { getCurrentActiveBreak } from '../../utils/workshopHoursUtils';
 
@@ -21,6 +22,7 @@ export const Header: React.FC = () => {
   const { setIsAddModalOpen, isRealtimeConnected } = useVehicles();
   const { signOut, user } = useAuth();
   const { canAddVehicle, displayName, currentRole } = usePermissions();
+  const { themeMode, isDark, colors, toggleTheme } = useTheme();
   const [timeStr, setTimeStr] = useState<string>('');
   const [activeBreak, setActiveBreak] = useState<{ name: string; endStr: string } | null>(null);
   const [isAudioMuted, setIsAudioMuted] = useState<boolean>(chimeService.getMuted());
@@ -50,18 +52,29 @@ export const Header: React.FC = () => {
 
   useEffect(() => {
     const updateTime = () => {
-      const d = new Date();
-      setTimeStr(d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-      setActiveBreak(getCurrentActiveBreak(d));
+      const now = new Date();
+      const options: Intl.DateTimeFormatOptions = {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true,
+      };
+      setTimeStr(now.toLocaleDateString('en-US', options));
+      setActiveBreak(getCurrentActiveBreak(now));
     };
+
     updateTime();
     const interval = setInterval(updateTime, 1000);
     return () => clearInterval(interval);
   }, []);
 
+  // Heartbeat pulse animation
   useEffect(() => {
     if (isRealtimeConnected) {
-      Animated.loop(
+      const loop = Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, {
             toValue: 1.5,
@@ -72,24 +85,21 @@ export const Header: React.FC = () => {
             toValue: 1,
             duration: 1000,
             useNativeDriver: Platform.OS !== 'web',
-          })
+          }),
         ])
-      ).start();
-    } else {
-      pulseAnim.setValue(1);
+      );
+      loop.start();
+      return () => loop.stop();
     }
   }, [isRealtimeConnected, pulseAnim]);
 
-  const menuRef = React.useRef<View>(null);
-
+  // Click outside listener for web to close menu
   useEffect(() => {
     if (Platform.OS === 'web' && isMenuOpen) {
       const handleOutsideClick = (e: MouseEvent) => {
-        if (menuRef.current) {
-          const domNode = menuRef.current as any;
-          if (domNode && domNode.contains && !domNode.contains(e.target)) {
-            setIsMenuOpen(false);
-          }
+        const target = e.target as HTMLElement;
+        if (!target.closest('#profile-menu-container')) {
+          setIsMenuOpen(false);
         }
       };
       const timer = setTimeout(() => {
@@ -103,14 +113,14 @@ export const Header: React.FC = () => {
   }, [isMenuOpen]);
 
   return (
-    <View style={styles.headerContainer}>
+    <View style={[styles.headerContainer, { backgroundColor: colors.surface, borderBottomColor: colors.borderGlass }]}>
       <View style={styles.brandRow}>
-        <View style={styles.logoBox}>
+        <View style={[styles.logoBox, { backgroundColor: colors.primary }]}>
           <Car size={24} color="#ffffff" />
         </View>
         <View style={styles.brandTextContainer}>
           <View style={styles.titleRow}>
-            <Text style={styles.brandTitle}>UNITED MOTORS</Text>
+            <Text style={[styles.brandTitle, { color: colors.textPrimary }]}>UNITED MOTORS</Text>
             <View style={styles.statusContainer}>
               {isRealtimeConnected && (
                 <Animated.View 
@@ -123,7 +133,7 @@ export const Header: React.FC = () => {
               <View style={[styles.statusDot, isRealtimeConnected ? styles.dotOnline : styles.dotOffline]} />
             </View>
           </View>
-          <Text style={styles.brandSub}>
+          <Text style={[styles.brandSub, { color: colors.textMuted }]}>
             {timeStr}
             {activeBreak && (
               <Text style={styles.breakPillText}> · ☕ {activeBreak.name} (Until {activeBreak.endStr})</Text>
@@ -132,47 +142,69 @@ export const Header: React.FC = () => {
         </View>
       </View>
 
-      <View style={styles.rightGroup} ref={menuRef}>
-        {/* Minimal Clickable Avatar Circle Button */}
+      <View
+        style={styles.rightGroup}
+        {...(Platform.OS === 'web' ? ({ id: 'profile-menu-container' } as any) : {})}
+      >
+        {/* User Profile Avatar Trigger */}
         <TouchableOpacity
-          style={[styles.avatarCircleBtn, isMenuOpen && styles.avatarCircleBtnActive]}
+          style={[
+            styles.avatarCircleBtn,
+            { backgroundColor: colors.primaryDim, borderColor: colors.primaryBorder },
+            isMenuOpen && styles.avatarCircleBtnActive,
+          ]}
           onPress={() => setIsMenuOpen(!isMenuOpen)}
-          activeOpacity={0.7}
+          activeOpacity={0.8}
         >
-          <User size={20} color="#38bdf8" />
+          <User size={20} color={colors.primaryLight} />
         </TouchableOpacity>
 
-        {/* Expanding Dropdown Popover Menu */}
+        {/* Profile Dropdown Popover */}
         {isMenuOpen && (
-          <View style={styles.dropdownPopover}>
-            {/* User Info Header */}
+          <View style={[styles.dropdownPopover, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderGlassBright }]}>
+            {/* User Identity Info */}
             <View style={styles.dropdownUserHeader}>
-              <View style={styles.dropdownAvatarLarge}>
-                <User size={22} color="#38bdf8" />
+              <View style={[styles.dropdownAvatarLarge, { backgroundColor: colors.primaryDim, borderColor: colors.primaryBorder }]}>
+                <User size={22} color={colors.primaryLight} />
               </View>
               <View style={styles.dropdownTextGroup}>
-                <Text style={styles.dropdownDisplayName}>{displayName}</Text>
-                <Text style={styles.dropdownEmail} numberOfLines={1}>{user?.email || 'authenticated user'}</Text>
-                <View style={styles.dropdownRoleChip}>
-                  <Shield size={10} color="#38bdf8" />
-                  <Text style={styles.dropdownRoleText}>{ROLE_LABELS[currentRole] || currentRole}</Text>
+                <Text style={[styles.dropdownDisplayName, { color: colors.textPrimary }]}>{displayName}</Text>
+                <Text style={[styles.dropdownEmail, { color: colors.textMuted }]} numberOfLines={1}>{user?.email || 'authenticated user'}</Text>
+                <View style={[styles.dropdownRoleChip, { backgroundColor: colors.primaryDim }]}>
+                  <Shield size={10} color={colors.primaryLight} />
+                  <Text style={[styles.dropdownRoleText, { color: colors.primaryLight }]}>{ROLE_LABELS[currentRole] || currentRole}</Text>
                 </View>
               </View>
             </View>
 
-            <View style={styles.dropdownDivider} />
+            <View style={[styles.dropdownDivider, { backgroundColor: colors.borderGlass }]} />
+
+            {/* Theme Toggle Option */}
+            <TouchableOpacity style={styles.dropdownItem} onPress={toggleTheme}>
+              {isDark ? (
+                <>
+                  <Moon size={16} color="#c084fc" />
+                  <Text style={[styles.dropdownItemText, { color: '#c084fc' }]}>Theme: Carbon Dark</Text>
+                </>
+              ) : (
+                <>
+                  <Sun size={16} color="#d97706" />
+                  <Text style={[styles.dropdownItemText, { color: '#d97706' }]}>Theme: Executive Light</Text>
+                </>
+              )}
+            </TouchableOpacity>
 
             {/* Sound & Chime Toggle Option */}
             <TouchableOpacity style={styles.dropdownItem} onPress={toggleAudio}>
               {isAudioMuted ? (
                 <>
-                  <VolumeX size={16} color="#64748b" />
-                  <Text style={styles.dropdownItemText}>Audio Chimes: Muted</Text>
+                  <VolumeX size={16} color={colors.textMuted} />
+                  <Text style={[styles.dropdownItemText, { color: colors.textMuted }]}>Audio Chimes: Muted</Text>
                 </>
               ) : (
                 <>
-                  <Volume2 size={16} color="#38bdf8" />
-                  <Text style={[styles.dropdownItemText, { color: '#38bdf8' }]}>Audio Chimes: Enabled</Text>
+                  <Volume2 size={16} color={colors.primaryLight} />
+                  <Text style={[styles.dropdownItemText, { color: colors.primaryLight }]}>Audio Chimes: Enabled</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -181,18 +213,18 @@ export const Header: React.FC = () => {
             <TouchableOpacity style={styles.dropdownItem} onPress={toggleHaptics}>
               {isHapticsMuted ? (
                 <>
-                  <Smartphone size={16} color="#64748b" />
-                  <Text style={styles.dropdownItemText}>Haptic Feedback: Disabled</Text>
+                  <Smartphone size={16} color={colors.textMuted} />
+                  <Text style={[styles.dropdownItemText, { color: colors.textMuted }]}>Haptic Feedback: Disabled</Text>
                 </>
               ) : (
                 <>
-                  <Smartphone size={16} color="#38bdf8" />
-                  <Text style={[styles.dropdownItemText, { color: '#38bdf8' }]}>Haptic Feedback: Enabled</Text>
+                  <Smartphone size={16} color={colors.primaryLight} />
+                  <Text style={[styles.dropdownItemText, { color: colors.primaryLight }]}>Haptic Feedback: Enabled</Text>
                 </>
               )}
             </TouchableOpacity>
 
-            <View style={styles.dropdownDivider} />
+            <View style={[styles.dropdownDivider, { backgroundColor: colors.borderGlass }]} />
 
             {/* Sign Out Option */}
             <TouchableOpacity

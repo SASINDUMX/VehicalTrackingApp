@@ -7,6 +7,7 @@ import { TimerPill } from '../shared/TimerPill';
 import { calculateJobSheetProgress } from '../../utils/vehicleUtils';
 import { useTechnicianStation } from '../../hooks/useTechnicianStation';
 import { Vehicle, VehicleTask } from '../../types/vehicle';
+import { useTheme } from '../../context/ThemeContext';
 
 export const TechnicianStationView: React.FC = React.memo(() => {
   const {
@@ -29,6 +30,7 @@ export const TechnicianStationView: React.FC = React.memo(() => {
     handleRequestTransfer,
     handleConfirmTransfer,
   } = useTechnicianStation();
+  const { colors, isDark } = useTheme();
 
   const renderVehicleItem = ({ item: vehicle }: { item: Vehicle }) => {
     const { completedCount, totalRequired: totalReq, percent } = calculateJobSheetProgress(vehicle.tasks);
@@ -58,7 +60,7 @@ export const TechnicianStationView: React.FC = React.memo(() => {
     const hasAnyDispatchBtn = canShowAlignmentBtn || canShowHoistBtn || canShowWorkshopBtn || canShowAdvisorBtn;
 
     return (
-      <View key={vehicle.id} style={styles.vehicleCardWrapper}>
+      <View key={vehicle.id} style={[styles.vehicleCardWrapper, { backgroundColor: colors.surface, borderColor: colors.borderGlass }]}>
         {/* Header Card Area (Clickable to Expand / Collapse Card) */}
         <TouchableOpacity
           style={styles.cardHeaderArea}
@@ -74,8 +76,8 @@ export const TechnicianStationView: React.FC = React.memo(() => {
                         <TimerPill elapsedText={elapsedTimes[vehicle.id] || '0m 00s'} variant="cyan" size="md" />
 
                         {/* Expand / Collapse Chevron Icon */}
-                        <View style={styles.chevronWrapper}>
-                          {isExpanded ? <ChevronUp size={20} color="#94a3b8" /> : <ChevronDown size={20} color="#94a3b8" />}
+                        <View style={[styles.chevronWrapper, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)', borderColor: colors.borderGlass }]}>
+                          {isExpanded ? <ChevronUp size={20} color={colors.textSecondary} /> : <ChevronDown size={20} color={colors.textSecondary} />}
                         </View>
                       </View>
                     </View>
@@ -109,13 +111,13 @@ export const TechnicianStationView: React.FC = React.memo(() => {
                             <MessageSquare size={14} color="#f59e0b" />
                             <Text style={styles.remarksSectionLabel}>REMARKS / SPECIAL INSTRUCTIONS:</Text>
                           </View>
-                          <Text style={styles.remarksBodyText}>{vehicle.remarks}</Text>
+                          <Text style={[styles.remarksBodyText, { color: colors.textPrimary }]}>{vehicle.remarks}</Text>
                         </View>
                       )}
 
                       {/* Station Assigned Task Checklist */}
-                      <View style={styles.tasksSection}>
-                        <Text style={styles.sectionHeaderLabel}>JOB SHEET TASKS ({vehicle.tasks.filter(t => t.is_required).length}):</Text>
+                      <View style={[styles.tasksSection, { borderTopColor: colors.borderGlass }]}>
+                        <Text style={[styles.sectionHeaderLabel, { color: colors.textMuted }]}>JOB SHEET TASKS ({vehicle.tasks.filter(t => t.is_required).length}):</Text>
                         {vehicle.tasks.filter(t => t.is_required).map(task => {
                           const isVehicleInInspectionOrFinished = vehicle.current_zone === 'inspection' || vehicle.is_finished;
                           const isMyBayTask = task.task_type === activeTaskType;
@@ -126,6 +128,10 @@ export const TechnicianStationView: React.FC = React.memo(() => {
                               key={task.id}
                               style={[
                                 styles.taskRow,
+                                {
+                                  backgroundColor: isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)',
+                                  borderColor: colors.borderGlass
+                                },
                                 (!isMyBayTask || isVehicleInInspectionOrFinished) && styles.otherBayTaskRow,
                                 !isEditable && styles.disabledTaskRow,
                                 Platform.OS === 'web' && !isEditable && ({ cursor: 'not-allowed' } as any),
@@ -141,9 +147,14 @@ export const TechnicianStationView: React.FC = React.memo(() => {
                                 {task.is_completed ? (
                                   <CheckSquare size={18} color="#10b981" />
                                 ) : (
-                                  <Square size={18} color={isEditable ? "#64748b" : "#475569"} />
+                                  <Square size={18} color={isEditable ? colors.textSecondary : colors.textMuted} />
                                 )}
-                                <Text style={[styles.taskName, task.is_completed && styles.completedTaskName, (!isMyBayTask || isVehicleInInspectionOrFinished) && styles.otherBayTaskName]}>
+                                <Text style={[
+                                  styles.taskName,
+                                  { color: colors.textPrimary },
+                                  task.is_completed && styles.completedTaskName,
+                                  (!isMyBayTask || isVehicleInInspectionOrFinished) && { color: colors.textMuted }
+                                ]}>
                                   {task.task_name}
                                 </Text>
                               </View>

@@ -5,9 +5,11 @@ import { BayZone, TaskType } from '../../types/vehicle';
 import { X, Car, Wrench, Shield, Navigation, Send, CheckSquare, Square } from 'lucide-react-native';
 
 import { formatVehicleNoInput, isValidVehicleNo } from '../../utils/vehicleNumberUtils';
+import { useTheme } from '../../context/ThemeContext';
 
 export const AddVehicleModal: React.FC = () => {
   const { isAddModalOpen, setIsAddModalOpen, addVehicle, vehicles } = useVehicles();
+  const { colors, isDark } = useTheme();
 
   const [vehicleNo, setVehicleNo] = useState<string>('');
   const [selectedTasks, setSelectedTasks] = useState<TaskType[]>([
@@ -86,30 +88,35 @@ export const AddVehicleModal: React.FC = () => {
 
   return (
     <Modal visible={isAddModalOpen} animationType="fade" transparent>
-      <View style={styles.backdrop}>
-        <View style={styles.modalCard}>
-          <View style={styles.header}>
+      <View style={[styles.backdrop, { backgroundColor: colors.backdrop }]}>
+        <View style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.borderGlass }]}>
+          <View style={[styles.header, { borderBottomColor: colors.borderGlass }]}>
             <View style={styles.headerTitleRow}>
-              <View style={styles.iconWrapper}>
-                <Car size={20} color="#0ea5e9" />
+              <View style={[styles.iconWrapper, { backgroundColor: colors.primaryDim }]}>
+                <Car size={20} color={colors.primaryLight} />
               </View>
-              <Text style={styles.headerTitle}>Add Vehicle & Job Order</Text>
+              <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Add Vehicle & Job Order</Text>
             </View>
             <TouchableOpacity style={styles.closeBtn} onPress={() => setIsAddModalOpen(false)}>
-              <X size={20} color="#94a3b8" />
+              <X size={20} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
           <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent}>
             <View style={styles.formGroup}>
-              <Text style={styles.label}>VEHICLE NUMBER / REGISTRATION NO:</Text>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>VEHICLE NUMBER / REGISTRATION NO:</Text>
               <TextInput
                 style={[
                   styles.input,
+                  {
+                    backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)',
+                    borderColor: colors.borderGlass,
+                    color: colors.textPrimary,
+                  },
                   isNoValid && styles.inputValid
                 ]}
                 placeholder="e.g. CAB-7712, WP-1234, or 14-1234"
-                placeholderTextColor="#475569"
+                placeholderTextColor={colors.textMuted}
                 value={vehicleNo}
                 onChangeText={handleVehicleNoChange}
                 autoCapitalize="characters"
@@ -231,11 +238,19 @@ export const AddVehicleModal: React.FC = () => {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>REMARKS / INSTRUCTIONS:</Text>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>REMARKS / INSTRUCTIONS:</Text>
               <TextInput
-                style={[styles.input, styles.textArea]}
+                style={[
+                  styles.input,
+                  styles.textArea,
+                  {
+                    backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)',
+                    borderColor: colors.borderGlass,
+                    color: colors.textPrimary,
+                  }
+                ]}
                 placeholder="Customer requests or issues..."
-                placeholderTextColor="#475569"
+                placeholderTextColor={colors.textMuted}
                 value={remarks}
                 onChangeText={setRemarks}
                 multiline
@@ -244,14 +259,18 @@ export const AddVehicleModal: React.FC = () => {
             </View>
           </ScrollView>
 
-          <View style={styles.footer}>
-            <TouchableOpacity style={styles.backBtn} onPress={() => setIsAddModalOpen(false)}>
-              <Text style={styles.backBtnText}>Cancel</Text>
+          <View style={[styles.footer, { borderTopColor: colors.borderGlass }]}>
+            <TouchableOpacity
+              style={[styles.backBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)' }]}
+              onPress={() => setIsAddModalOpen(false)}
+            >
+              <Text style={[styles.backBtnText, { color: colors.textSecondary }]}>Cancel</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[
                 styles.submitBtn,
+                { backgroundColor: colors.primary },
                 (!isNoValid || isSubmitting) && styles.disabledBtn,
                 (!isNoValid || isSubmitting) && (Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {})
               ]}

@@ -6,6 +6,7 @@ import { EmptyStateCard } from '../shared/EmptyStateCard';
 import { TimerPill } from '../shared/TimerPill';
 import { calculateJobSheetProgress, getTaskTypeForBay } from '../../utils/vehicleUtils';
 import { useFloorPlan } from '../../hooks/useFloorPlan';
+import { useTheme } from '../../context/ThemeContext';
 
 export const FloorPlan2D: React.FC = React.memo(() => {
   const {
@@ -18,6 +19,7 @@ export const FloorPlan2D: React.FC = React.memo(() => {
     setSelectedVehicle,
     getVehiclesInZone,
   } = useFloorPlan();
+  const { colors, isDark } = useTheme();
 
   if (isSearchActive && totalMatchingVehicles === 0) {
     return (
@@ -48,11 +50,11 @@ export const FloorPlan2D: React.FC = React.memo(() => {
                 }
 
                 return (
-                  <View key={bay.id} style={[styles.spatialBayBox, { borderColor: `${bay.color}50` }]}>
+                  <View key={bay.id} style={[styles.spatialBayBox, { backgroundColor: colors.surface, borderColor: `${bay.color}50` }]}>
                     <View style={[styles.spatialBayHeader, { backgroundColor: `${bay.color}15`, borderBottomColor: `${bay.color}40` }]}>
                       <View style={styles.spatialBayTitleRow}>
                         <IconComp size={16} color={bay.color} />
-                        <Text style={styles.spatialBayName}>{bay.name}</Text>
+                        <Text style={[styles.spatialBayName, { color: colors.textPrimary }]}>{bay.name}</Text>
                       </View>
                       <View style={[styles.vehicleCountPill, { backgroundColor: `${bay.color}18`, borderColor: `${bay.color}50` }]}>
                         <Car size={13} color={bay.color} />
@@ -62,14 +64,14 @@ export const FloorPlan2D: React.FC = React.memo(() => {
 
                     <View style={styles.spatialBayFloor}>
                       {isLoading ? (
-                        <View style={styles.bayEmptySpot}>
+                        <View style={[styles.bayEmptySpot, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)' }]}>
                           <ActivityIndicator size="small" color={bay.color} />
-                          <Text style={styles.bayEmptyText}>SYNCING TELEMETRY...</Text>
+                          <Text style={[styles.bayEmptyText, { color: colors.textMuted }]}>SYNCING TELEMETRY...</Text>
                         </View>
                       ) : bayVehicles.length === 0 ? (
-                        <View style={styles.bayEmptySpot}>
-                          <Car size={28} color="#334155" />
-                          <Text style={styles.bayEmptyText}>BAY CLEAR</Text>
+                        <View style={[styles.bayEmptySpot, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)' }]}>
+                          <Car size={28} color={isDark ? '#334155' : '#cbd5e1'} />
+                          <Text style={[styles.bayEmptyText, { color: colors.textMuted }]}>BAY CLEAR</Text>
                         </View>
                       ) : (
                         <View style={styles.bayVehicleContainer}>
@@ -82,7 +84,10 @@ export const FloorPlan2D: React.FC = React.memo(() => {
                             return (
                               <TouchableOpacity
                                 key={vehicle.id}
-                                style={styles.spatialVehicleCard}
+                                style={[
+                                  styles.spatialVehicleCard,
+                                  { backgroundColor: colors.surfaceElevated, borderColor: colors.borderGlass }
+                                ]}
                                 onPress={() => setSelectedVehicle(vehicle)}
                                 activeOpacity={0.8}
                               >
@@ -91,7 +96,7 @@ export const FloorPlan2D: React.FC = React.memo(() => {
                                 <TimerPill elapsedText={elapsedTimes[vehicle.id] || '0m 00s'} variant="cyan" size="sm" />
                               </View>
 
-                              <View style={styles.spatialProgressBar}>
+                              <View style={[styles.spatialProgressBar, { backgroundColor: colors.progressBg }]}>
                                 <View
                                   style={[
                                     styles.spatialProgressFill,
@@ -101,7 +106,7 @@ export const FloorPlan2D: React.FC = React.memo(() => {
                               </View>
                               
                               <View style={styles.spatialProgressRow}>
-                                <Text style={styles.spatialProgressText}>
+                                <Text style={[styles.spatialProgressText, { color: colors.textSecondary }]}>
                                   {completedCount}/{totalReq} Tasks Done ({percent}%)
                                 </Text>
                                 {isCurrentTaskDone && (

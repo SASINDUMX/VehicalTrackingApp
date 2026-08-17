@@ -6,9 +6,12 @@ import { usePermissions } from '../../hooks/usePermissions';
 import { UserRole } from '../../types/vehicle';
 import { Compass, Wrench, Shield, UserCheck, CheckCircle2, Search, X, ChevronLeft, ChevronRight, Plus, Car } from 'lucide-react-native';
 
+import { useTheme } from '../../context/ThemeContext';
+
 export const SearchBarRow: React.FC = () => {
   const { searchQuery, setSearchQuery, setIsAddModalOpen, currentRole, vehicles } = useVehicles();
   const { canAddVehicle } = usePermissions();
+  const { colors, isDark } = useTheme();
   const [localSearch, setLocalSearch] = React.useState<string>(searchQuery);
 
   // 300ms Debounce search input
@@ -44,16 +47,22 @@ export const SearchBarRow: React.FC = () => {
   }, [vehicles, currentRole]);
 
   return (
-    <View style={styles.topSearchContainer}>
+    <View style={[styles.topSearchContainer, { backgroundColor: colors.background, borderBottomColor: colors.borderGlass }]}>
       <View style={styles.searchBarRow}>
-        <View style={styles.searchBoxContainer}>
+        <View style={[
+          styles.searchBoxContainer,
+          {
+            backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)',
+            borderColor: colors.primaryBorder
+          }
+        ]}>
           <View style={styles.searchIconWrapper}>
-            <Search size={16} color="#38bdf8" />
+            <Search size={16} color={colors.primaryLight} />
           </View>
           <TextInput
-            style={styles.searchInput}
+            style={[styles.searchInput, { color: colors.textPrimary }]}
             placeholder="Search Vehicle"
-            placeholderTextColor="#64748b"
+            placeholderTextColor={colors.textMuted}
             value={localSearch}
             onChangeText={setLocalSearch}
             autoCapitalize="characters"
@@ -64,21 +73,24 @@ export const SearchBarRow: React.FC = () => {
                 setLocalSearch('');
                 setSearchQuery('');
               }}
-              style={styles.clearSearchBtn}
+              style={[
+                styles.clearSearchBtn,
+                { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.1)' }
+              ]}
             >
-              <X size={14} color="#94a3b8" />
+              <X size={14} color={colors.textSecondary} />
             </TouchableOpacity>
           )}
         </View>
 
         {/* Dynamic Vehicle Count Badge */}
-        <View style={styles.vehicleCountPill}>
-          <Car size={14} color="#38bdf8" />
-          <Text style={styles.vehicleCountPillText}>{activeCount}</Text>
+        <View style={[styles.vehicleCountPill, { backgroundColor: colors.primaryDim, borderColor: colors.primaryBorder }]}>
+          <Car size={14} color={colors.primaryLight} />
+          <Text style={[styles.vehicleCountPillText, { color: colors.primaryLight }]}>{activeCount}</Text>
         </View>
 
         {canAddVehicle && currentRole === 'supervisor' && (
-          <TouchableOpacity style={styles.addVehicleBtn} onPress={() => setIsAddModalOpen(true)}>
+          <TouchableOpacity style={[styles.addVehicleBtn, { backgroundColor: colors.primary }]} onPress={() => setIsAddModalOpen(true)}>
             <Plus size={16} color="#ffffff" />
             <Text style={styles.addVehicleBtnText}>Add vehicle</Text>
           </TouchableOpacity>
@@ -90,26 +102,37 @@ export const SearchBarRow: React.FC = () => {
 
 export const SegmentedTabs: React.FC = () => {
   const { currentRole, setCurrentRole } = useVehicles();
+  const { colors, isDark } = useTheme();
 
   return (
-    <View style={styles.segmentedContainer}>
+    <View style={[styles.segmentedContainer, { backgroundColor: colors.surface, borderBottomColor: colors.borderGlass }]}>
       <View style={styles.segmentedRow}>
         {/* 1. Floor Overview Button */}
         <TouchableOpacity
           style={[
             styles.segmentSingleBtn,
+            {
+              backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.04)',
+              borderColor: colors.borderGlass
+            },
             currentRole === 'supervisor' && styles.activeSingleBtn
           ]}
           onPress={() => setCurrentRole('supervisor')}
           activeOpacity={0.7}
         >
-          <Text style={[styles.segmentBtnText, currentRole === 'supervisor' && styles.activeBtnText]}>
+          <Text style={[styles.segmentBtnText, { color: colors.textSecondary }, currentRole === 'supervisor' && styles.activeBtnText]}>
             Overview
           </Text>
         </TouchableOpacity>
 
         {/* 2. 3 Workshop Station Stages (Grouped Box: General | Alignment | Hoist) */}
-        <View style={styles.groupedStagesBox}>
+        <View style={[
+          styles.groupedStagesBox,
+          {
+            backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.04)',
+            borderColor: colors.borderGlass
+          }
+        ]}>
           <TouchableOpacity
             style={[
               styles.groupedStageItem,
@@ -118,12 +141,12 @@ export const SegmentedTabs: React.FC = () => {
             onPress={() => setCurrentRole('tech_workshop')}
             activeOpacity={0.7}
           >
-            <Text style={[styles.segmentBtnText, currentRole === 'tech_workshop' && styles.activeBtnText]}>
+            <Text style={[styles.segmentBtnText, { color: colors.textSecondary }, currentRole === 'tech_workshop' && styles.activeBtnText]}>
               General
             </Text>
           </TouchableOpacity>
 
-          <View style={styles.stageDivider} />
+          <View style={[styles.stageDivider, { backgroundColor: colors.borderGlass }]} />
 
           <TouchableOpacity
             style={[
@@ -133,12 +156,12 @@ export const SegmentedTabs: React.FC = () => {
             onPress={() => setCurrentRole('tech_alignment')}
             activeOpacity={0.7}
           >
-            <Text style={[styles.segmentBtnText, currentRole === 'tech_alignment' && styles.activeBtnText]}>
+            <Text style={[styles.segmentBtnText, { color: colors.textSecondary }, currentRole === 'tech_alignment' && styles.activeBtnText]}>
               Alignment
             </Text>
           </TouchableOpacity>
 
-          <View style={styles.stageDivider} />
+          <View style={[styles.stageDivider, { backgroundColor: colors.borderGlass }]} />
 
           <TouchableOpacity
             style={[
@@ -148,7 +171,7 @@ export const SegmentedTabs: React.FC = () => {
             onPress={() => setCurrentRole('tech_hoist')}
             activeOpacity={0.7}
           >
-            <Text style={[styles.segmentBtnText, currentRole === 'tech_hoist' && styles.activeBtnText]}>
+            <Text style={[styles.segmentBtnText, { color: colors.textSecondary }, currentRole === 'tech_hoist' && styles.activeBtnText]}>
               Hoist
             </Text>
           </TouchableOpacity>
@@ -158,12 +181,16 @@ export const SegmentedTabs: React.FC = () => {
         <TouchableOpacity
           style={[
             styles.segmentSingleBtn,
+            {
+              backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.04)',
+              borderColor: colors.borderGlass
+            },
             currentRole === 'advisor' && styles.activeAdvisorBtn
           ]}
           onPress={() => setCurrentRole('advisor')}
           activeOpacity={0.7}
         >
-          <Text style={[styles.segmentBtnText, currentRole === 'advisor' && styles.activeBtnText]}>
+          <Text style={[styles.segmentBtnText, { color: colors.textSecondary }, currentRole === 'advisor' && styles.activeBtnText]}>
             Ready
           </Text>
         </TouchableOpacity>

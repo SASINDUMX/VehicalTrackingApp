@@ -12,6 +12,8 @@ import { AddVehicleModal } from './src/components/supervisor/AddVehicleModal';
 import { VehicleDetailsModal } from './src/components/shared/VehicleDetailsModal';
 import { UserRole } from './src/types/vehicle';
 
+import { ThemeProvider, useTheme } from './src/context/ThemeContext';
+
 const rolesList: UserRole[] = ['supervisor', 'tech_workshop', 'tech_alignment', 'tech_hoist', 'advisor'];
 
 const TabTransitionWrapper: React.FC<{ activeKey: string; children: React.ReactNode }> = ({ activeKey, children }) => {
@@ -48,6 +50,7 @@ const TabTransitionWrapper: React.FC<{ activeKey: string; children: React.ReactN
 const AppContent: React.FC = () => {
   const { userProfile } = useAuth();
   const { currentRole, setCurrentRole, isAddModalOpen, setIsAddModalOpen } = useVehicles();
+  const { colors, isDark } = useTheme();
   const [touchStart, setTouchStart] = React.useState<{ x: number; y: number } | null>(null);
 
   // Automatically direct user to their corresponding role page on login
@@ -69,22 +72,19 @@ const AppContent: React.FC = () => {
   const handleTouchEnd = (e: any) => {
     if (!touchStart) return;
     const touch = e.nativeEvent.changedTouches ? e.nativeEvent.changedTouches[0] : e.nativeEvent;
-    if (touch) {
-      const dx = touch.pageX - touchStart.x;
-      const dy = touch.pageY - touchStart.y;
+    if (!touch) return;
 
-      // Minimum swipe threshold (50px) and check that movement is primarily horizontal
-      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.3) {
-        if (dx < 0) {
-          // Swiped Left -> Step to Next Page
-          if (currentIndex < rolesList.length - 1) {
-            setCurrentRole(rolesList[currentIndex + 1]);
-          }
-        } else {
-          // Swiped Right -> Step to Previous Page
-          if (currentIndex > 0) {
-            setCurrentRole(rolesList[currentIndex - 1]);
-          }
+    const dx = touch.pageX - touchStart.x;
+    const dy = touch.pageY - touchStart.y;
+
+    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 60) {
+      if (dx < 0) {
+        if (currentIndex < rolesList.length - 1) {
+          setCurrentRole(rolesList[currentIndex + 1]);
+        }
+      } else {
+        if (currentIndex > 0) {
+          setCurrentRole(rolesList[currentIndex - 1]);
         }
       }
     }
@@ -120,9 +120,9 @@ const AppContent: React.FC = () => {
   }, []);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor="#0b0f19" />
-      <View style={styles.container}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.surface} />
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
         <Header />
         <SegmentedTabs />
         <SearchBarRow />
@@ -148,12 +148,13 @@ const AppContent: React.FC = () => {
 
 const AuthGate: React.FC = () => {
   const { isAuthenticated, isAuthLoading } = useAuth();
+  const { colors } = useTheme();
 
   if (isAuthLoading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#0ea5e9" />
-        <Text style={styles.loadingText}>Loading...</Text>
+      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading...</Text>
       </View>
     );
   }
@@ -171,21 +172,21 @@ const AuthGate: React.FC = () => {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AuthGate />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <AuthGate />
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#0b0f19',
     paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
   container: {
     flex: 1,
-    backgroundColor: '#0b0f19',
   },
   mainContent: {
     flex: 1,
@@ -193,13 +194,11 @@ const styles = StyleSheet.create({
   },
   loadingContainer: {
     flex: 1,
-    backgroundColor: '#0b0f19',
     justifyContent: 'center',
     alignItems: 'center',
     gap: 12,
   },
   loadingText: {
-    color: '#94a3b8',
     fontSize: 14,
   },
 });

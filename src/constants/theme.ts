@@ -1,6 +1,52 @@
 import { Platform } from 'react-native';
 
-export const Colors = {
+export interface ThemeColors {
+  background: string;
+  surface: string;
+  surfaceElevated: string;
+  card: string;
+  cardHover: string;
+  textPrimary: string;
+  textSecondary: string;
+  textMuted: string;
+  textSubtle: string;
+  textDark: string;
+  primary: string;
+  primaryLight: string;
+  primaryCyan: string;
+  primaryDim: string;
+  primaryGlow: string;
+  primaryBorder: string;
+  success: string;
+  successLight: string;
+  successDim: string;
+  successGlow: string;
+  successBorder: string;
+  warning: string;
+  warningLight: string;
+  warningDim: string;
+  warningGlow: string;
+  warningBorder: string;
+  purple: string;
+  purpleLight: string;
+  purpleDim: string;
+  purpleBorder: string;
+  danger: string;
+  dangerDim: string;
+  dangerBorder: string;
+  plateYellow: string;
+  plateYellowDark: string;
+  plateText: string;
+  plateBlueBar: string;
+  borderGlass: string;
+  borderGlassBright: string;
+  surfaceOverlay: string;
+  surfaceFaint: string;
+  backdrop: string;
+  progressBg: string;
+}
+
+export const DarkColors: ThemeColors = {
   // Ultra-Premium Carbon Dark Base
   background: '#070b14',
   surface: '#0f172a',
@@ -58,7 +104,70 @@ export const Colors = {
   surfaceFaint: 'rgba(255, 255, 255, 0.02)',
   backdrop: 'rgba(3, 7, 18, 0.85)',
   progressBg: 'rgba(255, 255, 255, 0.08)',
-} as const;
+};
+
+export const LightColors: ThemeColors = {
+  // Executive Crisp Light Base
+  background: '#f1f5f9',
+  surface: '#ffffff',
+  surfaceElevated: '#f8fafc',
+  card: '#ffffff',
+  cardHover: '#f1f5f9',
+
+  // Typography
+  textPrimary: '#0f172a',
+  textSecondary: '#475569',
+  textMuted: '#64748b',
+  textSubtle: '#1e293b',
+  textDark: '#0f172a',
+
+  // Brand Accents
+  primary: '#0284c7',
+  primaryLight: '#0ea5e9',
+  primaryCyan: '#0891b2',
+  primaryDim: 'rgba(2, 132, 199, 0.1)',
+  primaryGlow: 'rgba(2, 132, 199, 0.2)',
+  primaryBorder: 'rgba(2, 132, 199, 0.3)',
+
+  // Status & Zones
+  success: '#059669',
+  successLight: '#10b981',
+  successDim: 'rgba(5, 150, 105, 0.1)',
+  successGlow: 'rgba(5, 150, 105, 0.2)',
+  successBorder: 'rgba(5, 150, 105, 0.3)',
+
+  warning: '#d97706',
+  warningLight: '#f59e0b',
+  warningDim: 'rgba(217, 119, 6, 0.1)',
+  warningGlow: 'rgba(217, 119, 6, 0.2)',
+  warningBorder: 'rgba(217, 119, 6, 0.3)',
+
+  purple: '#7c3aed',
+  purpleLight: '#8b5cf6',
+  purpleDim: 'rgba(124, 58, 237, 0.1)',
+  purpleBorder: 'rgba(124, 58, 237, 0.3)',
+
+  danger: '#dc2626',
+  dangerDim: 'rgba(220, 38, 38, 0.1)',
+  dangerBorder: 'rgba(220, 38, 38, 0.3)',
+
+  // License Plate (Authentic Metallic Finish remains gold yellow)
+  plateYellow: '#facc15',
+  plateYellowDark: '#eab308',
+  plateText: '#0f172a',
+  plateBlueBar: '#1d4ed8',
+
+  // Glassmorphism & Borders
+  borderGlass: 'rgba(0, 0, 0, 0.08)',
+  borderGlassBright: 'rgba(0, 0, 0, 0.15)',
+  surfaceOverlay: 'rgba(0, 0, 0, 0.03)',
+  surfaceFaint: 'rgba(0, 0, 0, 0.02)',
+  backdrop: 'rgba(15, 23, 42, 0.65)',
+  progressBg: 'rgba(0, 0, 0, 0.08)',
+};
+
+// Default export is DarkColors to preserve existing dark design
+export const Colors = DarkColors;
 
 export const Spacing = {
   xs: 4,
@@ -95,4 +204,3 @@ export const Radius = {
 } as const;
 
 export const MonoFont = Platform.OS === 'ios' ? 'Courier' : 'monospace';
-

@@ -6,6 +6,8 @@ import { EmptyStateCard } from '../shared/EmptyStateCard';
 import { TimerPill } from '../shared/TimerPill';
 import { formatTotalTATString } from '../../utils/vehicleUtils';
 import { useAdvisorInspection } from '../../hooks/useAdvisorInspection';
+import { useTheme } from '../../context/ThemeContext';
+import { Vehicle, VehicleTask } from '../../types/vehicle';
 
 export const AdvisorInspectionView: React.FC = React.memo(() => {
   const {
@@ -17,12 +19,13 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
     finishVehicleJobSheet,
     setSelectedVehicle,
   } = useAdvisorInspection();
+  const { colors, isDark } = useTheme();
 
-  const renderVehicleCard = ({ item: vehicle }: { item: any }) => {
+  const renderVehicleCard = ({ item: vehicle }: { item: Vehicle }) => {
     const isExpanded = Boolean(expandedCards[vehicle.id]);
 
     return (
-      <View key={vehicle.id} style={styles.mainCard}>
+      <View key={vehicle.id} style={[styles.mainCard, { backgroundColor: colors.surface, borderColor: colors.borderGlass }]}>
         {/* Clickable Header Area to Expand / Collapse */}
         <TouchableOpacity
           style={styles.cardHeader}
@@ -34,8 +37,8 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
           <View style={styles.headerRightGroup}>
             <TimerPill elapsedText={formatTotalTATString(vehicle)} variant="amber" size="md" />
 
-            <View style={styles.chevronWrapper}>
-              {isExpanded ? <ChevronUp size={20} color="#94a3b8" /> : <ChevronDown size={20} color="#94a3b8" />}
+            <View style={[styles.chevronWrapper, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)', borderColor: colors.borderGlass }]}>
+              {isExpanded ? <ChevronUp size={20} color={colors.textSecondary} /> : <ChevronDown size={20} color={colors.textSecondary} />}
             </View>
           </View>
         </TouchableOpacity>
@@ -46,20 +49,20 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
             {/* Task Audit Summary */}
             <View style={styles.section}>
               <View style={styles.sectionHeaderRow}>
-                <Text style={styles.sectionTitle}>TASK AUDIT LOG</Text>
+                <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>TASK AUDIT LOG</Text>
                 <TouchableOpacity
                   style={styles.auditLogLink}
                   onPress={() => setSelectedVehicle(vehicle)}
                 >
-                  <History size={12} color="#38bdf8" />
-                  <Text style={styles.auditLogLinkText}>Full Audit Log</Text>
+                  <History size={12} color={colors.primaryLight} />
+                  <Text style={[styles.auditLogLinkText, { color: colors.primaryLight }]}>Full Audit Log</Text>
                 </TouchableOpacity>
               </View>
 
               <View style={styles.auditList}>
-                {vehicle.tasks.filter((t: any) => t.is_required).map((t: any) => (
-                  <View key={t.id} style={styles.taskAuditRow}>
-                    <Text style={[styles.taskName, !t.is_completed && styles.taskNameCancelled]}>
+                {vehicle.tasks.filter((t: VehicleTask) => t.is_required).map((t: VehicleTask) => (
+                  <View key={t.id} style={[styles.taskAuditRow, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)', borderColor: colors.borderGlass }]}>
+                    <Text style={[styles.taskName, { color: colors.textPrimary }, !t.is_completed && styles.taskNameCancelled]}>
                       {t.task_name}
                     </Text>
                     {t.is_completed ? (

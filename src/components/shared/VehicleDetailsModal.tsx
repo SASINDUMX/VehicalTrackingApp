@@ -11,6 +11,7 @@ import {
 import { LicensePlate } from './LicensePlate';
 import { getStageDurationBreakdown, formatDurationString } from '../../utils/vehicleUtils';
 import { getNetWorkingSeconds, getCurrentActiveBreak } from '../../utils/workshopHoursUtils';
+import { useTheme } from '../../context/ThemeContext';
 
 const STAGE_ORDER: { zone: BayZone; name: string; code: string; icon: any; color: string }[] = [
   { zone: 'workshop', name: 'General Workshop Bay', code: 'BAY 01', icon: Wrench, color: '#06b6d4' },
@@ -22,6 +23,7 @@ const STAGE_ORDER: { zone: BayZone; name: string; code: string; icon: any; color
 export const VehicleDetailsModal: React.FC = () => {
   const { selectedVehicle, setSelectedVehicle, transferVehicleZone, updateVehicleJobOrder } = useVehicles();
   const { canRelocateVehicle, canAddVehicle } = usePermissions();
+  const { colors, isDark } = useTheme();
 
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [selectedTasks, setSelectedTasks] = useState<TaskType[]>([]);
@@ -133,26 +135,29 @@ export const VehicleDetailsModal: React.FC = () => {
 
   return (
     <Modal visible={Boolean(selectedVehicle)} animationType="fade" transparent>
-      <View style={styles.backdrop}>
-        <View style={styles.modalCard}>
+      <View style={[styles.backdrop, { backgroundColor: colors.backdrop }]}>
+        <View style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.borderGlass }]}>
           {/* Header */}
-          <View style={styles.header}>
+          <View style={[styles.header, { borderBottomColor: colors.borderGlass }]}>
             <View style={styles.headerLeftRow}>
               <LicensePlate number={selectedVehicle.vehicle_no} size="md" />
             </View>
 
             <View style={styles.headerRightRow}>
-              {canAddVehicle && !isEditing && selectedVehicle.current_zone !== 'inspection' && !selectedVehicle.is_finished && (
+              {canAddVehicle && !isEditing && (
                 <TouchableOpacity
-                  style={styles.editPencilBtn}
+                  style={[styles.editPencilBtn, { backgroundColor: colors.primaryDim, borderColor: colors.primaryBorder }]}
                   onPress={() => setIsEditing(true)}
                   activeOpacity={0.7}
                 >
-                  <Pencil size={16} color="#38bdf8" />
+                  <Pencil size={16} color={colors.primaryLight} />
                 </TouchableOpacity>
               )}
-              <TouchableOpacity style={styles.closeBtnIcon} onPress={() => setSelectedVehicle(null)}>
-                <X size={20} color="#94a3b8" />
+              <TouchableOpacity 
+                style={[styles.closeBtnIcon, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)' }]} 
+                onPress={() => setSelectedVehicle(null)}
+              >
+                <X size={18} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
           </View>
@@ -248,11 +253,18 @@ export const VehicleDetailsModal: React.FC = () => {
                 </View>
 
                 <View style={styles.remarksEditGroup}>
-                  <Text style={styles.editSectionTitle}>UPDATE REMARKS / INSTRUCTIONS:</Text>
+                  <Text style={[styles.editSectionTitle, { color: colors.textSecondary }]}>UPDATE REMARKS / INSTRUCTIONS:</Text>
                   <TextInput
-                    style={styles.textAreaInput}
+                    style={[
+                      styles.textAreaInput,
+                      {
+                        backgroundColor: isDark ? 'rgba(0, 0, 0, 0.2)' : 'rgba(0, 0, 0, 0.04)',
+                        borderColor: colors.borderGlass,
+                        color: colors.textPrimary,
+                      }
+                    ]}
                     placeholder="Enter updated customer requests or service notes..."
-                    placeholderTextColor="#475569"
+                    placeholderTextColor={colors.textMuted}
                     value={remarks}
                     onChangeText={setRemarks}
                     multiline
@@ -263,7 +275,14 @@ export const VehicleDetailsModal: React.FC = () => {
             ) : (
               /* --- HIGH-TECH STEPPER TIMELINE STAGE AUDIT MODE --- */
               <View style={styles.stepperContainer}>
-                <Text style={styles.stepperTitle}>WORKSHOP STAGE TIMELINE & AUDIT LOG:</Text>
+                {Boolean(selectedVehicle.remarks && selectedVehicle.remarks.trim()) && (
+                  <View style={[styles.remarksBox, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderGlass }]}>
+                    <Text style={[styles.remarksLabel, { color: colors.textMuted }]}>CUSTOMER REMARKS / SPECIAL INSTRUCTIONS:</Text>
+                    <Text style={[styles.remarksText, { color: colors.textPrimary }]}>{selectedVehicle.remarks}</Text>
+                  </View>
+                )}
+
+                <Text style={[styles.stepperTitle, { color: colors.textMuted }]}>WORKSHOP STAGE TIMELINE & AUDIT LOG:</Text>
 
                 {/* Vertical Stepper Timeline list */}
                 <View style={styles.timelineList}>
@@ -423,14 +442,21 @@ export const VehicleDetailsModal: React.FC = () => {
           </ScrollView>
 
           {/* Footer */}
-          <View style={styles.footer}>
+          <View style={[styles.footer, { borderTopColor: colors.borderGlass }]}>
             {isEditing ? (
               <View style={styles.editFooterRow}>
-                <TouchableOpacity style={styles.cancelEditBtn} onPress={() => setIsEditing(false)}>
-                  <Text style={styles.cancelEditText}>Cancel</Text>
+                <TouchableOpacity
+                  style={[styles.cancelEditBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)' }]}
+                  onPress={() => setIsEditing(false)}
+                >
+                  <Text style={[styles.cancelEditText, { color: colors.textSecondary }]}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.saveEditBtn, isSubmitting && { opacity: 0.5, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }]}
+                  style={[
+                    styles.saveEditBtn,
+                    { backgroundColor: colors.primary },
+                    isSubmitting && { opacity: 0.5, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }
+                  ]}
                   onPress={() => { if (!isSubmitting) handleSaveJobOrder(); }}
                   activeOpacity={isSubmitting ? 1 : 0.7}
                 >
@@ -440,18 +466,21 @@ export const VehicleDetailsModal: React.FC = () => {
               </View>
             ) : (
               <View style={styles.footerStandardRow}>
-                <View style={styles.totalTimePill}>
-                  <Clock size={15} color="#38bdf8" />
+                <View style={[styles.totalTimePill, { backgroundColor: colors.primaryDim, borderColor: colors.primaryBorder }]}>
+                  <Clock size={15} color={colors.primaryLight} />
                   <View style={styles.totalTimeTextCol}>
-                    <Text style={styles.totalTimeText}>Net Work: {totalElapsedStr}</Text>
+                    <Text style={[styles.totalTimeText, { color: colors.primaryLight }]}>Net Work: {totalElapsedStr}</Text>
                     {grossElapsedStr !== totalElapsedStr && (
-                      <Text style={styles.grossTimeSubText}>Total Shop: {grossElapsedStr}</Text>
+                      <Text style={[styles.grossTimeSubText, { color: colors.textMuted }]}>Total Shop: {grossElapsedStr}</Text>
                     )}
                   </View>
                 </View>
 
-                <TouchableOpacity style={styles.closeBtn} onPress={() => setSelectedVehicle(null)}>
-                  <Text style={styles.closeText}>Close</Text>
+                <TouchableOpacity
+                  style={[styles.closeBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }]}
+                  onPress={() => setSelectedVehicle(null)}
+                >
+                  <Text style={[styles.closeText, { color: colors.textPrimary }]}>Close</Text>
                 </TouchableOpacity>
               </View>
             )}
