@@ -19,23 +19,26 @@ export const FloorPlan2D: React.FC = React.memo(() => {
     getVehiclesInZone,
   } = useFloorPlan();
 
+  if (isSearchActive && totalMatchingVehicles === 0) {
+    return (
+      <EmptyStateCard
+        icon={FileCheck}
+        title={`No matching vehicles for "${searchQuery}"`}
+        subtitle="Try searching another license plate number."
+      />
+    );
+  }
+
   return (
     <View style={styles.container}>
-        <ScrollView
-          style={styles.mainLeftArea}
-          contentContainerStyle={styles.canvasContent}
-          showsVerticalScrollIndicator={false}
-          showsHorizontalScrollIndicator={false}
-        >
-          {isSearchActive && totalMatchingVehicles === 0 ? (
-            <EmptyStateCard
-              icon={FileCheck}
-              title={`No matching vehicles for "${searchQuery}"`}
-              subtitle="Try searching another license plate number."
-            />
-          ) : (
-            <View style={styles.spatialGrid}>
-              {bays.map((bay) => {
+      <ScrollView
+        style={styles.mainLeftArea}
+        contentContainerStyle={styles.canvasContent}
+        showsVerticalScrollIndicator={false}
+        showsHorizontalScrollIndicator={false}
+      >
+        <View style={styles.spatialGrid}>
+          {bays.map((bay) => {
                 const IconComp = bay.icon;
                 const bayVehicles = getVehiclesInZone(bay.id);
 
@@ -117,11 +120,10 @@ export const FloorPlan2D: React.FC = React.memo(() => {
               );
             })}
           </View>
-        )}
-      </ScrollView>
-    </View>
-  );
-});
+        </ScrollView>
+      </View>
+    );
+  });
 
 const styles = StyleSheet.create({
   container: {

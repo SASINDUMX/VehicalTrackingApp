@@ -34,7 +34,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
-    marginTop: 8,
   },
   emptyTitle: {
     color: "#ffffff",
