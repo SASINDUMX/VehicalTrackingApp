@@ -441,15 +441,17 @@ export const VehicleDetailsModal: React.FC = () => {
             ) : (
               <View style={styles.footerStandardRow}>
                 <View style={styles.totalTimePill}>
-                  <Clock size={14} color="#38bdf8" />
-                  <Text style={styles.totalTimeText}>Net Work: {totalElapsedStr}</Text>
-                  {grossElapsedStr !== totalElapsedStr && (
-                    <Text style={styles.grossTimeSubText}>· Total: {grossElapsedStr}</Text>
-                  )}
+                  <Clock size={15} color="#38bdf8" />
+                  <View style={styles.totalTimeTextCol}>
+                    <Text style={styles.totalTimeText}>Net Work: {totalElapsedStr}</Text>
+                    {grossElapsedStr !== totalElapsedStr && (
+                      <Text style={styles.grossTimeSubText}>Total Shop: {grossElapsedStr}</Text>
+                    )}
+                  </View>
                 </View>
 
                 <TouchableOpacity style={styles.closeBtn} onPress={() => setSelectedVehicle(null)}>
-                  <Text style={styles.closeText}>Close Window</Text>
+                  <Text style={styles.closeText}>Close</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -468,16 +470,17 @@ const styles = StyleSheet.create({
   headerRightRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   plateBadge: { backgroundColor: '#facc15', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: '#eab308' },
   plateText: { color: '#000000', fontWeight: '800', fontSize: 16, letterSpacing: 0.5 },
-  footerStandardRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' },
-  totalTimePill: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(14, 165, 233, 0.12)', borderWidth: 1, borderColor: 'rgba(14, 165, 233, 0.3)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 },
+  footerStandardRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, width: '100%' },
+  totalTimePill: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(14, 165, 233, 0.12)', borderWidth: 1, borderColor: 'rgba(14, 165, 233, 0.3)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, flexShrink: 1 },
+  totalTimeTextCol: { gap: 1 },
   totalTimeText: { color: '#38bdf8', fontSize: 12, fontWeight: '700' },
-  grossTimeSubText: { color: '#94a3b8', fontSize: 11, fontWeight: '500' },
+  grossTimeSubText: { color: '#94a3b8', fontSize: 10.5, fontWeight: '500' },
   editPencilBtn: { backgroundColor: 'rgba(14, 165, 233, 0.15)', borderWidth: 1, borderColor: 'rgba(14, 165, 233, 0.3)', padding: 8, borderRadius: 20 },
   closeBtnIcon: { backgroundColor: 'rgba(255, 255, 255, 0.05)', padding: 8, borderRadius: 20 },
   body: { padding: 20 },
   bodyContent: { gap: 16 },
-  footer: { padding: 20, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)', alignItems: 'flex-end' },
-  closeBtn: { backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 10 },
+  footer: { padding: 16, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)', width: '100%' },
+  closeBtn: { backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 18, paddingVertical: 10, borderRadius: 10, flexShrink: 0 },
   closeText: { color: '#ffffff', fontWeight: '700', fontSize: 13 },
 
   /* Stepper Timeline Audit Styles */
