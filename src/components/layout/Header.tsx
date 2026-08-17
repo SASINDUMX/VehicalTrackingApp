@@ -4,7 +4,8 @@ import { useVehicles } from '../../context/VehicleContext';
 import { useAuth } from '../../context/AuthContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { chimeService } from '../../lib/chime';
-import { Car, Plus, LogOut, User, Volume2, VolumeX, ChevronDown, Shield } from 'lucide-react-native';
+import { hapticService } from '../../lib/haptics';
+import { Car, Plus, LogOut, User, Volume2, VolumeX, ChevronDown, Shield, Smartphone } from 'lucide-react-native';
 
 import { getCurrentActiveBreak } from '../../utils/workshopHoursUtils';
 
@@ -23,6 +24,7 @@ export const Header: React.FC = () => {
   const [timeStr, setTimeStr] = useState<string>('');
   const [activeBreak, setActiveBreak] = useState<{ name: string; endStr: string } | null>(null);
   const [isAudioMuted, setIsAudioMuted] = useState<boolean>(chimeService.getMuted());
+  const [isHapticsMuted, setIsHapticsMuted] = useState<boolean>(hapticService.getMuted());
   const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
   
   // Pulse Animation
@@ -34,6 +36,15 @@ export const Header: React.FC = () => {
     setIsAudioMuted(nextMuted);
     if (!nextMuted) {
       chimeService.playArrivalChime();
+    }
+  };
+
+  const toggleHaptics = () => {
+    const nextMuted = !isHapticsMuted;
+    hapticService.setMuted(nextMuted);
+    setIsHapticsMuted(nextMuted);
+    if (!nextMuted) {
+      hapticService.triggerArrivalHaptic();
     }
   };
 
@@ -162,6 +173,21 @@ export const Header: React.FC = () => {
                 <>
                   <Volume2 size={16} color="#38bdf8" />
                   <Text style={[styles.dropdownItemText, { color: '#38bdf8' }]}>Audio Chimes: Enabled</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            {/* Haptic Vibration Toggle Option */}
+            <TouchableOpacity style={styles.dropdownItem} onPress={toggleHaptics}>
+              {isHapticsMuted ? (
+                <>
+                  <Smartphone size={16} color="#64748b" />
+                  <Text style={styles.dropdownItemText}>Haptic Feedback: Disabled</Text>
+                </>
+              ) : (
+                <>
+                  <Smartphone size={16} color="#38bdf8" />
+                  <Text style={[styles.dropdownItemText, { color: '#38bdf8' }]}>Haptic Feedback: Enabled</Text>
                 </>
               )}
             </TouchableOpacity>
