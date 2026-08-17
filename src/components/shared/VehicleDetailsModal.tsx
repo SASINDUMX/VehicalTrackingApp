@@ -13,11 +13,11 @@ import { getStageDurationBreakdown, formatDurationString } from '../../utils/veh
 import { getNetWorkingSeconds, getCurrentActiveBreak } from '../../utils/workshopHoursUtils';
 import { useTheme } from '../../context/ThemeContext';
 
-const STAGE_ORDER: { zone: BayZone; name: string; code: string; icon: any; color: string }[] = [
-  { zone: 'workshop', name: 'General Workshop Bay', code: 'BAY 01', icon: Wrench, color: '#06b6d4' },
-  { zone: 'alignment', name: 'Wheel Alignment Bay', code: 'BAY 03', icon: Navigation, color: '#10b981' },
-  { zone: 'hoist', name: 'Hoist Service Bay', code: 'BAY 02', icon: Shield, color: '#f59e0b' },
-  { zone: 'inspection', name: 'Advisor Inspection Zone', code: 'FINAL', icon: CheckCircle2, color: '#a855f7' },
+const getStageOrder = (themeColors: any) => [
+  { zone: 'workshop' as BayZone, name: 'General Workshop Bay', code: 'BAY 01', icon: Wrench, color: themeColors.primary },
+  { zone: 'alignment' as BayZone, name: 'Wheel Alignment Bay', code: 'BAY 03', icon: Navigation, color: themeColors.success },
+  { zone: 'hoist' as BayZone, name: 'Hoist Service Bay', code: 'BAY 02', icon: Shield, color: themeColors.warning },
+  { zone: 'inspection' as BayZone, name: 'Advisor Inspection Zone', code: 'FINAL', icon: CheckCircle2, color: themeColors.purple },
 ];
 
 export const VehicleDetailsModal: React.FC = () => {
@@ -179,20 +179,34 @@ export const VehicleDetailsModal: React.FC = () => {
                     const isSelected = selectedTasks.includes('general_service');
                     return (
                       <TouchableOpacity
-                        style={[styles.taskChip, isSelected && styles.activeTaskChip, isCompleted && styles.completedLockedChip]}
+                        style={[
+                          styles.taskChip,
+                          {
+                            backgroundColor: isSelected 
+                              ? colors.primaryDim 
+                              : isCompleted 
+                              ? colors.successDim 
+                              : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
+                            borderColor: isSelected 
+                              ? colors.primary 
+                              : isCompleted 
+                              ? colors.successBorder 
+                              : colors.borderGlass
+                          }
+                        ]}
                         onPress={() => { if (!isCompleted) toggleTask('general_service'); }}
                         activeOpacity={isCompleted ? 1 : 0.7}
                       >
                         {isCompleted ? (
                           <>
-                            <CheckSquare size={16} color="#10b981" />
-                            <Text style={styles.lockedTaskText}>General Service (Done ✓)</Text>
-                            <Lock size={12} color="#10b981" />
+                            <CheckSquare size={16} color={colors.success} />
+                            <Text style={[styles.lockedTaskText, { color: colors.success }]}>General Service (Done ✓)</Text>
+                            <Lock size={12} color={colors.success} />
                           </>
                         ) : (
                           <>
-                            {isSelected ? <CheckSquare size={16} color="#0ea5e9" /> : <Square size={16} color="#64748b" />}
-                            <Text style={[styles.chipText, isSelected && styles.activeChipText]}>General Service</Text>
+                            {isSelected ? <CheckSquare size={16} color={colors.primary} /> : <Square size={16} color={colors.textMuted} />}
+                            <Text style={[styles.chipText, { color: isSelected ? colors.textPrimary : colors.textSecondary }]}>General Service</Text>
                           </>
                         )}
                       </TouchableOpacity>
@@ -205,20 +219,34 @@ export const VehicleDetailsModal: React.FC = () => {
                     const isSelected = selectedTasks.includes('wheel_alignment');
                     return (
                       <TouchableOpacity
-                        style={[styles.taskChip, isSelected && styles.activeTaskChip, isCompleted && styles.completedLockedChip]}
+                        style={[
+                          styles.taskChip,
+                          {
+                            backgroundColor: isSelected 
+                              ? colors.successDim 
+                              : isCompleted 
+                              ? colors.successDim 
+                              : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
+                            borderColor: isSelected 
+                              ? colors.success 
+                              : isCompleted 
+                              ? colors.successBorder 
+                              : colors.borderGlass
+                          }
+                        ]}
                         onPress={() => { if (!isCompleted) toggleTask('wheel_alignment'); }}
                         activeOpacity={isCompleted ? 1 : 0.7}
                       >
                         {isCompleted ? (
                           <>
-                            <CheckSquare size={16} color="#10b981" />
-                            <Text style={styles.lockedTaskText}>Wheel Alignment (Done ✓)</Text>
-                            <Lock size={12} color="#10b981" />
+                            <CheckSquare size={16} color={colors.success} />
+                            <Text style={[styles.lockedTaskText, { color: colors.success }]}>Wheel Alignment (Done ✓)</Text>
+                            <Lock size={12} color={colors.success} />
                           </>
                         ) : (
                           <>
-                            {isSelected ? <CheckSquare size={16} color="#10b981" /> : <Square size={16} color="#64748b" />}
-                            <Text style={[styles.chipText, isSelected && styles.activeChipText]}>Wheel Alignment</Text>
+                            {isSelected ? <CheckSquare size={16} color={colors.success} /> : <Square size={16} color={colors.textMuted} />}
+                            <Text style={[styles.chipText, { color: isSelected ? colors.textPrimary : colors.textSecondary }]}>Wheel Alignment</Text>
                           </>
                         )}
                       </TouchableOpacity>
@@ -231,20 +259,34 @@ export const VehicleDetailsModal: React.FC = () => {
                     const isSelected = selectedTasks.includes('hoist_service');
                     return (
                       <TouchableOpacity
-                        style={[styles.taskChip, isSelected && styles.activeTaskChip, isCompleted && styles.completedLockedChip]}
+                        style={[
+                          styles.taskChip,
+                          {
+                            backgroundColor: isSelected 
+                              ? colors.warningDim 
+                              : isCompleted 
+                              ? colors.successDim 
+                              : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
+                            borderColor: isSelected 
+                              ? colors.warning 
+                              : isCompleted 
+                              ? colors.successBorder 
+                              : colors.borderGlass
+                          }
+                        ]}
                         onPress={() => { if (!isCompleted) toggleTask('hoist_service'); }}
                         activeOpacity={isCompleted ? 1 : 0.7}
                       >
                         {isCompleted ? (
                           <>
-                            <CheckSquare size={16} color="#10b981" />
-                            <Text style={styles.lockedTaskText}>Hoist Service (Done ✓)</Text>
-                            <Lock size={12} color="#10b981" />
+                            <CheckSquare size={16} color={colors.success} />
+                            <Text style={[styles.lockedTaskText, { color: colors.success }]}>Hoist Service (Done ✓)</Text>
+                            <Lock size={12} color={colors.success} />
                           </>
                         ) : (
                           <>
-                            {isSelected ? <CheckSquare size={16} color="#f59e0b" /> : <Square size={16} color="#64748b" />}
-                            <Text style={[styles.chipText, isSelected && styles.activeChipText]}>Hoist Service</Text>
+                            {isSelected ? <CheckSquare size={16} color={colors.warning} /> : <Square size={16} color={colors.textMuted} />}
+                            <Text style={[styles.chipText, { color: isSelected ? colors.textPrimary : colors.textSecondary }]}>Hoist Service</Text>
                           </>
                         )}
                       </TouchableOpacity>
@@ -297,10 +339,10 @@ export const VehicleDetailsModal: React.FC = () => {
                     const isHoistReq = requiredTaskTypes.includes('hoist_service');
 
                     const masterStages = [
-                      { zone: 'workshop' as BayZone, name: 'General Workshop Bay', code: 'BAY 01', icon: Wrench, color: '#06b6d4', isRequired: isWorkshopReq },
-                      { zone: 'alignment' as BayZone, name: 'Wheel Alignment Bay', code: 'BAY 03', icon: Navigation, color: '#10b981', isRequired: isAlignmentReq },
-                      { zone: 'hoist' as BayZone, name: 'Hoist Service Bay', code: 'BAY 02', icon: Shield, color: '#f59e0b', isRequired: isHoistReq },
-                      { zone: 'inspection' as BayZone, name: 'Advisor Inspection Zone', code: 'FINAL', icon: CheckCircle2, color: '#a855f7', isRequired: true }
+                      { zone: 'workshop' as BayZone, name: 'General Workshop Bay', code: 'BAY 01', icon: Wrench, color: colors.primary, isRequired: isWorkshopReq },
+                      { zone: 'alignment' as BayZone, name: 'Wheel Alignment Bay', code: 'BAY 03', icon: Navigation, color: colors.success, isRequired: isAlignmentReq },
+                      { zone: 'hoist' as BayZone, name: 'Hoist Service Bay', code: 'BAY 02', icon: Shield, color: colors.warning, isRequired: isHoistReq },
+                      { zone: 'inspection' as BayZone, name: 'Advisor Inspection Zone', code: 'FINAL', icon: CheckCircle2, color: colors.purple, isRequired: true }
                     ];
 
                     // Filter only required stages or stages already visited/active
@@ -367,17 +409,18 @@ export const VehicleDetailsModal: React.FC = () => {
                           <View style={styles.timelineNodeColumn}>
                             <View style={[
                               styles.nodeCircle,
+                              { backgroundColor: colors.surfaceElevated, borderColor: colors.borderGlassBright },
                               isCurrent && { borderColor: stageDef.color, backgroundColor: `${stageDef.color}25` },
-                              isCompleted && styles.nodeCircleDone,
-                              isCancelled && styles.nodeCircleCancelled,
-                              !isCurrent && !isCompleted && !isCancelled && styles.nodeCircleUpcoming
+                              isCompleted && { borderColor: colors.success, backgroundColor: colors.successDim },
+                              isCancelled && { borderColor: colors.danger, backgroundColor: colors.dangerDim },
+                              !isCurrent && !isCompleted && !isCancelled && { borderColor: colors.borderGlassBright, backgroundColor: colors.surfaceOverlay }
                             ]}>
-                              <StageIcon size={16} color={isCurrent ? stageDef.color : isCompleted ? '#10b981' : isCancelled ? '#ef4444' : '#475569'} />
+                              <StageIcon size={16} color={isCurrent ? stageDef.color : isCompleted ? colors.success : isCancelled ? colors.danger : colors.textMuted} />
                             </View>
                             {!isLastInOrder && (
                               <>
-                                <View style={styles.timelineLine} />
-                                {isCompleted && <View style={[styles.timelineLine, styles.timelineLineDone]} />}
+                                <View style={[styles.timelineLine, { backgroundColor: colors.borderGlassBright }]} />
+                                {isCompleted && <View style={[styles.timelineLine, styles.timelineLineDone, { backgroundColor: colors.success }]} />}
                                 {isCurrent && <View style={[styles.timelineLine, styles.timelineLineHalf, { backgroundColor: stageDef.color }]} />}
                               </>
                             )}
@@ -385,7 +428,7 @@ export const VehicleDetailsModal: React.FC = () => {
 
                           <View style={styles.timelineContent}>
                             <View style={styles.timelineHeaderRow}>
-                              <Text style={[styles.stageNameText, isCurrent && { color: stageDef.color, fontWeight: '800' }, isCancelled && { color: '#94a3b8', textDecorationLine: 'line-through' }]}>
+                              <Text style={[styles.stageNameText, { color: colors.textPrimary }, isCurrent && { color: stageDef.color, fontWeight: '800' }, isCancelled && { color: colors.textMuted, textDecorationLine: 'line-through' }]}>
                                 {stageDef.name}
                               </Text>
                               {isCurrent ? (
@@ -394,24 +437,24 @@ export const VehicleDetailsModal: React.FC = () => {
                                   <Text style={[styles.currentBadgeText, { color: stageDef.color }]}>ACTIVE</Text>
                                 </View>
                               ) : isCompleted ? (
-                                <View style={styles.doneBadge}>
-                                  <Text style={styles.doneBadgeText}>COMPLETED</Text>
+                                <View style={[styles.doneBadge, { backgroundColor: colors.successDim, borderColor: colors.successBorder }]}>
+                                  <Text style={[styles.doneBadgeText, { color: colors.success }]}>COMPLETED</Text>
                                 </View>
                               ) : isCancelled ? (
-                                <View style={styles.cancelledBadge}>
-                                  <Text style={styles.cancelledBadgeText}>CANCELLED</Text>
+                                <View style={[styles.cancelledBadge, { backgroundColor: colors.dangerDim, borderColor: colors.dangerBorder }]}>
+                                  <Text style={[styles.cancelledBadgeText, { color: colors.danger }]}>CANCELLED</Text>
                                 </View>
                               ) : (
-                                <View style={styles.upcomingBadge}>
-                                  <Text style={styles.upcomingBadgeText}>PENDING</Text>
+                                <View style={[styles.upcomingBadge, { backgroundColor: colors.surfaceOverlay, borderColor: colors.borderGlass }]}>
+                                  <Text style={[styles.upcomingBadgeText, { color: colors.textMuted }]}>PENDING</Text>
                                 </View>
                               )}
                             </View>
 
                             <View style={styles.stageTimeRow}>
                               <View style={styles.timeTag}>
-                                <Clock size={12} color={isCurrent ? stageDef.color : isCancelled ? '#ef4444' : '#94a3b8'} />
-                                <Text style={[styles.timeTagText, isCurrent && { color: stageDef.color, fontWeight: '700' }, isCancelled && { color: '#fca5a5' }]}>
+                                <Clock size={12} color={isCurrent ? stageDef.color : isCancelled ? colors.danger : colors.textMuted} />
+                                <Text style={[styles.timeTagText, { color: colors.textSecondary }, isCurrent && { color: stageDef.color, fontWeight: '700' }, isCancelled && { color: colors.danger }]}>
                                   {isCurrent ? `Active: ${spentStr}` : isCompleted ? `Spent: ${spentStr}` : isCancelled ? 'Bypassed / Cancelled' : 'Pending'}
                                 </Text>
                               </View>

@@ -103,6 +103,11 @@ export const SearchBarRow: React.FC = () => {
 export const SegmentedTabs: React.FC = () => {
   const { currentRole, setCurrentRole } = useVehicles();
   const { colors, isDark } = useTheme();
+  const isOverviewActive = currentRole === 'supervisor';
+  const isWorkshopActive = currentRole === 'tech_workshop';
+  const isAlignmentActive = currentRole === 'tech_alignment';
+  const isHoistActive = currentRole === 'tech_hoist';
+  const isAdvisorActive = currentRole === 'advisor';
 
   return (
     <View style={[styles.segmentedContainer, { backgroundColor: colors.surface, borderBottomColor: colors.borderGlass }]}>
@@ -112,15 +117,20 @@ export const SegmentedTabs: React.FC = () => {
           style={[
             styles.segmentSingleBtn,
             {
-              backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.04)',
-              borderColor: colors.borderGlass
-            },
-            currentRole === 'supervisor' && styles.activeSingleBtn
+              backgroundColor: isOverviewActive 
+                ? colors.primaryDim 
+                : (isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.04)'),
+              borderColor: isOverviewActive ? colors.primary : colors.borderGlass,
+            }
           ]}
           onPress={() => setCurrentRole('supervisor')}
           activeOpacity={0.7}
         >
-          <Text style={[styles.segmentBtnText, { color: colors.textSecondary }, currentRole === 'supervisor' && styles.activeBtnText]}>
+          <Text style={[
+            styles.segmentBtnText,
+            { color: isOverviewActive ? (isDark ? '#ffffff' : colors.primary) : colors.textSecondary },
+            isOverviewActive && styles.activeBtnText
+          ]}>
             Overview
           </Text>
         </TouchableOpacity>
@@ -136,12 +146,19 @@ export const SegmentedTabs: React.FC = () => {
           <TouchableOpacity
             style={[
               styles.groupedStageItem,
-              currentRole === 'tech_workshop' && styles.activeWorkshopStage
+              isWorkshopActive && {
+                backgroundColor: colors.primaryDim,
+                borderColor: colors.primary,
+              }
             ]}
             onPress={() => setCurrentRole('tech_workshop')}
             activeOpacity={0.7}
           >
-            <Text style={[styles.segmentBtnText, { color: colors.textSecondary }, currentRole === 'tech_workshop' && styles.activeBtnText]}>
+            <Text style={[
+              styles.segmentBtnText,
+              { color: isWorkshopActive ? (isDark ? '#ffffff' : colors.primary) : colors.textSecondary },
+              isWorkshopActive && styles.activeBtnText
+            ]}>
               General
             </Text>
           </TouchableOpacity>
@@ -151,12 +168,19 @@ export const SegmentedTabs: React.FC = () => {
           <TouchableOpacity
             style={[
               styles.groupedStageItem,
-              currentRole === 'tech_alignment' && styles.activeAlignmentStage
+              isAlignmentActive && {
+                backgroundColor: colors.successDim,
+                borderColor: colors.success,
+              }
             ]}
             onPress={() => setCurrentRole('tech_alignment')}
             activeOpacity={0.7}
           >
-            <Text style={[styles.segmentBtnText, { color: colors.textSecondary }, currentRole === 'tech_alignment' && styles.activeBtnText]}>
+            <Text style={[
+              styles.segmentBtnText,
+              { color: isAlignmentActive ? (isDark ? '#ffffff' : colors.success) : colors.textSecondary },
+              isAlignmentActive && styles.activeBtnText
+            ]}>
               Alignment
             </Text>
           </TouchableOpacity>
@@ -166,12 +190,19 @@ export const SegmentedTabs: React.FC = () => {
           <TouchableOpacity
             style={[
               styles.groupedStageItem,
-              currentRole === 'tech_hoist' && styles.activeHoistStage
+              isHoistActive && {
+                backgroundColor: colors.warningDim,
+                borderColor: colors.warning,
+              }
             ]}
             onPress={() => setCurrentRole('tech_hoist')}
             activeOpacity={0.7}
           >
-            <Text style={[styles.segmentBtnText, { color: colors.textSecondary }, currentRole === 'tech_hoist' && styles.activeBtnText]}>
+            <Text style={[
+              styles.segmentBtnText,
+              { color: isHoistActive ? (isDark ? '#ffffff' : colors.warning) : colors.textSecondary },
+              isHoistActive && styles.activeBtnText
+            ]}>
               Hoist
             </Text>
           </TouchableOpacity>
@@ -182,15 +213,20 @@ export const SegmentedTabs: React.FC = () => {
           style={[
             styles.segmentSingleBtn,
             {
-              backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.04)',
-              borderColor: colors.borderGlass
-            },
-            currentRole === 'advisor' && styles.activeAdvisorBtn
+              backgroundColor: isAdvisorActive 
+                ? colors.purpleDim 
+                : (isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.04)'),
+              borderColor: isAdvisorActive ? colors.purple : colors.borderGlass,
+            }
           ]}
           onPress={() => setCurrentRole('advisor')}
           activeOpacity={0.7}
         >
-          <Text style={[styles.segmentBtnText, { color: colors.textSecondary }, currentRole === 'advisor' && styles.activeBtnText]}>
+          <Text style={[
+            styles.segmentBtnText,
+            { color: isAdvisorActive ? (isDark ? '#ffffff' : colors.purple) : colors.textSecondary },
+            isAdvisorActive && styles.activeBtnText
+          ]}>
             Ready
           </Text>
         </TouchableOpacity>

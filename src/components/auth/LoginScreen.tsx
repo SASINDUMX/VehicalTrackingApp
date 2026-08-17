@@ -11,10 +11,12 @@ import {
   ScrollView,
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
+import { useTheme } from '../../context/ThemeContext';
 import { Car, LogIn, AlertCircle, Shield, Wrench, Headphones, UserCheck } from 'lucide-react-native';
 
 export const LoginScreen: React.FC = () => {
   const { signIn } = useAuth();
+  const { colors, isDark } = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -69,33 +71,33 @@ export const LoginScreen: React.FC = () => {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: colors.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView contentContainerStyle={styles.scrollInner} keyboardShouldPersistTaps="handled">
         {/* Logo */}
         <View style={styles.logoSection}>
-          <View style={styles.logoCircleOuter}>
-            <View style={styles.logoCircleInner}>
+          <View style={[styles.logoCircleOuter, { backgroundColor: colors.primaryDim }]}>
+            <View style={[styles.logoCircleInner, { backgroundColor: colors.primary }]}>
               <Car size={40} color="#ffffff" />
             </View>
           </View>
-          <Text style={styles.appTitle}>UNITED MOTORS</Text>
-          <Text style={styles.appSubtitle}>Vehicle Tracking System</Text>
+          <Text style={[styles.appTitle, { color: colors.textPrimary }]}>UNITED MOTORS</Text>
+          <Text style={[styles.appSubtitle, { color: colors.textMuted }]}>Vehicle Tracking System</Text>
         </View>
 
         {/* Login Card */}
-        <View style={styles.card}>
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.borderGlass }]}>
           <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Sign In</Text>
-            <Text style={styles.cardSubtitle}>Enter your credentials to access the system</Text>
+            <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>Sign In</Text>
+            <Text style={[styles.cardSubtitle, { color: colors.textMuted }]}>Enter your credentials to access the system</Text>
           </View>
 
           {/* Error Banner */}
           {error && (
-            <View style={styles.errorBanner}>
-              <AlertCircle size={16} color="#ef4444" />
-              <Text style={styles.errorText}>{error}</Text>
+            <View style={[styles.errorBanner, { backgroundColor: colors.dangerDim, borderColor: colors.dangerBorder }]}>
+              <AlertCircle size={16} color={colors.danger} />
+              <Text style={[styles.errorText, { color: colors.danger }]}>{error}</Text>
             </View>
           )}
 
@@ -103,11 +105,18 @@ export const LoginScreen: React.FC = () => {
           <View style={styles.formSection}>
             {/* Email Field */}
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Email</Text>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>Email</Text>
               <TextInput
-                style={styles.input}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.04)',
+                    borderColor: colors.borderGlass,
+                    color: colors.textPrimary,
+                  }
+                ]}
                 placeholder="your.name@unitedmotors.com"
-                placeholderTextColor="#64748b"
+                placeholderTextColor={colors.textMuted}
                 value={email}
                 onChangeText={(text) => { setEmail(text); setError(null); }}
                 autoCapitalize="none"
@@ -119,11 +128,18 @@ export const LoginScreen: React.FC = () => {
 
             {/* Password Field */}
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Password</Text>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>Password</Text>
               <TextInput
-                style={styles.input}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.04)',
+                    borderColor: colors.borderGlass,
+                    color: colors.textPrimary,
+                  }
+                ]}
                 placeholder="••••••••"
-                placeholderTextColor="#64748b"
+                placeholderTextColor={colors.textMuted}
                 value={password}
                 onChangeText={(text) => { setPassword(text); setError(null); }}
                 secureTextEntry
@@ -136,7 +152,7 @@ export const LoginScreen: React.FC = () => {
 
           {/* Sign In Button */}
           <TouchableOpacity
-            style={[styles.signInBtn, isLoading && styles.signInBtnDisabled, isLoading && (Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {})]}
+            style={[styles.signInBtn, { backgroundColor: colors.primary }, isLoading && styles.signInBtnDisabled, isLoading && (Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {})]}
             onPress={() => { if (!isLoading) handleSignIn(); }}
             activeOpacity={isLoading ? 1 : 0.7}
           >
@@ -153,31 +169,51 @@ export const LoginScreen: React.FC = () => {
           {/* Quick Test Accounts */}
           <View style={styles.quickAccountsSection}>
             <View style={styles.dividerRow}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>Quick Demo Accounts</Text>
-              <View style={styles.dividerLine} />
+              <View style={[styles.dividerLine, { backgroundColor: colors.borderGlass }]} />
+              <Text style={[styles.dividerText, { color: colors.textMuted }]}>Quick Demo Accounts</Text>
+              <View style={[styles.dividerLine, { backgroundColor: colors.borderGlass }]} />
             </View>
             
             <View style={styles.pillsContainer}>
-              <TouchableOpacity style={styles.pill} onPress={() => { if (!isLoading) fillQuickAccount('supervisor'); }} activeOpacity={isLoading ? 1 : 0.7}>
-                <Shield size={13} color="#0ea5e9" />
-                <Text style={styles.pillText}>Supervisor</Text>
+              <TouchableOpacity
+                style={[styles.pill, { backgroundColor: colors.primaryDim, borderColor: colors.primaryBorder }]}
+                onPress={() => { if (!isLoading) fillQuickAccount('supervisor'); }}
+                activeOpacity={isLoading ? 1 : 0.7}
+              >
+                <Shield size={13} color={colors.primaryLight} />
+                <Text style={[styles.pillText, { color: colors.primaryLight }]}>Supervisor</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.pill} onPress={() => { if (!isLoading) fillQuickAccount('tech1'); }} activeOpacity={isLoading ? 1 : 0.7}>
-                <Wrench size={13} color="#06b6d4" />
-                <Text style={styles.pillText}>Tech 1 (General)</Text>
+              <TouchableOpacity
+                style={[styles.pill, { backgroundColor: colors.primaryDim, borderColor: colors.primaryBorder }]}
+                onPress={() => { if (!isLoading) fillQuickAccount('tech1'); }}
+                activeOpacity={isLoading ? 1 : 0.7}
+              >
+                <Wrench size={13} color={colors.primaryLight} />
+                <Text style={[styles.pillText, { color: colors.primaryLight }]}>Tech 1 (General)</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.pill} onPress={() => { if (!isLoading) fillQuickAccount('tech2'); }} activeOpacity={isLoading ? 1 : 0.7}>
-                <UserCheck size={13} color="#10b981" />
-                <Text style={styles.pillText}>Tech 2 (Alignment)</Text>
+              <TouchableOpacity
+                style={[styles.pill, { backgroundColor: colors.successDim, borderColor: colors.successBorder }]}
+                onPress={() => { if (!isLoading) fillQuickAccount('tech2'); }}
+                activeOpacity={isLoading ? 1 : 0.7}
+              >
+                <UserCheck size={13} color={colors.success} />
+                <Text style={[styles.pillText, { color: colors.success }]}>Tech 2 (Alignment)</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.pill} onPress={() => { if (!isLoading) fillQuickAccount('tech3'); }} activeOpacity={isLoading ? 1 : 0.7}>
-                <Shield size={13} color="#f59e0b" />
-                <Text style={styles.pillText}>Tech 3 (Hoist)</Text>
+              <TouchableOpacity
+                style={[styles.pill, { backgroundColor: colors.warningDim, borderColor: colors.warningBorder }]}
+                onPress={() => { if (!isLoading) fillQuickAccount('tech3'); }}
+                activeOpacity={isLoading ? 1 : 0.7}
+              >
+                <Shield size={13} color={colors.warning} />
+                <Text style={[styles.pillText, { color: colors.warning }]}>Tech 3 (Hoist)</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.pill} onPress={() => { if (!isLoading) fillQuickAccount('advisor'); }} activeOpacity={isLoading ? 1 : 0.7}>
-                <Headphones size={13} color="#a855f7" />
-                <Text style={styles.pillText}>Advisor</Text>
+              <TouchableOpacity
+                style={[styles.pill, { backgroundColor: colors.purpleDim, borderColor: colors.purpleBorder }]}
+                onPress={() => { if (!isLoading) fillQuickAccount('advisor'); }}
+                activeOpacity={isLoading ? 1 : 0.7}
+              >
+                <Headphones size={13} color={colors.purple} />
+                <Text style={[styles.pillText, { color: colors.purple }]}>Advisor</Text>
               </TouchableOpacity>
             </View>
           </View>

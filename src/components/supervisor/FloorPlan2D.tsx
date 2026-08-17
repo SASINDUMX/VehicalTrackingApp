@@ -62,7 +62,7 @@ export const FloorPlan2D: React.FC = React.memo(() => {
                       </View>
                     </View>
 
-                    <View style={styles.spatialBayFloor}>
+                    <View style={[styles.spatialBayFloor, { backgroundColor: isDark ? '#0b1220' : colors.surfaceElevated }]}>
                       {isLoading ? (
                         <View style={[styles.bayEmptySpot, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)' }]}>
                           <ActivityIndicator size="small" color={bay.color} />
@@ -86,7 +86,7 @@ export const FloorPlan2D: React.FC = React.memo(() => {
                                 key={vehicle.id}
                                 style={[
                                   styles.spatialVehicleCard,
-                                  { backgroundColor: colors.surfaceElevated, borderColor: colors.borderGlass }
+                                  { backgroundColor: colors.surface, borderColor: colors.borderGlass }
                                 ]}
                                 onPress={() => setSelectedVehicle(vehicle)}
                                 activeOpacity={0.8}

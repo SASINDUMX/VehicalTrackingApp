@@ -108,48 +108,48 @@ export const DarkColors: ThemeColors = {
 
 export const LightColors: ThemeColors = {
   // Executive Crisp Light Base
-  background: '#f1f5f9',
+  background: '#f8fafc',
   surface: '#ffffff',
-  surfaceElevated: '#f8fafc',
+  surfaceElevated: '#f1f5f9',
   card: '#ffffff',
-  cardHover: '#f1f5f9',
+  cardHover: '#f8fafc',
 
   // Typography
   textPrimary: '#0f172a',
-  textSecondary: '#475569',
+  textSecondary: '#334155',
   textMuted: '#64748b',
   textSubtle: '#1e293b',
   textDark: '#0f172a',
 
-  // Brand Accents
+  // Brand Accents (Deep, rich, accessible on light backgrounds)
   primary: '#0284c7',
-  primaryLight: '#0ea5e9',
+  primaryLight: '#0284c7',
   primaryCyan: '#0891b2',
-  primaryDim: 'rgba(2, 132, 199, 0.1)',
-  primaryGlow: 'rgba(2, 132, 199, 0.2)',
-  primaryBorder: 'rgba(2, 132, 199, 0.3)',
+  primaryDim: 'rgba(2, 132, 199, 0.08)',
+  primaryGlow: 'rgba(2, 132, 199, 0.15)',
+  primaryBorder: 'rgba(2, 132, 199, 0.25)',
 
   // Status & Zones
   success: '#059669',
-  successLight: '#10b981',
-  successDim: 'rgba(5, 150, 105, 0.1)',
-  successGlow: 'rgba(5, 150, 105, 0.2)',
-  successBorder: 'rgba(5, 150, 105, 0.3)',
+  successLight: '#059669',
+  successDim: 'rgba(5, 150, 105, 0.08)',
+  successGlow: 'rgba(5, 150, 105, 0.15)',
+  successBorder: 'rgba(5, 150, 105, 0.25)',
 
   warning: '#d97706',
-  warningLight: '#f59e0b',
-  warningDim: 'rgba(217, 119, 6, 0.1)',
-  warningGlow: 'rgba(217, 119, 6, 0.2)',
-  warningBorder: 'rgba(217, 119, 6, 0.3)',
+  warningLight: '#d97706',
+  warningDim: 'rgba(217, 119, 6, 0.08)',
+  warningGlow: 'rgba(217, 119, 6, 0.15)',
+  warningBorder: 'rgba(217, 119, 6, 0.25)',
 
   purple: '#7c3aed',
-  purpleLight: '#8b5cf6',
-  purpleDim: 'rgba(124, 58, 237, 0.1)',
-  purpleBorder: 'rgba(124, 58, 237, 0.3)',
+  purpleLight: '#7c3aed',
+  purpleDim: 'rgba(124, 58, 237, 0.08)',
+  purpleBorder: 'rgba(124, 58, 237, 0.25)',
 
   danger: '#dc2626',
-  dangerDim: 'rgba(220, 38, 38, 0.1)',
-  dangerBorder: 'rgba(220, 38, 38, 0.3)',
+  dangerDim: 'rgba(220, 38, 38, 0.08)',
+  dangerBorder: 'rgba(220, 38, 38, 0.25)',
 
   // License Plate (Authentic Metallic Finish remains gold yellow)
   plateYellow: '#facc15',
@@ -159,11 +159,11 @@ export const LightColors: ThemeColors = {
 
   // Glassmorphism & Borders
   borderGlass: 'rgba(0, 0, 0, 0.08)',
-  borderGlassBright: 'rgba(0, 0, 0, 0.15)',
+  borderGlassBright: 'rgba(0, 0, 0, 0.14)',
   surfaceOverlay: 'rgba(0, 0, 0, 0.03)',
-  surfaceFaint: 'rgba(0, 0, 0, 0.02)',
-  backdrop: 'rgba(15, 23, 42, 0.65)',
-  progressBg: 'rgba(0, 0, 0, 0.08)',
+  surfaceFaint: 'rgba(0, 0, 0, 0.015)',
+  backdrop: 'rgba(15, 23, 42, 0.6)',
+  progressBg: 'rgba(0, 0, 0, 0.06)',
 };
 
 // Default export is DarkColors to preserve existing dark design

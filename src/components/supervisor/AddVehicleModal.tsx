@@ -138,46 +138,64 @@ export const AddVehicleModal: React.FC = () => {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>REQUIRED WORKSHOP TASKS:</Text>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>REQUIRED WORKSHOP TASKS:</Text>
               <View style={styles.tasksRow}>
                 <TouchableOpacity
-                  style={[styles.taskChip, selectedTasks.includes('general_service') && styles.activeTaskChip]}
+                  style={[
+                    styles.taskChip,
+                    {
+                      backgroundColor: selectedTasks.includes('general_service') ? colors.primaryDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
+                      borderColor: selectedTasks.includes('general_service') ? colors.primary : colors.borderGlass,
+                    }
+                  ]}
                   onPress={() => toggleTask('general_service')}
                 >
                   {selectedTasks.includes('general_service') ? (
-                    <CheckSquare size={16} color="#0ea5e9" />
+                    <CheckSquare size={16} color={colors.primaryLight} />
                   ) : (
-                    <Square size={16} color="#64748b" />
+                    <Square size={16} color={colors.textMuted} />
                   )}
-                  <Text style={[styles.chipText, selectedTasks.includes('general_service') && styles.activeChipText]}>
+                  <Text style={[styles.chipText, { color: selectedTasks.includes('general_service') ? (isDark ? '#ffffff' : colors.primary) : colors.textSecondary }]}>
                     General Service
                   </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[styles.taskChip, selectedTasks.includes('wheel_alignment') && styles.activeTaskChip]}
+                  style={[
+                    styles.taskChip,
+                    {
+                      backgroundColor: selectedTasks.includes('wheel_alignment') ? colors.successDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
+                      borderColor: selectedTasks.includes('wheel_alignment') ? colors.success : colors.borderGlass,
+                    }
+                  ]}
                   onPress={() => toggleTask('wheel_alignment')}
                 >
                   {selectedTasks.includes('wheel_alignment') ? (
-                    <CheckSquare size={16} color="#10b981" />
+                    <CheckSquare size={16} color={colors.successLight} />
                   ) : (
-                    <Square size={16} color="#64748b" />
+                    <Square size={16} color={colors.textMuted} />
                   )}
-                  <Text style={[styles.chipText, selectedTasks.includes('wheel_alignment') && styles.activeChipText]}>
+                  <Text style={[styles.chipText, { color: selectedTasks.includes('wheel_alignment') ? (isDark ? '#ffffff' : colors.success) : colors.textSecondary }]}>
                     Wheel Alignment
                   </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[styles.taskChip, selectedTasks.includes('hoist_service') && styles.activeTaskChip]}
+                  style={[
+                    styles.taskChip,
+                    {
+                      backgroundColor: selectedTasks.includes('hoist_service') ? colors.warningDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
+                      borderColor: selectedTasks.includes('hoist_service') ? colors.warning : colors.borderGlass,
+                    }
+                  ]}
                   onPress={() => toggleTask('hoist_service')}
                 >
                   {selectedTasks.includes('hoist_service') ? (
-                    <CheckSquare size={16} color="#f59e0b" />
+                    <CheckSquare size={16} color={colors.warningLight} />
                   ) : (
-                    <Square size={16} color="#64748b" />
+                    <Square size={16} color={colors.textMuted} />
                   )}
-                  <Text style={[styles.chipText, selectedTasks.includes('hoist_service') && styles.activeChipText]}>
+                  <Text style={[styles.chipText, { color: selectedTasks.includes('hoist_service') ? (isDark ? '#ffffff' : colors.warning) : colors.textSecondary }]}>
                     Hoist Service
                   </Text>
                 </TouchableOpacity>
@@ -185,19 +203,25 @@ export const AddVehicleModal: React.FC = () => {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>TARGET DISPATCH STATION:</Text>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>TARGET DISPATCH STATION:</Text>
               <View style={styles.dispatchGrid}>
                 {/* 1. Workshop (Default 1st) */}
                 {selectedTasks.includes('general_service') && (
                   <TouchableOpacity
-                    style={[styles.dispatchBtn, targetZone === 'workshop' && styles.activeDispatch]}
+                    style={[
+                      styles.dispatchBtn,
+                      {
+                        backgroundColor: targetZone === 'workshop' ? colors.primaryDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
+                        borderColor: targetZone === 'workshop' ? colors.primary : colors.borderGlass,
+                      }
+                    ]}
                     onPress={() => {
                       setTargetZone('workshop');
                       setAssignedTech('Technician 1 (General Workshop)');
                     }}
                   >
-                    <Wrench size={16} color={targetZone === 'workshop' ? '#0ea5e9' : '#64748b'} />
-                    <Text style={[styles.dispatchText, targetZone === 'workshop' && styles.activeDispatchText]}>
+                    <Wrench size={16} color={targetZone === 'workshop' ? colors.primaryLight : colors.textMuted} />
+                    <Text style={[styles.dispatchText, { color: targetZone === 'workshop' ? colors.primaryLight : colors.textSecondary }]}>
                       TO Workshop
                     </Text>
                   </TouchableOpacity>
@@ -206,14 +230,20 @@ export const AddVehicleModal: React.FC = () => {
                 {/* 2. Alignment (2nd in sequence) */}
                 {selectedTasks.includes('wheel_alignment') && (
                   <TouchableOpacity
-                    style={[styles.dispatchBtn, targetZone === 'alignment' && styles.activeDispatchAl]}
+                    style={[
+                      styles.dispatchBtn,
+                      {
+                        backgroundColor: targetZone === 'alignment' ? colors.successDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
+                        borderColor: targetZone === 'alignment' ? colors.success : colors.borderGlass,
+                      }
+                    ]}
                     onPress={() => {
                       setTargetZone('alignment');
                       setAssignedTech('Technician 3 (Wheel Alignment)');
                     }}
                   >
-                    <Navigation size={16} color={targetZone === 'alignment' ? '#10b981' : '#64748b'} />
-                    <Text style={[styles.dispatchText, targetZone === 'alignment' && styles.activeDispatchTextAl]}>
+                    <Navigation size={16} color={targetZone === 'alignment' ? colors.successLight : colors.textMuted} />
+                    <Text style={[styles.dispatchText, { color: targetZone === 'alignment' ? colors.successLight : colors.textSecondary }]}>
                       TO Alignment
                     </Text>
                   </TouchableOpacity>
@@ -222,14 +252,20 @@ export const AddVehicleModal: React.FC = () => {
                 {/* 3. Hoist (Always Last in sequence) */}
                 {selectedTasks.includes('hoist_service') && (
                   <TouchableOpacity
-                    style={[styles.dispatchBtn, targetZone === 'hoist' && styles.activeDispatchHo]}
+                    style={[
+                      styles.dispatchBtn,
+                      {
+                        backgroundColor: targetZone === 'hoist' ? colors.warningDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
+                        borderColor: targetZone === 'hoist' ? colors.warning : colors.borderGlass,
+                      }
+                    ]}
                     onPress={() => {
                       setTargetZone('hoist');
                       setAssignedTech('Technician 2 (Hoist Bay)');
                     }}
                   >
-                    <Shield size={16} color={targetZone === 'hoist' ? '#f59e0b' : '#64748b'} />
-                    <Text style={[styles.dispatchText, targetZone === 'hoist' && styles.activeDispatchTextHo]}>
+                    <Shield size={16} color={targetZone === 'hoist' ? colors.warningLight : colors.textMuted} />
+                    <Text style={[styles.dispatchText, { color: targetZone === 'hoist' ? colors.warningLight : colors.textSecondary }]}>
                       TO Hoist
                     </Text>
                   </TouchableOpacity>

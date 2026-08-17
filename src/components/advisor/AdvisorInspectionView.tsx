@@ -62,18 +62,18 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
               <View style={styles.auditList}>
                 {vehicle.tasks.filter((t: VehicleTask) => t.is_required).map((t: VehicleTask) => (
                   <View key={t.id} style={[styles.taskAuditRow, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)', borderColor: colors.borderGlass }]}>
-                    <Text style={[styles.taskName, { color: colors.textPrimary }, !t.is_completed && styles.taskNameCancelled]}>
+                    <Text style={[styles.taskName, { color: colors.textPrimary }, !t.is_completed && { color: colors.textMuted, textDecorationLine: 'line-through' }]}>
                       {t.task_name}
                     </Text>
                     {t.is_completed ? (
-                      <View style={[styles.statusPill, styles.statusDoneBg]}>
-                        <CheckCircle2 size={12} color="#10b981" />
-                        <Text style={[styles.statusText, styles.statusDone]}>DONE</Text>
+                      <View style={[styles.statusPill, { backgroundColor: colors.successDim, borderColor: colors.successBorder, borderWidth: 1 }]}>
+                        <CheckCircle2 size={12} color={colors.success} />
+                        <Text style={[styles.statusText, { color: colors.success }]}>DONE</Text>
                       </View>
                     ) : (
-                      <View style={[styles.statusPill, styles.statusCancelledBg]}>
-                        <XCircle size={12} color="#ef4444" />
-                        <Text style={[styles.statusText, styles.statusCancelled]}>CANCELLED</Text>
+                      <View style={[styles.statusPill, { backgroundColor: colors.dangerDim, borderColor: colors.dangerBorder, borderWidth: 1 }]}>
+                        <XCircle size={12} color={colors.danger} />
+                        <Text style={[styles.statusText, { color: colors.danger }]}>CANCELLED</Text>
                       </View>
                     )}
                   </View>
@@ -83,7 +83,11 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
 
             {/* Finish & Deliver Action */}
             <TouchableOpacity
-              style={[styles.deliverBtn, !canFinishJob && { opacity: 0.4, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }]}
+              style={[
+                styles.deliverBtn,
+                { backgroundColor: colors.success },
+                !canFinishJob && { opacity: 0.4, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }
+              ]}
               onPress={() => {
                 if (canFinishJob) finishVehicleJobSheet(vehicle.id, 'Service Advisor');
               }}

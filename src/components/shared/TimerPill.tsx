@@ -1,6 +1,7 @@
 import React from "react";
 import { View, Text, StyleSheet, Platform } from "react-native";
 import { Clock } from "lucide-react-native";
+import { useTheme } from "../../context/ThemeContext";
 
 interface TimerPillProps {
   elapsedText: string;
@@ -13,22 +14,27 @@ export const TimerPill: React.FC<TimerPillProps> = ({
   variant = "cyan",
   size = "md",
 }) => {
+  const { colors } = useTheme();
   const isAmber = variant === "amber";
   const isSm = size === "sm";
+
+  const pillColor = isAmber ? colors.warningLight : colors.primaryLight;
+  const pillBg = isAmber ? colors.warningDim : colors.primaryBorder ? colors.primaryDim : 'rgba(14, 165, 233, 0.12)';
+  const pillBorder = isAmber ? colors.warningBorder : colors.primaryBorder;
 
   return (
     <View
       style={[
         styles.pillContainer,
-        isAmber ? styles.amberBg : styles.cyanBg,
+        { backgroundColor: pillBg, borderColor: pillBorder },
         isSm && styles.smPill,
       ]}
     >
-      <Clock size={isSm ? 11 : 13} color={isAmber ? "#fbbf24" : "#38bdf8"} />
+      <Clock size={isSm ? 11 : 13} color={pillColor} />
       <Text
         style={[
           styles.pillText,
-          isAmber ? styles.amberText : styles.cyanText,
+          { color: pillColor },
           isSm && styles.smText,
         ]}
       >
@@ -53,14 +59,6 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 10,
   },
-  cyanBg: {
-    backgroundColor: "rgba(14, 165, 233, 0.15)",
-    borderColor: "rgba(14, 165, 233, 0.3)",
-  },
-  amberBg: {
-    backgroundColor: "rgba(245, 158, 11, 0.15)",
-    borderColor: "rgba(245, 158, 11, 0.3)",
-  },
   pillText: {
     fontSize: 12,
     fontWeight: "700",
@@ -68,11 +66,5 @@ const styles = StyleSheet.create({
   },
   smText: {
     fontSize: 10,
-  },
-  cyanText: {
-    color: "#38bdf8",
-  },
-  amberText: {
-    color: "#fbbf24",
   },
 });

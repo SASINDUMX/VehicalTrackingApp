@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useVehicles } from "../context/VehicleContext";
 import { usePermissions } from "./usePermissions";
+import { useTheme } from "../context/ThemeContext";
 import { BayZone } from "../types/vehicle";
 import { Wrench, ShieldAlert, Navigation, CheckCircle } from "lucide-react-native";
 import { matchesVehicleSearch } from "../utils/searchUtils";
@@ -38,6 +39,7 @@ const computeVehicleTimersMap = (vehicleList: any[]) => {
 export const useFloorPlan = () => {
   const { vehicles, setSelectedVehicle, setIsAddModalOpen, isAddModalOpen, isLoading, searchQuery } = useVehicles();
   const { canAddVehicle } = usePermissions();
+  const { colors } = useTheme();
   const [elapsedTimes, setElapsedTimes] = useState<Record<string, string>>(() => computeVehicleTimersMap(vehicles));
 
   useEffect(() => {
@@ -51,10 +53,10 @@ export const useFloorPlan = () => {
   }, [vehicles]);
 
   const bays: BayItem[] = [
-    { id: "workshop", name: "General Workshop Bay", code: "BAY 01", icon: Wrench, color: "#06b6d4" },
-    { id: "alignment", name: "Wheel Alignment Bay", code: "BAY 02", icon: Navigation, color: "#10b981" },
-    { id: "hoist", name: "Hoist Service Bay", code: "BAY 03", icon: ShieldAlert, color: "#f59e0b" },
-    { id: "inspection", name: "Advisor Inspection Zone", code: "FINAL", icon: CheckCircle, color: "#a855f7" },
+    { id: "workshop", name: "General Workshop Bay", code: "BAY 01", icon: Wrench, color: colors.primary },
+    { id: "alignment", name: "Wheel Alignment Bay", code: "BAY 02", icon: Navigation, color: colors.success },
+    { id: "hoist", name: "Hoist Service Bay", code: "BAY 03", icon: ShieldAlert, color: colors.warning },
+    { id: "inspection", name: "Advisor Inspection Zone", code: "FINAL", icon: CheckCircle, color: colors.purple },
   ];
 
   const getVehiclesInZone = (zoneId: BayZone) => {

@@ -85,18 +85,18 @@ export const TechnicianStationView: React.FC = React.memo(() => {
                     {/* Task Progress Bar */}
                     <View style={styles.progressContainer}>
                       <View style={styles.progressLabelRow}>
-                        <Text style={styles.progressLabelText}>JOB SHEET PROGRESS</Text>
+                        <Text style={[styles.progressLabelText, { color: colors.textMuted }]}>JOB SHEET PROGRESS</Text>
                         <View style={styles.progressPercentGroup}>
-                          <Text style={styles.progressPercentText}>{completedCount}/{totalReq} Tasks ({percent}%)</Text>
+                          <Text style={[styles.progressPercentText, { color: colors.primaryLight }]}>{completedCount}/{totalReq} Tasks ({percent}%)</Text>
                           {isCurrentTaskDone && (
                             <View style={styles.tinyDoneIconGroup}>
-                              <CheckCircle2 size={12} color="#10b981" />
+                              <CheckCircle2 size={12} color={colors.success} />
                             </View>
                           )}
                         </View>
                       </View>
-                      <View style={styles.progressBarBg}>
-                        <View style={[styles.progressBarFill, { width: `${percent}%` }]} />
+                      <View style={[styles.progressBarBg, { backgroundColor: colors.progressBg }]}>
+                        <View style={[styles.progressBarFill, { width: `${percent}%`, backgroundColor: colors.primary }]} />
                       </View>
                     </View>
                   </TouchableOpacity>
@@ -216,49 +216,65 @@ export const TechnicianStationView: React.FC = React.memo(() => {
                           <View style={styles.dispatchBtnGroup}>
                             {canShowAlignmentBtn && (
                               <TouchableOpacity
-                                style={[styles.dispatchBtn, styles.dispatchBtnAlignment, !isCanDispatch && { opacity: 0.35, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }]}
+                                style={[
+                                  styles.dispatchBtn,
+                                  { backgroundColor: colors.successDim, borderColor: colors.successBorder },
+                                  !isCanDispatch && { opacity: 0.35, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }
+                                ]}
                                 onPress={() => {
                                   if (isCanDispatch) handleRequestTransfer(vehicle.id, vehicle.vehicle_no, 'alignment', 'Wheel Alignment Bay');
                                 }}
                                 activeOpacity={isCanDispatch ? 0.7 : 1}
                               >
-                                <Text style={styles.dispatchBtnText}>Alignment</Text>
+                                <Text style={[styles.dispatchBtnText, { color: colors.successLight }]}>Alignment</Text>
                               </TouchableOpacity>
                             )}
 
                             {canShowHoistBtn && (
                               <TouchableOpacity
-                                style={[styles.dispatchBtn, styles.dispatchBtnHoist, !isCanDispatch && { opacity: 0.35, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }]}
+                                style={[
+                                  styles.dispatchBtn,
+                                  { backgroundColor: colors.warningDim, borderColor: colors.warningBorder },
+                                  !isCanDispatch && { opacity: 0.35, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }
+                                ]}
                                 onPress={() => {
                                   if (isCanDispatch) handleRequestTransfer(vehicle.id, vehicle.vehicle_no, 'hoist', 'Hoist Service Bay');
                                 }}
                                 activeOpacity={isCanDispatch ? 0.7 : 1}
                               >
-                                <Text style={styles.dispatchBtnText}>Hoist</Text>
+                                <Text style={[styles.dispatchBtnText, { color: colors.warningLight }]}>Hoist</Text>
                               </TouchableOpacity>
                             )}
 
                             {canShowWorkshopBtn && (
                               <TouchableOpacity
-                                style={[styles.dispatchBtn, styles.dispatchBtnWorkshop, !isCanDispatch && { opacity: 0.35, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }]}
+                                style={[
+                                  styles.dispatchBtn,
+                                  { backgroundColor: colors.primaryDim, borderColor: colors.primaryBorder },
+                                  !isCanDispatch && { opacity: 0.35, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }
+                                ]}
                                 onPress={() => {
                                   if (isCanDispatch) handleRequestTransfer(vehicle.id, vehicle.vehicle_no, 'workshop', 'General Workshop Bay');
                                 }}
                                 activeOpacity={isCanDispatch ? 0.7 : 1}
                               >
-                                <Text style={styles.dispatchBtnText}>Workshop</Text>
+                                <Text style={[styles.dispatchBtnText, { color: colors.primaryLight }]}>Workshop</Text>
                               </TouchableOpacity>
                             )}
 
                             {canShowAdvisorBtn && (
                               <TouchableOpacity
-                                style={[styles.dispatchBtn, styles.dispatchBtnAdvisor, !isCanDispatch && { opacity: 0.35, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }]}
+                                style={[
+                                  styles.dispatchBtn,
+                                  { backgroundColor: colors.purpleDim, borderColor: colors.purpleBorder, marginLeft: 'auto' },
+                                  !isCanDispatch && { opacity: 0.35, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }
+                                ]}
                                 onPress={() => {
                                   if (isCanDispatch) handleRequestTransfer(vehicle.id, vehicle.vehicle_no, 'inspection', 'Advisor Inspection Zone');
                                 }}
                                 activeOpacity={isCanDispatch ? 0.7 : 1}
                               >
-                                <Text style={styles.dispatchBtnText}>Final Inspection →</Text>
+                                <Text style={[styles.dispatchBtnText, { color: colors.purpleLight }]}>Final Inspection →</Text>
                               </TouchableOpacity>
                             )}
                           </View>
@@ -273,9 +289,9 @@ export const TechnicianStationView: React.FC = React.memo(() => {
   return (
     <View style={styles.rootView}>
       {isLoading ? (
-        <View style={styles.emptyCard}>
-          <ActivityIndicator size="small" color="#06b6d4" />
-          <Text style={[styles.emptyTitle, { marginTop: 8 }]}>Syncing Workshop Telemetry...</Text>
+        <View style={[styles.emptyCard, { backgroundColor: colors.surface, borderColor: colors.borderGlass }]}>
+          <ActivityIndicator size="small" color={colors.primary} />
+          <Text style={[styles.emptyTitle, { color: colors.textPrimary, marginTop: 8 }]}>Syncing Workshop Telemetry...</Text>
         </View>
       ) : bayVehicles.length === 0 ? (
         <EmptyStateCard
@@ -300,29 +316,29 @@ export const TechnicianStationView: React.FC = React.memo(() => {
       {pendingTransfer && (
         <View style={styles.confirmOverlay}>
           <TouchableOpacity
-            style={styles.confirmBackdrop}
+            style={[styles.confirmBackdrop, { backgroundColor: colors.backdrop }]}
             activeOpacity={1}
             onPress={() => setPendingTransfer(null)}
           />
-          <View style={styles.confirmCard}>
+          <View style={[styles.confirmCard, { backgroundColor: colors.surface, borderColor: colors.borderGlassBright }]}>
             <View style={styles.confirmHeader}>
-              <AlertTriangle size={24} color="#f59e0b" />
-              <Text style={styles.confirmTitle}>Confirm Station Dispatch</Text>
+              <AlertTriangle size={24} color={colors.warning} />
+              <Text style={[styles.confirmTitle, { color: colors.textPrimary }]}>Confirm Station Dispatch</Text>
             </View>
-            <Text style={styles.confirmBodyText}>
-              Are you sure you want to dispatch vehicle <Text style={styles.confirmBoldPlate}>{pendingTransfer.vehicleNo}</Text> to <Text style={styles.confirmBoldZone}>{pendingTransfer.targetZoneName}</Text>?
+            <Text style={[styles.confirmBodyText, { color: colors.textSecondary }]}>
+              Are you sure you want to dispatch vehicle <Text style={styles.confirmBoldPlate}>{pendingTransfer.vehicleNo}</Text> to <Text style={[styles.confirmBoldZone, { color: colors.primaryLight }]}>{pendingTransfer.targetZoneName}</Text>?
             </Text>
 
             <View style={styles.confirmBtnRow}>
               <TouchableOpacity
-                style={styles.cancelBtn}
+                style={[styles.cancelBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)', borderColor: colors.borderGlass }]}
                 onPress={() => setPendingTransfer(null)}
               >
-                <Text style={styles.cancelBtnText}>Cancel</Text>
+                <Text style={[styles.cancelBtnText, { color: colors.textSecondary }]}>Cancel</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.confirmDispatchBtn}
+                style={[styles.confirmDispatchBtn, { backgroundColor: colors.primary }]}
                 onPress={handleConfirmTransfer}
               >
                 <Text style={styles.confirmDispatchBtnText}>Confirm Dispatch ✓</Text>
