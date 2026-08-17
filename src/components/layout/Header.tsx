@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { chimeService } from '../../lib/chime';
 import { hapticService } from '../../lib/haptics';
-import { Car, Plus, LogOut, User, Volume2, VolumeX, ChevronDown, Shield, Smartphone, Sun, Moon } from 'lucide-react-native';
+import { Car, Plus, LogOut, User, Volume2, VolumeX, ChevronDown, Shield, Smartphone, Sun, Moon, Monitor } from 'lucide-react-native';
 import { useTheme } from '../../context/ThemeContext';
 
 import { getCurrentActiveBreak } from '../../utils/workshopHoursUtils';
@@ -22,7 +22,7 @@ export const Header: React.FC = () => {
   const { setIsAddModalOpen, isRealtimeConnected } = useVehicles();
   const { signOut, user } = useAuth();
   const { canAddVehicle, displayName, currentRole } = usePermissions();
-  const { themeMode, isDark, colors, toggleTheme } = useTheme();
+  const { themeMode, isDark, colors, setThemeMode } = useTheme();
   const [timeStr, setTimeStr] = useState<string>('');
   const [activeBreak, setActiveBreak] = useState<{ name: string; endStr: string } | null>(null);
   const [isAudioMuted, setIsAudioMuted] = useState<boolean>(chimeService.getMuted());
@@ -179,20 +179,60 @@ export const Header: React.FC = () => {
 
             <View style={[styles.dropdownDivider, { backgroundColor: colors.borderGlass }]} />
 
-            {/* Theme Toggle Option */}
-            <TouchableOpacity style={styles.dropdownItem} onPress={toggleTheme}>
-              {isDark ? (
-                <>
-                  <Moon size={16} color="#c084fc" />
-                  <Text style={[styles.dropdownItemText, { color: '#c084fc' }]}>Theme: Carbon Dark</Text>
-                </>
-              ) : (
-                <>
-                  <Sun size={16} color="#d97706" />
-                  <Text style={[styles.dropdownItemText, { color: '#d97706' }]}>Theme: Executive Light</Text>
-                </>
-              )}
-            </TouchableOpacity>
+            {/* Theme Selection Row with Dark / Light / Auto (System Default) */}
+            <View style={styles.dropdownThemeRow}>
+              <View style={styles.dropdownThemeLeft}>
+                {themeMode === 'system' ? (
+                  <Monitor size={15} color={colors.primaryLight} />
+                ) : isDark ? (
+                  <Moon size={15} color="#c084fc" />
+                ) : (
+                  <Sun size={15} color="#d97706" />
+                )}
+                <Text style={[styles.dropdownItemText, { color: colors.textPrimary }]}>Theme</Text>
+              </View>
+
+              <View style={[styles.themePillsContainer, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)', borderColor: colors.borderGlass }]}>
+                {/* Dark Button */}
+                <TouchableOpacity
+                  style={[
+                    styles.themePillBtn,
+                    themeMode === 'dark' && { backgroundColor: colors.primaryDim, borderColor: colors.primary }
+                  ]}
+                  onPress={() => setThemeMode('dark')}
+                  activeOpacity={0.7}
+                >
+                  <Moon size={11} color={themeMode === 'dark' ? colors.primaryLight : colors.textMuted} />
+                  <Text style={[styles.themePillText, { color: themeMode === 'dark' ? colors.primaryLight : colors.textMuted, fontWeight: themeMode === 'dark' ? '800' : '600' }]}>Dark</Text>
+                </TouchableOpacity>
+
+                {/* Light Button */}
+                <TouchableOpacity
+                  style={[
+                    styles.themePillBtn,
+                    themeMode === 'light' && { backgroundColor: colors.primaryDim, borderColor: colors.primary }
+                  ]}
+                  onPress={() => setThemeMode('light')}
+                  activeOpacity={0.7}
+                >
+                  <Sun size={11} color={themeMode === 'light' ? colors.primaryLight : colors.textMuted} />
+                  <Text style={[styles.themePillText, { color: themeMode === 'light' ? colors.primaryLight : colors.textMuted, fontWeight: themeMode === 'light' ? '800' : '600' }]}>Light</Text>
+                </TouchableOpacity>
+
+                {/* Auto (System Default) Button */}
+                <TouchableOpacity
+                  style={[
+                    styles.themePillBtn,
+                    themeMode === 'system' && { backgroundColor: colors.primaryDim, borderColor: colors.primary }
+                  ]}
+                  onPress={() => setThemeMode('system')}
+                  activeOpacity={0.7}
+                >
+                  <Monitor size={11} color={themeMode === 'system' ? colors.primaryLight : colors.textMuted} />
+                  <Text style={[styles.themePillText, { color: themeMode === 'system' ? colors.primaryLight : colors.textMuted, fontWeight: themeMode === 'system' ? '800' : '600' }]}>Auto</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
 
             {/* Sound & Chime Toggle Option */}
             <TouchableOpacity style={styles.dropdownItem} onPress={toggleAudio}>
@@ -440,6 +480,42 @@ const styles = StyleSheet.create({
   dropdownItemText: {
     color: '#cbd5e1',
     fontSize: 13,
+    fontWeight: '600',
+  },
+  dropdownThemeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+  },
+  dropdownThemeLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  themePillsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    padding: 2,
+    gap: 2,
+  },
+  themePillBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  themePillText: {
+    fontSize: 11,
     fontWeight: '600',
   },
   dropdownSignOutItem: {

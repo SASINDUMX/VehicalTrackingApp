@@ -1,11 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Platform } from 'react-native';
+import { Platform, useColorScheme } from 'react-native';
 import { ThemeColors, DarkColors, LightColors } from '../constants/theme';
 
-export type ThemeMode = 'dark' | 'light';
+export type ThemeMode = 'system' | 'dark' | 'light';
 
 interface ThemeContextType {
   themeMode: ThemeMode;
+  resolvedTheme: 'dark' | 'light';
   isDark: boolean;
   colors: ThemeColors;
   toggleTheme: () => void;
@@ -15,12 +16,13 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [themeMode, setThemeModeState] = useState<ThemeMode>('dark');
+  const systemColorScheme = useColorScheme();
+  const [themeMode, setThemeModeState] = useState<ThemeMode>('system');
 
   useEffect(() => {
     if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
       const saved = localStorage.getItem('um_theme_mode') as ThemeMode;
-      if (saved === 'light' || saved === 'dark') {
+      if (saved === 'light' || saved === 'dark' || saved === 'system') {
         setThemeModeState(saved);
       }
     }
@@ -30,22 +32,35 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setThemeModeState(mode);
     if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
       localStorage.setItem('um_theme_mode', mode);
-      document.documentElement.setAttribute('data-theme', mode);
+      const effectiveScheme = mode === 'system' ? (systemColorScheme === 'light' ? 'light' : 'dark') : mode;
+      document.documentElement.setAttribute('data-theme', effectiveScheme);
     }
   };
 
   const toggleTheme = () => {
-    const nextMode: ThemeMode = themeMode === 'dark' ? 'light' : 'dark';
-    setThemeMode(nextMode);
+    if (themeMode === 'system') {
+      setThemeMode('light');
+    } else if (themeMode === 'light') {
+      setThemeMode('dark');
+    } else {
+      setThemeMode('system');
+    }
   };
 
-  const colors = themeMode === 'light' ? LightColors : DarkColors;
-  const isDark = themeMode === 'dark';
+  // Determine effective theme
+  const resolvedTheme: 'dark' | 'light' =
+    themeMode === 'system'
+      ? (systemColorScheme === 'light' ? 'light' : 'dark')
+      : themeMode;
+
+  const colors = resolvedTheme === 'light' ? LightColors : DarkColors;
+  const isDark = resolvedTheme === 'dark';
 
   return (
     <ThemeContext.Provider
       value={{
         themeMode,
+        resolvedTheme,
         isDark,
         colors,
         toggleTheme,
