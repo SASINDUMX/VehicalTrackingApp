@@ -34,6 +34,7 @@ export const getRoleBay = (role: UserRole): BayZone => {
     case 'tech_workshop': return 'workshop';
     case 'tech_hoist': return 'hoist';
     case 'tech_alignment': return 'alignment';
+    case 'advisor': return 'inspection';
     default: return 'workshop';
   }
 };

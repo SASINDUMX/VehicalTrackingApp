@@ -3,6 +3,8 @@ import { Platform, Alert } from 'react-native';
 import { Vehicle, UserRole, BayZone, TaskType, VehicleTask, StageLog } from '../types/vehicle';
 import { supabase, isSupabaseConnected, safeStorage } from '../lib/supabase';
 import { chimeService } from '../lib/chime';
+import { hapticService } from '../lib/haptics';
+import { getRoleBay } from '../constants/bays';
 
 interface VehicleContextType {
   vehicles: Vehicle[];
@@ -59,6 +61,10 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
   });
 
   const [currentRole, setCurrentRole] = useState<UserRole>('supervisor');
+  const currentRoleRef = useRef<UserRole>(currentRole);
+  useEffect(() => {
+    currentRoleRef.current = currentRole;
+  }, [currentRole]);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
   const [isConfigModalOpen, setIsConfigModalOpen] = useState<boolean>(false);
@@ -190,17 +196,30 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'vehicles' }, (payload) => {
           if (payload.new && isMountedRef.current) {
             const updated = payload.new as Record<string, unknown>;
-            setVehicles(prev => prev.map(v => {
-              if (v.id !== updated.id) return v;
-              return {
-                ...v,
-                current_zone: updated.current_zone as BayZone,
-                assigned_tech: (updated.assigned_tech as string) || v.assigned_tech,
-                remarks: (updated.remarks as string) ?? v.remarks,
-                is_finished: updated.is_finished as boolean,
-                completed_at: updated.completed_at as string | null,
-              };
-            }));
+            setVehicles(prev => {
+              const prevV = prev.find(v => v.id === updated.id);
+              const prevZone = prevV?.current_zone;
+              const nextZone = updated.current_zone as BayZone;
+              const userBay = getRoleBay(currentRoleRef.current);
+
+              // Play arrival chime & vibration if vehicle was transferred to current user's active bay
+              if (prevZone && prevZone !== nextZone && nextZone === userBay) {
+                try { chimeService.playArrivalChime(); } catch { /* ignore audio error */ }
+                try { hapticService.triggerArrivalHaptic(); } catch { /* ignore haptic error */ }
+              }
+
+              return prev.map(v => {
+                if (v.id !== updated.id) return v;
+                return {
+                  ...v,
+                  current_zone: nextZone,
+                  assigned_tech: (updated.assigned_tech as string) || v.assigned_tech,
+                  remarks: (updated.remarks as string) ?? v.remarks,
+                  is_finished: updated.is_finished as boolean,
+                  completed_at: updated.completed_at as string | null,
+                };
+              });
+            });
           }
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'vehicle_tasks' }, () => {
@@ -407,6 +426,7 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   // 2. TOGGLE TASK COMPLETION (Optimistic + RPC + Rollback)
   const toggleTaskCompletion = useCallback(async (vehicleId: string, taskId: string, completedBy: string) => {
+    try { hapticService.triggerLightHaptic(); } catch { /* ignore haptic error */ }
     const now = new Date().toISOString();
     const prevVehicles = vehicles;
 
@@ -467,6 +487,7 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
   // 3. TRANSFER VEHICLE ZONE (Optimistic + RPC + Fallback + Rollback)
   const transferVehicleZone = useCallback(async (vehicleId: string, toZone: BayZone, movedBy: string) => {
     try { chimeService.playChime(); } catch { /* ignore audio error */ }
+    try { hapticService.triggerArrivalHaptic(); } catch { /* ignore haptic error */ }
     const now = new Date().toISOString();
     const prevVehicles = vehicles;
 
@@ -557,6 +578,7 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   // 4. FINISH VEHICLE JOB SHEET (Service Advisor — RPC + Fallback)
   const finishVehicleJobSheet = useCallback(async (vehicleId: string, advisorName: string) => {
+    try { hapticService.triggerSuccessHaptic(); } catch { /* ignore haptic error */ }
     const now = new Date().toISOString();
     const prevVehicles = vehicles;
     const client = supabase;
