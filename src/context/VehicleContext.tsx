@@ -173,12 +173,21 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'vehicles' }, (payload) => {
           if (payload.new && isMountedRef.current) {
             const newV = payload.new as Record<string, unknown>;
+            const targetZone = newV.current_zone as BayZone;
+            const userBay = getRoleBay(currentRoleRef.current);
+
+            // Play arrival chime & vibration if new vehicle was dispatched directly to current user's bay
+            if (targetZone === userBay) {
+              try { chimeService.playArrivalChime(); } catch { /* ignore audio error */ }
+              try { hapticService.triggerArrivalHaptic(); } catch { /* ignore haptic error */ }
+            }
+
             setVehicles(prev => {
               if (prev.some(v => v.id === newV.id)) return prev;
               const vehicle: Vehicle = {
                 id: newV.id as string,
                 vehicle_no: newV.vehicle_no as string,
-                current_zone: newV.current_zone as BayZone,
+                current_zone: targetZone,
                 assigned_tech: (newV.assigned_tech as string) || 'Unassigned',
                 remarks: (newV.remarks as string) || '',
                 intake_at: newV.intake_at as string,
