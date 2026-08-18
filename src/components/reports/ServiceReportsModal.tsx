@@ -300,24 +300,24 @@ export const ServiceReportsModal: React.FC = () => {
           </View>
 
           <View style={styles.footerActionGroup}>
-            {/* Download Excel (.csv) */}
+            {/* Download Excel */}
             <TouchableOpacity
               style={[styles.exportBtn, { backgroundColor: colors.success }]}
               onPress={() => exportServiceLogsToCSV(filteredVehicles, activeDateLabel)}
               activeOpacity={0.8}
             >
-              <Download size={16} color="#ffffff" />
-              <Text style={styles.exportBtnText}>Download Excel (.csv)</Text>
+              <Download size={15} color="#ffffff" />
+              <Text style={styles.exportBtnText}>Download Excel</Text>
             </TouchableOpacity>
 
-            {/* Print / Export PDF */}
+            {/* Export PDF */}
             <TouchableOpacity
               style={[styles.exportBtn, { backgroundColor: colors.primary }]}
               onPress={() => exportServiceLogsToPDF(filteredVehicles, kpis, activeDateLabel)}
               activeOpacity={0.8}
             >
-              <Printer size={16} color="#ffffff" />
-              <Text style={styles.exportBtnText}>Print / Export PDF</Text>
+              <Printer size={15} color="#ffffff" />
+              <Text style={styles.exportBtnText}>Export PDF</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -546,11 +546,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderTopWidth: 1,
     flexWrap: 'wrap',
-    gap: 10,
+    gap: 8,
   },
   footerLeft: {
     flexDirection: 'row',
@@ -563,19 +563,20 @@ const styles = StyleSheet.create({
   footerActionGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    flexWrap: 'wrap',
+    gap: 8,
   },
   exportBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderRadius: 8,
   },
   exportBtnText: {
     color: '#ffffff',
-    fontSize: 13,
-    fontWeight: '800',
+    fontSize: 12,
+    fontWeight: '700',
   },
 });
