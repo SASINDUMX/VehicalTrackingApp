@@ -10,6 +10,7 @@ import { TechnicianStationView } from './src/components/technician/TechnicianSta
 import { AdvisorInspectionView } from './src/components/advisor/AdvisorInspectionView';
 import { AddVehicleModal } from './src/components/supervisor/AddVehicleModal';
 import { VehicleDetailsModal } from './src/components/shared/VehicleDetailsModal';
+import { ServiceReportsModal } from './src/components/reports/ServiceReportsModal';
 import { UserRole } from './src/types/vehicle';
 
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
@@ -141,6 +142,7 @@ const AppContent: React.FC = () => {
         </View>
         <AddVehicleModal />
         <VehicleDetailsModal />
+        <ServiceReportsModal />
       </View>
     </SafeAreaView>
   );

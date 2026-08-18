@@ -16,6 +16,8 @@ interface VehicleContextType {
   setIsAddModalOpen: (open: boolean) => void;
   isConfigModalOpen: boolean;
   setIsConfigModalOpen: (open: boolean) => void;
+  isReportsModalOpen: boolean;
+  setIsReportsModalOpen: (open: boolean) => void;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   addVehicle: (vehicleNo: string, tasks: TaskType[], targetZone: BayZone, assignedTech: string, remarks: string) => Promise<void>;
@@ -68,6 +70,7 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
   const [isConfigModalOpen, setIsConfigModalOpen] = useState<boolean>(false);
+  const [isReportsModalOpen, setIsReportsModalOpen] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(() => {
     if (isSupabaseConnected) {
@@ -647,6 +650,8 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
       setIsAddModalOpen,
       isConfigModalOpen,
       setIsConfigModalOpen,
+      isReportsModalOpen,
+      setIsReportsModalOpen,
       searchQuery,
       setSearchQuery,
       addVehicle,
@@ -664,6 +669,7 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
       selectedVehicle,
       isAddModalOpen,
       isConfigModalOpen,
+      isReportsModalOpen,
       searchQuery,
       addVehicle,
       updateVehicleJobOrder,
