@@ -90,9 +90,9 @@ export const ServiceReportsModal: React.FC = () => {
             <View style={[styles.headerIconWrapper, { backgroundColor: colors.primaryDim, borderColor: colors.primaryBorder }]}>
               <FileText size={20} color={colors.primaryLight} />
             </View>
-            <View>
+            <View style={styles.headerTextContainer}>
               <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Service Logs & Telemetry Reports</Text>
-              <Text style={[styles.headerSub, { color: colors.textMuted }]}>
+              <Text style={[styles.headerSub, { color: colors.textMuted }]} numberOfLines={2}>
                 Export turnaround times (TAT), bay stage durations, and technician audit trails
               </Text>
             </View>
@@ -365,11 +365,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
+    gap: 12,
   },
   headerTitleGroup: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    minWidth: 0,
   },
   headerIconWrapper: {
     width: 40,
@@ -378,6 +381,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
+  },
+  headerTextContainer: {
+    flex: 1,
+    minWidth: 0,
   },
   headerTitle: {
     fontSize: 17,
