@@ -1,6 +1,6 @@
-# 🚗 United Motors Vehicle Tracking System
+# 🚗 Vehicle Tracking System
 
-A full-stack, real-time automotive workshop vehicle tracking and station management application built for **United Motors Lanka PLC**. Built with React Native & Expo for web, mobile, and Progressive Web App (PWA) standalone deployment.
+A full-stack, real-time automotive workshop vehicle tracking and station management application Built with React Native & Expo for web, mobile, and Progressive Web App (PWA) standalone deployment.
 
 ---
 
