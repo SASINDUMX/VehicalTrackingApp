@@ -32,6 +32,7 @@ import {
   exportServiceLogsToPDF,
   formatDuration,
   getStageSecondsForZone,
+  getVehicleTotalPausedSeconds,
 } from '../../utils/reportExportUtils';
 import { getNetWorkingSeconds } from '../../utils/workshopHoursUtils';
 import { LicensePlate } from '../shared/LicensePlate';
@@ -236,7 +237,9 @@ export const ServiceReportsModal: React.FC = () => {
                     const start = new Date(v.intake_at || v.created_at);
                     const end = v.completed_at ? new Date(v.completed_at) : new Date();
                     const grossSec = Math.max(0, Math.floor((end.getTime() - start.getTime()) / 1000));
-                    const netSec = getNetWorkingSeconds(start, end);
+                    const totalPausedSec = getVehicleTotalPausedSeconds(v);
+                    const rawNetSec = getNetWorkingSeconds(start, end);
+                    const netSec = Math.max(0, rawNetSec - totalPausedSec);
 
                     const workshopSec = getStageSecondsForZone(v, 'workshop');
                     const alignmentSec = getStageSecondsForZone(v, 'alignment');

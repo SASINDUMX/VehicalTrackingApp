@@ -56,6 +56,24 @@ export const filterVehiclesForReport = (
   });
 };
 
+export const getVehicleTotalPausedSeconds = (v: Vehicle): number => {
+  let total = 0;
+  v.stage_logs.forEach(l => {
+    if (l.paused_seconds && l.paused_seconds > 0) {
+      total += l.paused_seconds;
+    }
+  });
+
+  if (v.is_paused && v.paused_at) {
+    const pausedAtMs = new Date(v.paused_at).getTime();
+    if (!isNaN(pausedAtMs)) {
+      total += Math.max(0, Math.floor((Date.now() - pausedAtMs) / 1000));
+    }
+  }
+
+  return total;
+};
+
 export const calculateReportKPIs = (filteredVehicles: Vehicle[]): ReportKPIs => {
   if (filteredVehicles.length === 0) {
     return {
@@ -79,7 +97,9 @@ export const calculateReportKPIs = (filteredVehicles: Vehicle[]): ReportKPIs => 
     const start = new Date(v.intake_at || v.created_at);
     const end = v.completed_at ? new Date(v.completed_at) : new Date();
     const gross = Math.max(0, Math.floor((end.getTime() - start.getTime()) / 1000));
-    const net = getNetWorkingSeconds(start, end);
+    const totalPausedSec = getVehicleTotalPausedSeconds(v);
+    const rawNet = getNetWorkingSeconds(start, end);
+    const net = Math.max(0, rawNet - totalPausedSec);
     const { breakSeconds } = getBreakOverlap(start, end);
 
     totalGross += gross;
@@ -133,6 +153,7 @@ export const exportServiceLogsToCSV = (
     'Gross TAT (Total Time)',
     'Net Active Work Time',
     'Deducted Break Time',
+    'Deducted Pause Time',
     'General Workshop (Bay 01)',
     'Wheel Alignment (Bay 03)',
     'Hoist Service (Bay 02)',
@@ -164,7 +185,9 @@ export const exportServiceLogsToCSV = (
     const start = new Date(v.intake_at || v.created_at);
     const end = v.completed_at ? new Date(v.completed_at) : new Date();
     const grossSec = Math.max(0, Math.floor((end.getTime() - start.getTime()) / 1000));
-    const netSec = getNetWorkingSeconds(start, end);
+    const totalPausedSec = getVehicleTotalPausedSeconds(v);
+    const rawNetSec = getNetWorkingSeconds(start, end);
+    const netSec = Math.max(0, rawNetSec - totalPausedSec);
     const { breakSeconds } = getBreakOverlap(start, end);
 
     const workshopSec = getStageSecondsForZone(v, 'workshop');
@@ -186,6 +209,7 @@ export const exportServiceLogsToCSV = (
       escapeCSV(formatDuration(grossSec)),
       escapeCSV(formatDuration(netSec)),
       escapeCSV(formatDuration(breakSeconds)),
+      escapeCSV(formatDuration(totalPausedSec)),
       escapeCSV(formatDuration(workshopSec)),
       escapeCSV(formatDuration(alignmentSec)),
       escapeCSV(formatDuration(hoistSec)),
@@ -204,9 +228,8 @@ export const exportServiceLogsToCSV = (
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    const filename = `UnitedMotors_Service_Report_${new Date().toISOString().slice(0, 10)}.csv`;
     link.setAttribute('href', url);
-    link.setAttribute('download', filename);
+    link.setAttribute('download', `UnitedMotors_ServiceLogs_${datePresetLabel.replace(/\s+/g, '_')}_${Date.now()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -215,7 +238,7 @@ export const exportServiceLogsToCSV = (
 };
 
 /**
- * Triggers a printable corporate PDF document with executive styling.
+ * Generates an executive PDF report with KPIs, detailed stage breakdown, and print styles.
  */
 export const exportServiceLogsToPDF = (
   vehicles: Vehicle[],
@@ -228,7 +251,9 @@ export const exportServiceLogsToPDF = (
     const start = new Date(v.intake_at || v.created_at);
     const end = v.completed_at ? new Date(v.completed_at) : new Date();
     const grossSec = Math.max(0, Math.floor((end.getTime() - start.getTime()) / 1000));
-    const netSec = getNetWorkingSeconds(start, end);
+    const totalPausedSec = getVehicleTotalPausedSeconds(v);
+    const rawNetSec = getNetWorkingSeconds(start, end);
+    const netSec = Math.max(0, rawNetSec - totalPausedSec);
     const { breakSeconds } = getBreakOverlap(start, end);
 
     const workshopSec = getStageSecondsForZone(v, 'workshop');
@@ -260,6 +285,9 @@ export const exportServiceLogsToPDF = (
         </td>
         <td style="padding: 8px 10px; font-size: 11px; color: #d97706; border-bottom: 1px solid #e2e8f0;">
           ${formatDuration(breakSeconds)}
+        </td>
+        <td style="padding: 8px 10px; font-size: 11px; color: #ea580c; border-bottom: 1px solid #e2e8f0;">
+          ${formatDuration(totalPausedSec)}
         </td>
         <td style="padding: 8px 10px; font-size: 11px; color: #475569; border-bottom: 1px solid #e2e8f0;">
           ${formatDuration(workshopSec)}
@@ -350,6 +378,7 @@ export const exportServiceLogsToPDF = (
               <th>Gross TAT</th>
               <th>Net Active</th>
               <th>Breaks</th>
+              <th>Paused</th>
               <th>Bay 01 (Gen)</th>
               <th>Bay 03 (Align)</th>
               <th>Bay 02 (Hoist)</th>
