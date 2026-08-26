@@ -4,9 +4,8 @@ import { usePermissions } from "./usePermissions";
 import { getRoleBay, getTechName } from "../constants/bays";
 import { BayZone, TaskType } from "../types/vehicle";
 import { matchesVehicleSearch } from "../utils/searchUtils";
-import { getTaskTypeForBay } from "../utils/vehicleUtils";
-
-import { getNetWorkingSeconds, getCurrentActiveBreak } from "../utils/workshopHoursUtils";
+import { getTaskTypeForBay, getActiveStageNetSeconds } from "../utils/vehicleUtils";
+import { getCurrentActiveBreak } from "../utils/workshopHoursUtils";
 
 export interface PendingTransfer {
   vehicleId: string;
@@ -22,14 +21,27 @@ const computeVehicleTimersMap = (vehicleList: any[]) => {
 
   vehicleList.forEach((v) => {
     const lastLog = v.stage_logs[v.stage_logs.length - 1];
+    const isPaused = Boolean(v.is_paused || (lastLog && lastLog.is_paused));
+    const pausedAt = v.paused_at || (lastLog && lastLog.paused_at);
+    const pausedSeconds = v.paused_seconds || (lastLog && lastLog.paused_seconds) || 0;
+
     if (lastLog && !lastLog.exited_at) {
-      const netSec = getNetWorkingSeconds(lastLog.entered_at, now);
+      const netSec = getActiveStageNetSeconds(
+        lastLog.entered_at,
+        null,
+        isPaused,
+        pausedAt,
+        pausedSeconds
+      );
       const hours = Math.floor(netSec / 3600);
       const mins = Math.floor((netSec % 3600) / 60);
       const secs = netSec % 60;
       const padSec = secs < 10 ? `0${secs}` : `${secs}`;
       const timeStr = hours > 0 ? `${hours}h ${mins}m ${padSec}s` : `${mins}m ${padSec}s`;
-      if (activeBreak) {
+
+      if (isPaused) {
+        updated[v.id] = timeStr;
+      } else if (activeBreak) {
         updated[v.id] = `⏸ ${timeStr} (${activeBreak.name})`;
       } else {
         updated[v.id] = timeStr;
@@ -43,8 +55,8 @@ const computeVehicleTimersMap = (vehicleList: any[]) => {
 };
 
 export const useTechnicianStation = () => {
-  const { vehicles, currentRole, toggleTaskCompletion, transferVehicleZone, isLoading, searchQuery, setSelectedVehicle } = useVehicles();
-  const { canMarkTaskDone, canTransferVehicle } = usePermissions();
+  const { vehicles, currentRole, toggleTaskCompletion, transferVehicleZone, toggleStageTimer, isLoading, searchQuery, setSelectedVehicle } = useVehicles();
+  const { canMarkTaskDone, canTransferVehicle, canControlTimer } = usePermissions();
 
   const activeBay = getRoleBay(currentRole);
   const techName = getTechName(currentRole);
@@ -109,8 +121,10 @@ export const useTechnicianStation = () => {
     currentRole,
     canMarkTaskDone,
     canTransferVehicle,
+    canControlTimer,
     toggleExpand,
     toggleTaskCompletion,
+    toggleStageTimer,
     setSelectedVehicle,
     setPendingTransfer,
     handleRequestTransfer,

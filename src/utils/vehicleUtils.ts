@@ -66,20 +66,43 @@ export interface StageBreakdownResult {
   netSec: number;
   grossSec: number;
   breakSec: number;
+  pausedSec: number;
+  isPaused: boolean;
   netStr: string;
   grossStr: string;
   breakNote: string | null;
 }
 
+export const getActiveStageNetSeconds = (
+  enteredAt?: string | null,
+  exitedAt?: string | null,
+  isPaused: boolean = false,
+  pausedAt?: string | null,
+  pausedSeconds: number = 0
+): number => {
+  if (!enteredAt) return 0;
+  const start = new Date(enteredAt);
+  const end = isPaused && pausedAt ? new Date(pausedAt) : (exitedAt ? new Date(exitedAt) : new Date());
+  if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) return 0;
+
+  const baseNet = getNetWorkingSeconds(start, end);
+  return Math.max(0, baseNet - (pausedSeconds || 0));
+};
+
 export const getStageDurationBreakdown = (
   enteredAt?: string | null,
-  exitedAt?: string | null
+  exitedAt?: string | null,
+  isPaused: boolean = false,
+  pausedAt?: string | null,
+  pausedSeconds: number = 0
 ): StageBreakdownResult => {
   if (!enteredAt) {
     return {
       netSec: 0,
       grossSec: 0,
       breakSec: 0,
+      pausedSec: 0,
+      isPaused: false,
       netStr: '0m',
       grossStr: '0m',
       breakNote: null,
@@ -87,35 +110,45 @@ export const getStageDurationBreakdown = (
   }
 
   const start = new Date(enteredAt);
-  const end = exitedAt ? new Date(exitedAt) : new Date();
+  const end = isPaused && pausedAt ? new Date(pausedAt) : (exitedAt ? new Date(exitedAt) : new Date());
 
   if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) {
     return {
       netSec: 0,
       grossSec: 0,
       breakSec: 0,
+      pausedSec: 0,
+      isPaused,
       netStr: '0m',
       grossStr: '0m',
-      breakNote: null,
+      breakNote: isPaused ? '⏸ Timer Paused' : null,
     };
   }
 
   const grossSec = Math.floor((end.getTime() - start.getTime()) / 1000);
   const { breakSeconds, breakNames } = getBreakOverlap(start, end);
-  const netSec = Math.max(0, grossSec - breakSeconds);
+  const totalPaused = pausedSeconds || 0;
+  const netSec = Math.max(0, grossSec - breakSeconds - totalPaused);
 
   const breakMins = Math.round(breakSeconds / 60);
+  const pausedMins = Math.round(totalPaused / 60);
   let breakNote: string | null = null;
 
-  if (breakMins > 0 && breakNames.length > 0) {
+  if (isPaused) {
+    breakNote = `⏸ PAUSED · Active Work: ${formatDurationString(netSec, false)}`;
+  } else if (breakMins > 0 && breakNames.length > 0) {
     const breakNamesStr = breakNames.join(', ');
     breakNote = `Gross: ${formatDurationString(grossSec, false)} · ${breakMins}m ${breakNamesStr} deducted`;
+  } else if (pausedMins > 0) {
+    breakNote = `Gross: ${formatDurationString(grossSec, false)} · ${pausedMins}m paused time deducted`;
   }
 
   return {
     netSec,
     grossSec,
     breakSec: breakSeconds,
+    pausedSec: totalPaused,
+    isPaused,
     netStr: formatDurationString(netSec, true),
     grossStr: formatDurationString(grossSec, false),
     breakNote,

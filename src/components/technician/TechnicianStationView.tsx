@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet, Platform, ActivityIndicator } from 'react-native';
-import { Save, CheckSquare, Square, Pencil, CheckCircle2, Clock, Car, ChevronDown, ChevronUp, History, AlertTriangle, Lock, MessageSquare } from 'lucide-react-native';
+import { Save, CheckSquare, Square, Pencil, CheckCircle2, Clock, Car, ChevronDown, ChevronUp, History, AlertTriangle, Lock, MessageSquare, Play, Pause } from 'lucide-react-native';
 import { LicensePlate } from '../shared/LicensePlate';
 import { EmptyStateCard } from '../shared/EmptyStateCard';
 import { TimerPill } from '../shared/TimerPill';
@@ -23,8 +23,10 @@ export const TechnicianStationView: React.FC = React.memo(() => {
     currentRole,
     canMarkTaskDone,
     canTransferVehicle,
+    canControlTimer,
     toggleExpand,
     toggleTaskCompletion,
+    toggleStageTimer,
     setSelectedVehicle,
     setPendingTransfer,
     handleRequestTransfer,
@@ -35,6 +37,8 @@ export const TechnicianStationView: React.FC = React.memo(() => {
   const renderVehicleItem = ({ item: vehicle }: { item: Vehicle }) => {
     const { completedCount, totalRequired: totalReq, percent } = calculateJobSheetProgress(vehicle.tasks);
     const isExpanded = Boolean(expandedCards[vehicle.id]);
+    const isVehiclePaused = Boolean(vehicle.is_paused || (vehicle.stage_logs[vehicle.stage_logs.length - 1]?.is_paused));
+    const canToggleTimer = canControlTimer(activeBay);
 
     // Filter ONLY the task assigned to this active bay
     const bayTask = vehicle.tasks.find(t => t.task_type === activeTaskType && t.is_required) || vehicle.tasks.find(t => t.task_type === activeTaskType);
@@ -67,20 +71,55 @@ export const TechnicianStationView: React.FC = React.memo(() => {
           onPress={() => toggleExpand(vehicle.id)}
           activeOpacity={0.8}
         >
-                    <View style={styles.cardTopRow}>
-                      {/* Sri Lankan License Plate Badge */}
-                      <LicensePlate number={vehicle.vehicle_no} size="md" />
+          <View style={styles.cardTopRow}>
+            {/* Sri Lankan License Plate Badge */}
+            <LicensePlate number={vehicle.vehicle_no} size="md" />
 
-                      <View style={styles.headerRightGroup}>
-                        {/* Live Station Timer Pill */}
-                        <TimerPill elapsedText={elapsedTimes[vehicle.id] || '0m 00s'} variant="cyan" size="md" />
+            <View style={styles.headerRightGroup}>
+              {/* Live Station Timer Pill */}
+              <TimerPill
+                elapsedText={elapsedTimes[vehicle.id] || '0m 00s'}
+                variant={isVehiclePaused ? 'amber' : 'cyan'}
+                isPaused={isVehiclePaused}
+                size="md"
+              />
 
-                        {/* Expand / Collapse Chevron Icon */}
-                        <View style={[styles.chevronWrapper, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)', borderColor: colors.borderGlass }]}>
-                          {isExpanded ? <ChevronUp size={20} color={colors.textSecondary} /> : <ChevronDown size={20} color={colors.textSecondary} />}
-                        </View>
-                      </View>
-                    </View>
+              {/* Start / Stop Timer Button */}
+              <TouchableOpacity
+                style={[
+                  styles.timerControlBtn,
+                  isVehiclePaused
+                    ? { backgroundColor: colors.successDim, borderColor: colors.successBorder }
+                    : { backgroundColor: colors.warningDim, borderColor: colors.warningBorder },
+                  !canToggleTimer && { opacity: 0.4 }
+                ]}
+                onPress={(e) => {
+                  if (canToggleTimer) {
+                    toggleStageTimer(vehicle.id, !isVehiclePaused, techName);
+                  }
+                }}
+                activeOpacity={0.7}
+                disabled={!canToggleTimer}
+              >
+                {isVehiclePaused ? (
+                  <>
+                    <Play size={12} color={colors.success} />
+                    <Text style={[styles.timerControlText, { color: colors.success }]}>Start</Text>
+                  </>
+                ) : (
+                  <>
+                    <Pause size={12} color={colors.warningLight} />
+                    <Text style={[styles.timerControlText, { color: colors.warningLight }]}>Stop</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              {/* Expand / Collapse Chevron Icon */}
+              <View style={[styles.chevronWrapper, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)', borderColor: colors.borderGlass }]}>
+                {isExpanded ? <ChevronUp size={20} color={colors.textSecondary} /> : <ChevronDown size={20} color={colors.textSecondary} />}
+              </View>
+            </View>
+          </View>
 
                     {/* Task Progress Bar */}
                     <View style={styles.progressContainer}>
@@ -380,6 +419,19 @@ const styles = StyleSheet.create({
   dispatchHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   auditLogLink: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 6, paddingVertical: 2 },
   auditLogLinkText: { color: '#38bdf8', fontSize: 11, fontWeight: '600', textDecorationLine: 'underline' },
+  timerControlBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  timerControlText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
   timerPill: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(14, 165, 233, 0.15)', borderWidth: 1, borderColor: 'rgba(14, 165, 233, 0.3)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
   timerPillText: { color: '#38bdf8', fontSize: 12, fontWeight: '700', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
   progressContainer: { gap: 4 },

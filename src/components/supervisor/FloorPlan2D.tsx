@@ -81,6 +81,8 @@ export const FloorPlan2D: React.FC = React.memo(() => {
                             const currentTask = vehicle.tasks.find(t => t.task_type === currentBayTaskType);
                             const isCurrentTaskDone = Boolean(currentTask && currentTask.is_completed);
 
+                            const isVehiclePaused = Boolean(vehicle.is_paused || (vehicle.stage_logs[vehicle.stage_logs.length - 1]?.is_paused));
+
                             return (
                               <TouchableOpacity
                                 key={vehicle.id}
@@ -93,7 +95,12 @@ export const FloorPlan2D: React.FC = React.memo(() => {
                               >
                               <View style={styles.cardHeaderTopRow}>
                                 <LicensePlate number={vehicle.vehicle_no} size="sm" />
-                                <TimerPill elapsedText={elapsedTimes[vehicle.id] || '0m 00s'} variant="cyan" size="sm" />
+                                <TimerPill
+                                  elapsedText={elapsedTimes[vehicle.id] || '0m 00s'}
+                                  variant={isVehiclePaused ? 'amber' : 'cyan'}
+                                  isPaused={isVehiclePaused}
+                                  size="sm"
+                                />
                               </View>
 
                               <View style={[styles.spatialProgressBar, { backgroundColor: colors.progressBg }]}>

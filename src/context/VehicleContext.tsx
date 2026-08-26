@@ -24,6 +24,7 @@ interface VehicleContextType {
   updateVehicleJobOrder: (vehicleId: string, updatedTaskTypes: TaskType[], updatedRemarks: string) => Promise<void>;
   toggleTaskCompletion: (vehicleId: string, taskId: string, completedBy: string) => Promise<void>;
   transferVehicleZone: (vehicleId: string, toZone: BayZone, movedBy: string) => Promise<void>;
+  toggleStageTimer: (vehicleId: string, pause: boolean, updatedBy: string) => Promise<void>;
   finishVehicleJobSheet: (vehicleId: string, advisorName: string) => Promise<void>;
   refreshVehicles: () => Promise<void>;
   isLoading: boolean;
@@ -535,10 +536,20 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
           to_zone: toZone,
           entered_at: now,
           duration_seconds: 0,
-          moved_by: movedBy
+          moved_by: movedBy,
+          is_paused: false,
+          paused_at: null,
+          paused_seconds: 0,
         });
 
-        return { ...v, current_zone: toZone, stage_logs: updatedLogs };
+        return {
+          ...v,
+          current_zone: toZone,
+          is_paused: false,
+          paused_at: null,
+          paused_seconds: 0,
+          stage_logs: updatedLogs
+        };
       })
     );
 
@@ -575,12 +586,15 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
             vehicle_id: vehicleId,
             to_zone: toZone,
             entered_at: now,
-            moved_by: movedBy
+            moved_by: movedBy,
+            is_paused: false,
+            paused_at: null,
+            paused_seconds: 0,
           });
 
           const { error: directErr } = await client
             .from('vehicles')
-            .update({ current_zone: toZone })
+            .update({ current_zone: toZone, is_paused: false, paused_at: null, paused_seconds: 0 })
             .eq('id', vehicleId);
 
           if (directErr) throw directErr;
@@ -606,7 +620,7 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
     setVehicles(prev =>
       prev.map(v => {
         if (v.id !== vehicleId) return v;
-        return { ...v, current_zone: 'completed' as BayZone, is_finished: true, completed_at: now };
+        return { ...v, current_zone: 'completed' as BayZone, is_finished: true, completed_at: now, is_paused: false, paused_at: null };
       })
     );
 
@@ -624,7 +638,9 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
             .update({
               current_zone: 'completed',
               is_finished: true,
-              completed_at: now
+              completed_at: now,
+              is_paused: false,
+              paused_at: null,
             })
             .eq('id', vehicleId);
           if (directErr) throw directErr;
@@ -635,6 +651,119 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
           setVehicles(prevVehicles);
           showError('Finish Failed', 'Could not complete the vehicle job sheet. Please try again.');
         }
+      }
+    }
+  }, [vehicles]);
+
+  // 5. TOGGLE STAGE TIMER (START / STOP / PAUSE / RESUME)
+  const toggleStageTimer = useCallback(async (vehicleId: string, pause: boolean, updatedBy: string) => {
+    try { hapticService.triggerLightHaptic(); } catch { /* ignore haptic error */ }
+    const now = new Date().toISOString();
+    const client = supabase;
+
+    // Optimistic Update
+    setVehicles(prev =>
+      prev.map(v => {
+        if (v.id !== vehicleId) return v;
+
+        const updatedLogs = [...v.stage_logs];
+        const lastIndex = updatedLogs.length - 1;
+        let newPausedSec = v.paused_seconds || 0;
+
+        if (pause) {
+          // Pausing / Stopping Timer
+          if (lastIndex >= 0) {
+            updatedLogs[lastIndex] = {
+              ...updatedLogs[lastIndex],
+              is_paused: true,
+              paused_at: now,
+            };
+          }
+          return {
+            ...v,
+            is_paused: true,
+            paused_at: now,
+            stage_logs: updatedLogs,
+          };
+        } else {
+          // Starting / Resuming Timer
+          const pausedAtTime = v.paused_at ? new Date(v.paused_at).getTime() : Date.now();
+          const addedPauseDuration = Math.max(0, Math.floor((Date.now() - pausedAtTime) / 1000));
+          newPausedSec += addedPauseDuration;
+
+          if (lastIndex >= 0) {
+            const logPausedSec = (updatedLogs[lastIndex].paused_seconds || 0) + addedPauseDuration;
+            updatedLogs[lastIndex] = {
+              ...updatedLogs[lastIndex],
+              is_paused: false,
+              paused_at: null,
+              paused_seconds: logPausedSec,
+            };
+          }
+
+          return {
+            ...v,
+            is_paused: false,
+            paused_at: null,
+            paused_seconds: newPausedSec,
+            stage_logs: updatedLogs,
+          };
+        }
+      })
+    );
+
+    // Supabase Sync with Fallback
+    if (client && isSupabaseConnected) {
+      try {
+        const targetVehicle = vehicles.find(v => v.id === vehicleId);
+        if (!targetVehicle) return;
+
+        if (pause) {
+          await client
+            .from('vehicles')
+            .update({ is_paused: true, paused_at: now })
+            .eq('id', vehicleId);
+
+          const { data: dbLogs } = await client
+            .from('stage_logs')
+            .select('*')
+            .eq('vehicle_id', vehicleId)
+            .is('exited_at', null)
+            .order('entered_at', { ascending: false });
+
+          if (dbLogs && dbLogs.length > 0) {
+            await client
+              .from('stage_logs')
+              .update({ is_paused: true, paused_at: now })
+              .eq('id', dbLogs[0].id);
+          }
+        } else {
+          const pausedAtTime = targetVehicle.paused_at ? new Date(targetVehicle.paused_at).getTime() : Date.now();
+          const addedPauseDuration = Math.max(0, Math.floor((Date.now() - pausedAtTime) / 1000));
+          const newPausedSec = (targetVehicle.paused_seconds || 0) + addedPauseDuration;
+
+          await client
+            .from('vehicles')
+            .update({ is_paused: false, paused_at: null, paused_seconds: newPausedSec })
+            .eq('id', vehicleId);
+
+          const { data: dbLogs } = await client
+            .from('stage_logs')
+            .select('*')
+            .eq('vehicle_id', vehicleId)
+            .is('exited_at', null)
+            .order('entered_at', { ascending: false });
+
+          if (dbLogs && dbLogs.length > 0) {
+            const logPausedSec = (dbLogs[0].paused_seconds || 0) + addedPauseDuration;
+            await client
+              .from('stage_logs')
+              .update({ is_paused: false, paused_at: null, paused_seconds: logPausedSec })
+              .eq('id', dbLogs[0].id);
+          }
+        }
+      } catch (err) {
+        console.warn('Supabase stage timer sync note:', err);
       }
     }
   }, [vehicles]);
@@ -658,6 +787,7 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
       updateVehicleJobOrder,
       toggleTaskCompletion,
       transferVehicleZone,
+      toggleStageTimer,
       finishVehicleJobSheet,
       refreshVehicles: fetchSupabaseData,
       isLoading,
@@ -675,6 +805,7 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
       updateVehicleJobOrder,
       toggleTaskCompletion,
       transferVehicleZone,
+      toggleStageTimer,
       finishVehicleJobSheet,
       fetchSupabaseData,
       isLoading,

@@ -4,8 +4,8 @@ import { usePermissions } from "./usePermissions";
 import { matchesVehicleSearch } from "../utils/searchUtils";
 
 export const useAdvisorInspection = () => {
-  const { vehicles, finishVehicleJobSheet, setSelectedVehicle, searchQuery } = useVehicles();
-  const { canFinishJob } = usePermissions();
+  const { vehicles, finishVehicleJobSheet, toggleStageTimer, setSelectedVehicle, searchQuery } = useVehicles();
+  const { canFinishJob, canControlTimer } = usePermissions();
   const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
 
   const toggleExpand = (id: string) => {
@@ -23,8 +23,10 @@ export const useAdvisorInspection = () => {
     expandedCards,
     searchQuery,
     canFinishJob,
+    canControlTimer,
     toggleExpand,
     finishVehicleJobSheet,
+    toggleStageTimer,
     setSelectedVehicle,
   };
 };

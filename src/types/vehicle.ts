@@ -29,6 +29,9 @@ export interface StageLog {
   exited_at?: string | null;
   duration_seconds: number;
   moved_by?: string;
+  is_paused?: boolean;
+  paused_at?: string | null;
+  paused_seconds?: number;
 }
 
 export interface Vehicle {
@@ -43,6 +46,9 @@ export interface Vehicle {
   created_at: string;
   tasks: VehicleTask[];
   stage_logs: StageLog[];
+  is_paused?: boolean;
+  paused_at?: string | null;
+  paused_seconds?: number;
   // 2D animation coordinates (x %, y %)
   position?: { x: number; y: number };
 }

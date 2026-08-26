@@ -5,6 +5,8 @@ import { useTheme } from "../context/ThemeContext";
 import { BayZone } from "../types/vehicle";
 import { Wrench, ShieldAlert, Navigation, CheckCircle } from "lucide-react-native";
 import { matchesVehicleSearch } from "../utils/searchUtils";
+import { getActiveStageNetSeconds } from "../utils/vehicleUtils";
+import { getCurrentActiveBreak } from "../utils/workshopHoursUtils";
 
 export interface BayItem {
   id: BayZone;
@@ -16,18 +18,36 @@ export interface BayItem {
 
 const computeVehicleTimersMap = (vehicleList: any[]) => {
   const newTimes: Record<string, string> = {};
-  const now = Date.now();
+  const now = new Date();
+  const activeBreak = getCurrentActiveBreak(now);
 
   vehicleList.forEach((v) => {
     const lastLog = v.stage_logs[v.stage_logs.length - 1];
+    const isPaused = Boolean(v.is_paused || (lastLog && lastLog.is_paused));
+    const pausedAt = v.paused_at || (lastLog && lastLog.paused_at);
+    const pausedSeconds = v.paused_seconds || (lastLog && lastLog.paused_seconds) || 0;
+
     if (lastLog && !lastLog.exited_at) {
-      const start = new Date(lastLog.entered_at).getTime();
-      const diffSec = Math.max(0, Math.floor((now - start) / 1000));
-      const hours = Math.floor(diffSec / 3600);
-      const mins = Math.floor((diffSec % 3600) / 60);
-      const secs = diffSec % 60;
+      const netSec = getActiveStageNetSeconds(
+        lastLog.entered_at,
+        null,
+        isPaused,
+        pausedAt,
+        pausedSeconds
+      );
+      const hours = Math.floor(netSec / 3600);
+      const mins = Math.floor((netSec % 3600) / 60);
+      const secs = netSec % 60;
       const padSec = secs < 10 ? `0${secs}` : `${secs}`;
-      newTimes[v.id] = hours > 0 ? `${hours}h ${mins}m ${padSec}s` : `${mins}m ${padSec}s`;
+      const timeStr = hours > 0 ? `${hours}h ${mins}m ${padSec}s` : `${mins}m ${padSec}s`;
+
+      if (isPaused) {
+        newTimes[v.id] = timeStr;
+      } else if (activeBreak) {
+        newTimes[v.id] = `⏸ ${timeStr} (${activeBreak.name})`;
+      } else {
+        newTimes[v.id] = timeStr;
+      }
     } else {
       newTimes[v.id] = "0m 00s";
     }

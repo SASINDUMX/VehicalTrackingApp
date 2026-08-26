@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet, Platform } from 'react-native';
-import { ShieldCheck, Clock, FileCheck, Sparkles, CheckCircle2, Clock3, ChevronDown, ChevronUp, History, XCircle } from 'lucide-react-native';
+import { ShieldCheck, Clock, FileCheck, Sparkles, CheckCircle2, Clock3, ChevronDown, ChevronUp, History, XCircle, Play, Pause } from 'lucide-react-native';
 import { LicensePlate } from '../shared/LicensePlate';
 import { EmptyStateCard } from '../shared/EmptyStateCard';
 import { TimerPill } from '../shared/TimerPill';
@@ -15,7 +15,9 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
     expandedCards,
     searchQuery,
     canFinishJob,
+    canControlTimer,
     toggleExpand,
+    toggleStageTimer,
     finishVehicleJobSheet,
     setSelectedVehicle,
   } = useAdvisorInspection();
@@ -23,6 +25,8 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
 
   const renderVehicleCard = ({ item: vehicle }: { item: Vehicle }) => {
     const isExpanded = Boolean(expandedCards[vehicle.id]);
+    const isVehiclePaused = Boolean(vehicle.is_paused || (vehicle.stage_logs[vehicle.stage_logs.length - 1]?.is_paused));
+    const canToggleTimer = canControlTimer('inspection');
 
     return (
       <View key={vehicle.id} style={[styles.mainCard, { backgroundColor: colors.surface, borderColor: colors.borderGlass }]}>
@@ -35,7 +39,42 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
           <LicensePlate number={vehicle.vehicle_no} size="md" />
 
           <View style={styles.headerRightGroup}>
-            <TimerPill elapsedText={formatTotalTATString(vehicle)} variant="amber" size="md" />
+            <TimerPill
+              elapsedText={formatTotalTATString(vehicle)}
+              variant={isVehiclePaused ? 'amber' : 'cyan'}
+              isPaused={isVehiclePaused}
+              size="md"
+            />
+
+            {/* Start / Stop Timer Button */}
+            <TouchableOpacity
+              style={[
+                styles.timerControlBtn,
+                isVehiclePaused
+                  ? { backgroundColor: colors.successDim, borderColor: colors.successBorder }
+                  : { backgroundColor: colors.warningDim, borderColor: colors.warningBorder },
+                !canToggleTimer && { opacity: 0.4 }
+              ]}
+              onPress={(e) => {
+                if (canToggleTimer) {
+                  toggleStageTimer(vehicle.id, !isVehiclePaused, 'Service Advisor');
+                }
+              }}
+              activeOpacity={0.7}
+              disabled={!canToggleTimer}
+            >
+              {isVehiclePaused ? (
+                <>
+                  <Play size={12} color={colors.success} />
+                  <Text style={[styles.timerControlText, { color: colors.success }]}>Start</Text>
+                </>
+              ) : (
+                <>
+                  <Pause size={12} color={colors.warningLight} />
+                  <Text style={[styles.timerControlText, { color: colors.warningLight }]}>Stop</Text>
+                </>
+              )}
+            </TouchableOpacity>
 
             <View style={[styles.chevronWrapper, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)', borderColor: colors.borderGlass }]}>
               {isExpanded ? <ChevronUp size={20} color={colors.textSecondary} /> : <ChevronDown size={20} color={colors.textSecondary} />}
@@ -148,7 +187,20 @@ const styles = StyleSheet.create({
   plateCountryCode: { color: '#ffffff', fontSize: 8, fontWeight: '700', marginTop: 1 },
   plateRightArea: { paddingHorizontal: 8, paddingVertical: 4, justifyContent: 'center' },
   plateText: { color: '#000000', fontWeight: '800', fontSize: 14, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', letterSpacing: 0.5 },
-  headerRightGroup: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headerRightGroup: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  timerControlBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  timerControlText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
   chevronWrapper: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255, 255, 255, 0.05)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)' },
   tatBox: { alignItems: 'flex-end' },
   tatRow: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(245, 158, 11, 0.1)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(245, 158, 11, 0.3)' },

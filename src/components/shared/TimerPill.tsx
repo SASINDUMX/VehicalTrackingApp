@@ -1,25 +1,27 @@
 import React from "react";
 import { View, Text, StyleSheet, Platform } from "react-native";
-import { Clock } from "lucide-react-native";
+import { Clock, Pause } from "lucide-react-native";
 import { useTheme } from "../../context/ThemeContext";
 
 interface TimerPillProps {
   elapsedText: string;
   variant?: "cyan" | "amber";
   size?: "sm" | "md";
+  isPaused?: boolean;
 }
 
 export const TimerPill: React.FC<TimerPillProps> = ({
   elapsedText,
   variant = "cyan",
   size = "md",
+  isPaused = false,
 }) => {
   const { colors } = useTheme();
-  const isAmber = variant === "amber";
+  const isAmber = isPaused || variant === "amber";
   const isSm = size === "sm";
 
   const pillColor = isAmber ? colors.warningLight : colors.primaryLight;
-  const pillBg = isAmber ? colors.warningDim : colors.primaryBorder ? colors.primaryDim : 'rgba(14, 165, 233, 0.12)';
+  const pillBg = isAmber ? colors.warningDim : colors.primaryDim;
   const pillBorder = isAmber ? colors.warningBorder : colors.primaryBorder;
 
   return (
@@ -30,7 +32,11 @@ export const TimerPill: React.FC<TimerPillProps> = ({
         isSm && styles.smPill,
       ]}
     >
-      <Clock size={isSm ? 11 : 13} color={pillColor} />
+      {isPaused ? (
+        <Pause size={isSm ? 10 : 12} color={pillColor} />
+      ) : (
+        <Clock size={isSm ? 11 : 13} color={pillColor} />
+      )}
       <Text
         style={[
           styles.pillText,
@@ -38,7 +44,7 @@ export const TimerPill: React.FC<TimerPillProps> = ({
           isSm && styles.smText,
         ]}
       >
-        {elapsedText}
+        {isPaused ? `PAUSED · ${elapsedText}` : elapsedText}
       </Text>
     </View>
   );

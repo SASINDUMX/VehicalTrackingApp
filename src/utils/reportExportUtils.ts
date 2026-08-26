@@ -106,8 +106,12 @@ export const getStageSecondsForZone = (v: Vehicle, zone: BayZone): number => {
       total += l.duration_seconds;
     } else if (l.entered_at) {
       const enter = new Date(l.entered_at);
-      const exit = l.exited_at ? new Date(l.exited_at) : new Date();
-      total += Math.max(0, Math.floor((exit.getTime() - enter.getTime()) / 1000));
+      const isLogPaused = Boolean(l.is_paused || (v.current_zone === zone && v.is_paused));
+      const pausedAt = l.paused_at || (v.current_zone === zone ? v.paused_at : null);
+      const pausedSec = l.paused_seconds || (v.current_zone === zone ? v.paused_seconds : 0) || 0;
+      const exit = isLogPaused && pausedAt ? new Date(pausedAt) : (l.exited_at ? new Date(l.exited_at) : new Date());
+      const rawSec = Math.max(0, Math.floor((exit.getTime() - enter.getTime()) / 1000));
+      total += Math.max(0, rawSec - pausedSec);
     }
   });
   return total;
