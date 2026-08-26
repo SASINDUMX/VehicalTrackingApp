@@ -5,7 +5,7 @@ import { usePermissions } from '../../hooks/usePermissions';
 import { BayZone, TaskType } from '../../types/vehicle';
 import { 
   X, Wrench, Shield, Navigation, Pencil, Save, CheckSquare, Square, Lock, 
-  Clock, CheckCircle2, Circle, ArrowRight, UserCheck, Calendar, Play, Pause
+  Clock, CheckCircle2, Circle, ArrowRight, UserCheck, Calendar, Trash2, AlertTriangle
 } from 'lucide-react-native';
 
 import { LicensePlate } from './LicensePlate';
@@ -21,14 +21,15 @@ const getStageOrder = (themeColors: any) => [
 ];
 
 export const VehicleDetailsModal: React.FC = () => {
-  const { selectedVehicle, setSelectedVehicle, transferVehicleZone, updateVehicleJobOrder, toggleStageTimer } = useVehicles();
-  const { canRelocateVehicle, canAddVehicle, canControlTimer, displayName } = usePermissions();
+  const { selectedVehicle, setSelectedVehicle, transferVehicleZone, updateVehicleJobOrder, deleteVehicle } = useVehicles();
+  const { canRelocateVehicle, canAddVehicle, canDeleteVehicle, displayName } = usePermissions();
   const { colors, isDark } = useTheme();
 
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [selectedTasks, setSelectedTasks] = useState<TaskType[]>([]);
   const [remarks, setRemarks] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<boolean>(false);
   const [activeStageDuration, setActiveStageDuration] = useState<string>('0m 00s');
   const [totalElapsedStr, setTotalElapsedStr] = useState<string>('0m 00s');
   const [grossElapsedStr, setGrossElapsedStr] = useState<string>('0m 00s');
@@ -65,7 +66,10 @@ export const VehicleDetailsModal: React.FC = () => {
       const now = new Date();
 
       // Net & Gross Elapsed Time since Intake
-      const netSec = getNetWorkingSeconds(selectedVehicle.intake_at, now);
+      const rawNetSec = getNetWorkingSeconds(selectedVehicle.intake_at, now);
+      const totalPausedSec = selectedVehicle.stage_logs.reduce((sum, l) => sum + (l.paused_seconds || 0), 0) +
+        (selectedVehicle.is_paused && selectedVehicle.paused_at ? Math.max(0, Math.floor((now.getTime() - new Date(selectedVehicle.paused_at).getTime()) / 1000)) : (selectedVehicle.paused_seconds || 0));
+      const netSec = Math.max(0, rawNetSec - totalPausedSec);
       const grossSec = Math.max(0, Math.floor((now.getTime() - new Date(selectedVehicle.intake_at).getTime()) / 1000));
       setTotalElapsedStr(formatDurationString(netSec, true));
       setGrossElapsedStr(formatDurationString(grossSec, true));
@@ -404,7 +408,6 @@ export const VehicleDetailsModal: React.FC = () => {
                       let totalGrossSec = 0;
                       const breakNotes: string[] = [];
                       const isPaused = Boolean(selectedVehicle.is_paused || (logsForZone[logsForZone.length - 1]?.is_paused));
-                      const canToggleTimer = isCurrent && !selectedVehicle.is_finished && canControlTimer(stageDef.zone);
 
                       logsForZone.forEach(l => {
                         const isLogPaused = Boolean(l.is_paused || (isCurrent && selectedVehicle.is_paused));
@@ -451,50 +454,22 @@ export const VehicleDetailsModal: React.FC = () => {
                                 {stageDef.name}
                               </Text>
                               {isCurrent ? (
-                                <View style={styles.activeStageControlGroup}>
+                                <View style={[
+                                  styles.currentBadge,
+                                  isPaused
+                                    ? { backgroundColor: colors.warningDim, borderColor: colors.warningBorder }
+                                    : { backgroundColor: `${stageDef.color}25`, borderColor: stageDef.color }
+                                ]}>
                                   <View style={[
-                                    styles.currentBadge,
-                                    isPaused
-                                      ? { backgroundColor: colors.warningDim, borderColor: colors.warningBorder }
-                                      : { backgroundColor: `${stageDef.color}25`, borderColor: stageDef.color }
+                                    styles.pulsingDot,
+                                    { backgroundColor: isPaused ? colors.warning : stageDef.color }
+                                  ]} />
+                                  <Text style={[
+                                    styles.currentBadgeText,
+                                    { color: isPaused ? colors.warning : stageDef.color }
                                   ]}>
-                                    <View style={[
-                                      styles.pulsingDot,
-                                      { backgroundColor: isPaused ? colors.warning : stageDef.color }
-                                    ]} />
-                                    <Text style={[
-                                      styles.currentBadgeText,
-                                      { color: isPaused ? colors.warning : stageDef.color }
-                                    ]}>
-                                      {isPaused ? 'PAUSED' : 'ACTIVE'}
-                                    </Text>
-                                  </View>
-
-                                  {/* Start / Stop Timer Button */}
-                                  {canToggleTimer && (
-                                    <TouchableOpacity
-                                      style={[
-                                        styles.stageTimerBtn,
-                                        isPaused
-                                          ? { backgroundColor: colors.successDim, borderColor: colors.successBorder }
-                                          : { backgroundColor: colors.warningDim, borderColor: colors.warningBorder }
-                                      ]}
-                                      onPress={() => toggleStageTimer(selectedVehicle.id, !isPaused, displayName)}
-                                      activeOpacity={0.7}
-                                    >
-                                      {isPaused ? (
-                                        <>
-                                          <Play size={11} color={colors.success} />
-                                          <Text style={[styles.stageTimerBtnText, { color: colors.success }]}>Start</Text>
-                                        </>
-                                      ) : (
-                                        <>
-                                          <Pause size={11} color={colors.warningLight} />
-                                          <Text style={[styles.stageTimerBtnText, { color: colors.warningLight }]}>Stop</Text>
-                                        </>
-                                      )}
-                                    </TouchableOpacity>
-                                  )}
+                                    {isPaused ? 'PAUSED' : 'ACTIVE'}
+                                  </Text>
                                 </View>
                               ) : isCompleted ? (
                                 <View style={[styles.doneBadge, { backgroundColor: colors.successDim, borderColor: colors.successBorder }]}>
@@ -579,15 +554,76 @@ export const VehicleDetailsModal: React.FC = () => {
                   </View>
                 </View>
 
-                <TouchableOpacity
-                  style={[styles.closeBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }]}
-                  onPress={() => setSelectedVehicle(null)}
-                >
-                  <Text style={[styles.closeText, { color: colors.textPrimary }]}>Close</Text>
-                </TouchableOpacity>
+                <View style={styles.footerRightButtons}>
+                  {canDeleteVehicle && (
+                    <TouchableOpacity
+                      style={[styles.deleteBtn, { backgroundColor: colors.dangerDim, borderColor: colors.dangerBorder }]}
+                      onPress={() => setShowDeleteConfirm(true)}
+                      activeOpacity={0.7}
+                    >
+                      <Trash2 size={14} color={colors.danger} />
+                      <Text style={[styles.deleteBtnText, { color: colors.danger }]}>Delete</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  <TouchableOpacity
+                    style={[styles.closeBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }]}
+                    onPress={() => setSelectedVehicle(null)}
+                  >
+                    <Text style={[styles.closeText, { color: colors.textPrimary }]}>Close</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             )}
           </View>
+
+          {/* Delete Confirmation Dialog */}
+          {showDeleteConfirm && (
+            <View style={styles.confirmOverlay}>
+              <TouchableOpacity
+                style={styles.confirmBackdrop}
+                onPress={() => setShowDeleteConfirm(false)}
+                activeOpacity={1}
+              />
+              <View style={[styles.confirmCard, { backgroundColor: colors.surfaceElevated, borderColor: colors.dangerBorder }]}>
+                <View style={styles.confirmHeader}>
+                  <View style={[styles.confirmIconCircle, { backgroundColor: colors.dangerDim }]}>
+                    <AlertTriangle size={20} color={colors.danger} />
+                  </View>
+                  <View style={styles.confirmTitleGroup}>
+                    <Text style={[styles.confirmTitle, { color: colors.textPrimary }]}>Delete Job Sheet?</Text>
+                    <Text style={[styles.confirmSub, { color: colors.textMuted }]}>Permanent Action</Text>
+                  </View>
+                </View>
+
+                <Text style={[styles.confirmBodyText, { color: colors.textSecondary }]}>
+                  Are you sure you want to permanently delete vehicle <Text style={[styles.confirmBoldPlate, { color: colors.warningLight }]}>{selectedVehicle.vehicle_no}</Text>?
+                  {'\n\n'}This will remove the job sheet, task checklist, and all stage timing logs.
+                </Text>
+
+                <View style={styles.confirmBtnRow}>
+                  <TouchableOpacity
+                    style={[styles.confirmCancelBtn, { borderColor: colors.borderGlass, backgroundColor: colors.surfaceOverlay }]}
+                    onPress={() => setShowDeleteConfirm(false)}
+                  >
+                    <Text style={[styles.confirmCancelText, { color: colors.textSecondary }]}>Cancel</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.confirmDeleteBtn, { backgroundColor: colors.danger }]}
+                    onPress={async () => {
+                      setShowDeleteConfirm(false);
+                      await deleteVehicle(selectedVehicle.id);
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Trash2 size={14} color="#ffffff" />
+                    <Text style={styles.confirmDeleteBtnText}>Yes, Delete</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          )}
         </View>
       </View>
     </Modal>
@@ -603,6 +639,9 @@ const styles = StyleSheet.create({
   plateBadge: { backgroundColor: '#facc15', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: '#eab308' },
   plateText: { color: '#000000', fontWeight: '800', fontSize: 16, letterSpacing: 0.5 },
   footerStandardRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, width: '100%' },
+  footerRightButtons: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  deleteBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, borderWidth: 1 },
+  deleteBtnText: { fontSize: 12, fontWeight: '700' },
   totalTimePill: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(14, 165, 233, 0.12)', borderWidth: 1, borderColor: 'rgba(14, 165, 233, 0.3)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, flexShrink: 1 },
   totalTimeTextCol: { gap: 1 },
   totalTimeText: { color: '#38bdf8', fontSize: 12, fontWeight: '700' },
@@ -614,6 +653,23 @@ const styles = StyleSheet.create({
   footer: { padding: 16, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)', width: '100%' },
   closeBtn: { backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 18, paddingVertical: 10, borderRadius: 10, flexShrink: 0 },
   closeText: { color: '#ffffff', fontWeight: '700', fontSize: 13 },
+
+  // Confirmation Modal Styles
+  confirmOverlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, justifyContent: 'center', alignItems: 'center', zIndex: 9999, padding: 16 },
+  confirmBackdrop: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0, 0, 0, 0.75)', ...(Platform.OS === 'web' ? { position: 'fixed' as any } : {}) },
+  confirmCard: { width: '100%', maxWidth: 420, borderRadius: 18, borderWidth: 1, padding: 20, gap: 16, zIndex: 10000, ...(Platform.OS === 'web' ? ({ boxShadow: '0px 12px 30px rgba(0, 0, 0, 0.6)' } as any) : { elevation: 12 }) },
+  confirmHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  confirmIconCircle: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
+  confirmTitleGroup: { flex: 1 },
+  confirmTitle: { fontSize: 16, fontWeight: '800' },
+  confirmSub: { fontSize: 11, fontWeight: '600', marginTop: 1 },
+  confirmBodyText: { fontSize: 13, lineHeight: 20 },
+  confirmBoldPlate: { fontWeight: '800' },
+  confirmBtnRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 10, marginTop: 4 },
+  confirmCancelBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, borderWidth: 1 },
+  confirmCancelText: { fontSize: 13, fontWeight: '600' },
+  confirmDeleteBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 8 },
+  confirmDeleteBtnText: { color: '#ffffff', fontSize: 13, fontWeight: '800' },
 
   /* Stepper Timeline Audit Styles */
   stepperContainer: { gap: 16 },

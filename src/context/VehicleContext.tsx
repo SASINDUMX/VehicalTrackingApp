@@ -26,6 +26,7 @@ interface VehicleContextType {
   transferVehicleZone: (vehicleId: string, toZone: BayZone, movedBy: string) => Promise<void>;
   toggleStageTimer: (vehicleId: string, pause: boolean, updatedBy: string) => Promise<void>;
   finishVehicleJobSheet: (vehicleId: string, advisorName: string) => Promise<void>;
+  deleteVehicle: (vehicleId: string) => Promise<void>;
   refreshVehicles: () => Promise<void>;
   isLoading: boolean;
   isRealtimeConnected: boolean;
@@ -768,6 +769,36 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
     }
   }, [vehicles]);
 
+  // 6. DELETE VEHICLE JOB SHEET (Supervisor only — Cascades in DB)
+  const deleteVehicle = useCallback(async (vehicleId: string) => {
+    try { hapticService.triggerLightHaptic(); } catch { /* ignore */ }
+    const prevVehicles = vehicles;
+    const client = supabase;
+
+    // Optimistic removal
+    setVehicles(prev => prev.filter(v => v.id !== vehicleId));
+    if (selectedVehicle?.id === vehicleId) {
+      setSelectedVehicle(null);
+    }
+
+    if (client && isSupabaseConnected) {
+      try {
+        const { error } = await client
+          .from('vehicles')
+          .delete()
+          .eq('id', vehicleId);
+
+        if (error) throw error;
+      } catch (err) {
+        console.error('Supabase delete vehicle error:', err);
+        if (isMountedRef.current) {
+          setVehicles(prevVehicles);
+          showError('Delete Failed', 'Could not delete the vehicle record. Please try again.');
+        }
+      }
+    }
+  }, [vehicles, selectedVehicle]);
+
   const value = useMemo(
     () => ({
       vehicles,
@@ -789,6 +820,7 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
       transferVehicleZone,
       toggleStageTimer,
       finishVehicleJobSheet,
+      deleteVehicle,
       refreshVehicles: fetchSupabaseData,
       isLoading,
       isRealtimeConnected,
@@ -807,6 +839,7 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
       transferVehicleZone,
       toggleStageTimer,
       finishVehicleJobSheet,
+      deleteVehicle,
       fetchSupabaseData,
       isLoading,
       isRealtimeConnected,

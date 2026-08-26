@@ -7,6 +7,7 @@ export const usePermissions = () => {
 
   return {
     canAddVehicle: role === 'supervisor',
+    canDeleteVehicle: role === 'supervisor',
     canRelocateVehicle: role === 'supervisor',
     canMarkTaskDone: (bayZone: BayZone): boolean => {
       if (role === 'supervisor') return true;
