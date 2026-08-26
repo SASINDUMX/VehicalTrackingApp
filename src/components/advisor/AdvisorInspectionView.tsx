@@ -29,7 +29,20 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
     const canToggleTimer = canControlTimer('inspection');
 
     return (
-      <View key={vehicle.id} style={[styles.mainCard, { backgroundColor: colors.surface, borderColor: colors.borderGlass }]}>
+      <View
+        key={vehicle.id}
+        style={[
+          styles.mainCard,
+          {
+            backgroundColor: isVehiclePaused
+              ? (isDark ? 'rgba(245, 158, 11, 0.05)' : 'rgba(245, 158, 11, 0.02)')
+              : (isDark ? 'rgba(16, 185, 129, 0.04)' : 'rgba(16, 185, 129, 0.02)'),
+            borderColor: isVehiclePaused ? colors.warningBorder : colors.successBorder,
+            borderLeftWidth: 4,
+            borderLeftColor: isVehiclePaused ? colors.warning : colors.success,
+          }
+        ]}
+      >
         {/* Clickable Header Area to Expand / Collapse */}
         <TouchableOpacity
           style={styles.cardHeader}

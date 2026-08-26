@@ -88,7 +88,24 @@ export const FloorPlan2D: React.FC = React.memo(() => {
                                 key={vehicle.id}
                                 style={[
                                   styles.spatialVehicleCard,
-                                  { backgroundColor: colors.surface, borderColor: colors.borderGlass }
+                                  {
+                                    backgroundColor: isCurrentTaskDone
+                                      ? (isDark ? 'rgba(16, 185, 129, 0.08)' : 'rgba(16, 185, 129, 0.04)')
+                                      : isVehiclePaused
+                                      ? (isDark ? 'rgba(245, 158, 11, 0.08)' : 'rgba(245, 158, 11, 0.04)')
+                                      : colors.surface,
+                                    borderColor: isCurrentTaskDone
+                                      ? colors.successBorder
+                                      : isVehiclePaused
+                                      ? colors.warningBorder
+                                      : colors.borderGlass,
+                                    borderLeftWidth: 3,
+                                    borderLeftColor: isCurrentTaskDone
+                                      ? colors.success
+                                      : isVehiclePaused
+                                      ? colors.warning
+                                      : bay.color,
+                                  }
                                 ]}
                                 onPress={() => setSelectedVehicle(vehicle)}
                                 activeOpacity={0.8}
@@ -97,7 +114,7 @@ export const FloorPlan2D: React.FC = React.memo(() => {
                                 <LicensePlate number={vehicle.vehicle_no} size="sm" />
                                 <TimerPill
                                   elapsedText={elapsedTimes[vehicle.id] || '0m 00s'}
-                                  variant={isVehiclePaused ? 'amber' : 'cyan'}
+                                  variant={isCurrentTaskDone ? 'cyan' : isVehiclePaused ? 'amber' : 'cyan'}
                                   isPaused={isVehiclePaused}
                                   size="sm"
                                 />
@@ -107,7 +124,7 @@ export const FloorPlan2D: React.FC = React.memo(() => {
                                 <View
                                   style={[
                                     styles.spatialProgressFill,
-                                    { width: `${percent}%`, backgroundColor: bay.color },
+                                    { width: `${percent}%`, backgroundColor: isCurrentTaskDone ? colors.success : bay.color },
                                   ]}
                                 />
                               </View>

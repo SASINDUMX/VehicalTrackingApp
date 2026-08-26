@@ -64,7 +64,30 @@ export const TechnicianStationView: React.FC = React.memo(() => {
     const hasAnyDispatchBtn = canShowAlignmentBtn || canShowHoistBtn || canShowWorkshopBtn || canShowAdvisorBtn;
 
     return (
-      <View key={vehicle.id} style={[styles.vehicleCardWrapper, { backgroundColor: colors.surface, borderColor: colors.borderGlass }]}>
+      <View
+        key={vehicle.id}
+        style={[
+          styles.vehicleCardWrapper,
+          {
+            backgroundColor: isCurrentTaskDone
+              ? (isDark ? 'rgba(16, 185, 129, 0.05)' : 'rgba(16, 185, 129, 0.03)')
+              : isVehiclePaused
+              ? (isDark ? 'rgba(245, 158, 11, 0.05)' : 'rgba(245, 158, 11, 0.03)')
+              : colors.surface,
+            borderColor: isCurrentTaskDone
+              ? colors.successBorder
+              : isVehiclePaused
+              ? colors.warningBorder
+              : colors.borderGlass,
+            borderLeftWidth: 4,
+            borderLeftColor: isCurrentTaskDone
+              ? colors.success
+              : isVehiclePaused
+              ? colors.warning
+              : colors.primary,
+          }
+        ]}
+      >
         {/* Header Card Area (Clickable to Expand / Collapse Card) */}
         <TouchableOpacity
           style={styles.cardHeaderArea}
@@ -73,7 +96,15 @@ export const TechnicianStationView: React.FC = React.memo(() => {
         >
           <View style={styles.cardTopRow}>
             {/* Sri Lankan License Plate Badge */}
-            <LicensePlate number={vehicle.vehicle_no} size="md" />
+            <View style={styles.plateWithStatusGroup}>
+              <LicensePlate number={vehicle.vehicle_no} size="md" />
+              {isCurrentTaskDone && (
+                <View style={[styles.readyBadge, { backgroundColor: colors.successDim, borderColor: colors.successBorder }]}>
+                  <CheckCircle2 size={11} color={colors.success} />
+                  <Text style={[styles.readyBadgeText, { color: colors.success }]}>TASK DONE</Text>
+                </View>
+              )}
+            </View>
 
             <View style={styles.headerRightGroup}>
               {/* Live Station Timer Pill */}
@@ -121,24 +152,26 @@ export const TechnicianStationView: React.FC = React.memo(() => {
             </View>
           </View>
 
-                    {/* Task Progress Bar */}
-                    <View style={styles.progressContainer}>
-                      <View style={styles.progressLabelRow}>
-                        <Text style={[styles.progressLabelText, { color: colors.textMuted }]}>JOB SHEET PROGRESS</Text>
-                        <View style={styles.progressPercentGroup}>
-                          <Text style={[styles.progressPercentText, { color: colors.primaryLight }]}>{completedCount}/{totalReq} Tasks ({percent}%)</Text>
-                          {isCurrentTaskDone && (
-                            <View style={styles.tinyDoneIconGroup}>
-                              <CheckCircle2 size={12} color={colors.success} />
-                            </View>
-                          )}
-                        </View>
-                      </View>
-                      <View style={[styles.progressBarBg, { backgroundColor: colors.progressBg }]}>
-                        <View style={[styles.progressBarFill, { width: `${percent}%`, backgroundColor: colors.primary }]} />
-                      </View>
-                    </View>
-                  </TouchableOpacity>
+          {/* Task Progress Bar */}
+          <View style={styles.progressContainer}>
+            <View style={styles.progressLabelRow}>
+              <Text style={[styles.progressLabelText, { color: colors.textMuted }]}>JOB SHEET PROGRESS</Text>
+              <View style={styles.progressPercentGroup}>
+                <Text style={[styles.progressPercentText, { color: isCurrentTaskDone ? colors.success : colors.primaryLight }]}>
+                  {completedCount}/{totalReq} Tasks ({percent}%)
+                </Text>
+                {isCurrentTaskDone && (
+                  <View style={styles.tinyDoneIconGroup}>
+                    <CheckCircle2 size={12} color={colors.success} />
+                  </View>
+                )}
+              </View>
+            </View>
+            <View style={[styles.progressBarBg, { backgroundColor: colors.progressBg }]}>
+              <View style={[styles.progressBarFill, { width: `${percent}%`, backgroundColor: isCurrentTaskDone ? colors.success : colors.primary }]} />
+            </View>
+          </View>
+        </TouchableOpacity>
 
                   {/* EXPANDED CONTENT AREA */}
                   {isExpanded && (
@@ -404,7 +437,10 @@ const styles = StyleSheet.create({
   cardsGrid: { gap: 16 },
   vehicleCardWrapper: { backgroundColor: '#111827', borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)', padding: 16, gap: 14, ...(Platform.OS === 'web' ? ({ boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)' } as any) : { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 }) },
   cardHeaderArea: { gap: 12 },
-  cardTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  cardTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 },
+  plateWithStatusGroup: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  readyBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1 },
+  readyBadgeText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
   plateWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#facc15', borderRadius: 6, borderWidth: 1, borderColor: '#eab308', overflow: 'hidden' },
   plateLeftBar: { backgroundColor: '#000000', paddingHorizontal: 6, paddingVertical: 4, alignItems: 'center', justifyContent: 'center' },
   plateFlag: { fontSize: 10 },
