@@ -28,7 +28,7 @@ const styles = StyleSheet.create({
     borderColor: "#eab308",
     paddingHorizontal: 8,
     paddingVertical: 3,
-    alignSelf: "flex-start",
+    minHeight: 24,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -36,6 +36,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     paddingHorizontal: 6,
     paddingVertical: 2,
+    minHeight: 20,
   },
   plateLg: {
     borderRadius: 6,

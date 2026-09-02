@@ -1,76 +1,44 @@
-import React from "react";
-import { View, Text, StyleSheet, Platform } from "react-native";
-import { Clock, Pause } from "lucide-react-native";
-import { useTheme } from "../../context/ThemeContext";
+import React from 'react';
+import { View, Text, StyleSheet, Platform } from 'react-native';
+import { Clock } from 'lucide-react-native';
+import { useTheme } from '../../context/ThemeContext';
 
 interface TimerPillProps {
   elapsedText: string;
-  variant?: "cyan" | "amber";
-  size?: "sm" | "md";
+  variant?: 'cyan' | 'amber';
+  size?: 'sm' | 'md';
   isPaused?: boolean;
 }
 
+/** TimerPill — live elapsed timer display. Uses the same plate-DNA shape as StatusPill. */
 export const TimerPill: React.FC<TimerPillProps> = ({
-  elapsedText,
-  variant = "cyan",
-  size = "md",
-  isPaused = false,
+  elapsedText, variant = 'cyan', size = 'md', isPaused = false,
 }) => {
   const { colors } = useTheme();
-  const isAmber = isPaused || variant === "amber";
-  const isSm = size === "sm";
-
-  const pillColor = isAmber ? colors.warningLight : colors.primaryLight;
-  const pillBg = isAmber ? colors.warningDim : colors.primaryDim;
-  const pillBorder = isAmber ? colors.warningBorder : colors.primaryBorder;
+  const isAmber = isPaused || variant === 'amber';
+  const isSm = size === 'sm';
+  const color  = isAmber ? colors.warningLight : colors.primaryLight;
+  const bg     = isAmber ? colors.warningDim   : colors.primaryDim;
+  const border = isAmber ? colors.warningBorder : colors.primaryBorder;
 
   return (
-    <View
-      style={[
-        styles.pillContainer,
-        { backgroundColor: pillBg, borderColor: pillBorder },
-        isSm && styles.smPill,
-      ]}
-    >
-      {isPaused ? (
-        <Pause size={isSm ? 10 : 12} color={pillColor} />
-      ) : (
-        <Clock size={isSm ? 11 : 13} color={pillColor} />
-      )}
-      <Text
-        style={[
-          styles.pillText,
-          { color: pillColor },
-          isSm && styles.smText,
-        ]}
-      >
-        {isPaused ? `PAUSED · ${elapsedText}` : elapsedText}
-      </Text>
+    <View style={[styles.pill, { backgroundColor: bg, borderColor: border }, isSm && styles.pillSm]}>
+      <Clock size={isSm ? 10 : 12} color={color} />
+      <Text style={[styles.label, { color }, isSm && styles.labelSm]}>{elapsedText}</Text>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  pillContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    borderWidth: 1,
+  pill: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 4, paddingHorizontal: 8, paddingVertical: 3, minHeight: 24, borderRadius: 5, borderWidth: 1,
   },
-  smPill: {
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 10,
+  pillSm: { paddingHorizontal: 6, paddingVertical: 2, minHeight: 20, borderRadius: 4, gap: 3 },
+  label: {
+    fontSize: 11, fontWeight: '800',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    letterSpacing: 0.5,
   },
-  pillText: {
-    fontSize: 12,
-    fontWeight: "700",
-    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
-  },
-  smText: {
-    fontSize: 10,
-  },
+  labelSm: { fontSize: 9, letterSpacing: 0.3 },
 });
