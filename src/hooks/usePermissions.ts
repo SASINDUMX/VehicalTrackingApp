@@ -26,6 +26,13 @@ export const usePermissions = () => {
       if (role === 'advisor' && bayZone === 'inspection') return true;
       return false;
     },
+    canStartWork: (bayZone: BayZone): boolean => {
+      if (role === 'supervisor') return true;
+      if (role === 'tech_workshop' && bayZone === 'workshop') return true;
+      if (role === 'tech_hoist' && bayZone === 'hoist') return true;
+      if (role === 'tech_alignment' && bayZone === 'alignment') return true;
+      return false;
+    },
     currentRole: role ?? 'supervisor',
     displayName: userProfile?.display_name ?? 'User',
   };

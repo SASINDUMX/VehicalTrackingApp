@@ -28,25 +28,31 @@ const computeVehicleTimersMap = (vehicleList: any[]) => {
     const pausedSeconds = v.paused_seconds || (lastLog && lastLog.paused_seconds) || 0;
 
     if (lastLog && !lastLog.exited_at) {
-      const netSec = getActiveStageNetSeconds(
-        lastLog.entered_at,
-        null,
-        isPaused,
-        pausedAt,
-        pausedSeconds
-      );
-      const hours = Math.floor(netSec / 3600);
-      const mins = Math.floor((netSec % 3600) / 60);
-      const secs = netSec % 60;
-      const padSec = secs < 10 ? `0${secs}` : `${secs}`;
-      const timeStr = hours > 0 ? `${hours}h ${mins}m ${padSec}s` : `${mins}m ${padSec}s`;
-
-      if (isPaused) {
-        newTimes[v.id] = timeStr;
-      } else if (activeBreak) {
-        newTimes[v.id] = `⏸ ${timeStr} (${activeBreak.name})`;
+      if (!lastLog.work_started_at) {
+        // IDLE state: waiting for technician to start work
+        const enterMs = new Date(lastLog.entered_at).getTime();
+        const idleSec = Math.max(0, Math.floor((now.getTime() - enterMs) / 1000));
+        const hours = Math.floor(idleSec / 3600);
+        const mins = Math.floor((idleSec % 3600) / 60);
+        const secs = idleSec % 60;
+        const padSec = secs < 10 ? `0${secs}` : `${secs}`;
+        const timeStr = hours > 0 ? `${hours}h ${mins}m ${padSec}s` : `${mins}m ${padSec}s`;
+        newTimes[v.id] = `IDLE · ${timeStr}`;
       } else {
-        newTimes[v.id] = timeStr;
+        // ACTIVE state: technician work in progress
+        const workStartMs = new Date(lastLog.work_started_at).getTime();
+        const activeSec = Math.max(0, Math.floor((now.getTime() - workStartMs) / 1000));
+        const hours = Math.floor(activeSec / 3600);
+        const mins = Math.floor((activeSec % 3600) / 60);
+        const secs = activeSec % 60;
+        const padSec = secs < 10 ? `0${secs}` : `${secs}`;
+        const timeStr = hours > 0 ? `${hours}h ${mins}m ${padSec}s` : `${mins}m ${padSec}s`;
+
+        if (activeBreak) {
+          newTimes[v.id] = `⏸ ${timeStr} (${activeBreak.name})`;
+        } else {
+          newTimes[v.id] = timeStr;
+        }
       }
     } else {
       newTimes[v.id] = "0m 00s";

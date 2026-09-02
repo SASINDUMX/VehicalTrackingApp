@@ -1,13 +1,16 @@
 import React from 'react';
-import { View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet, Platform, ActivityIndicator } from 'react-native';
-import { Save, CheckSquare, Square, Pencil, CheckCircle2, Clock, Car, ChevronDown, ChevronUp, History, AlertTriangle, Lock, MessageSquare, Play, Pause } from 'lucide-react-native';
+import { View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet, Platform, ActivityIndicator, Alert } from 'react-native';
+import { Save, CheckSquare, Square, Pencil, CheckCircle2, Car, ChevronDown, ChevronUp, History, Lock, MessageSquare, Play, Pause, Bookmark, AlertTriangle, AlertOctagon } from 'lucide-react-native';
 import { LicensePlate } from '../shared/LicensePlate';
 import { EmptyStateCard } from '../shared/EmptyStateCard';
 import { TimerPill } from '../shared/TimerPill';
+import { StatusPill } from '../shared/StatusPill';
 import { calculateJobSheetProgress } from '../../utils/vehicleUtils';
 import { useTechnicianStation } from '../../hooks/useTechnicianStation';
+import { usePinnedVehicles } from '../../hooks/usePinnedVehicles';
 import { Vehicle, VehicleTask } from '../../types/vehicle';
 import { useTheme } from '../../context/ThemeContext';
+import { useVehicles } from '../../context/VehicleContext';
 
 export const TechnicianStationView: React.FC = React.memo(() => {
   const {
@@ -23,22 +26,36 @@ export const TechnicianStationView: React.FC = React.memo(() => {
     currentRole,
     canMarkTaskDone,
     canTransferVehicle,
-    canControlTimer,
+    canStartWork,
     toggleExpand,
     toggleTaskCompletion,
-    toggleStageTimer,
+    startStageWork,
     setSelectedVehicle,
     setPendingTransfer,
     handleRequestTransfer,
     handleConfirmTransfer,
   } = useTechnicianStation();
   const { colors, isDark } = useTheme();
+  const { togglePin, isPinned } = usePinnedVehicles();
+  const { showUrgentNote } = useVehicles();
+
+  // Sort: urgent first, then pinned, then by intake time
+  const sortedBayVehicles = [...bayVehicles].sort((a, b) => {
+    if (a.is_urgent && !b.is_urgent) return -1;
+    if (!a.is_urgent && b.is_urgent) return 1;
+    if (isPinned(a.id) && !isPinned(b.id)) return -1;
+    if (!isPinned(a.id) && isPinned(b.id)) return 1;
+    return 0;
+  });
 
   const renderVehicleItem = ({ item: vehicle }: { item: Vehicle }) => {
     const { completedCount, totalRequired: totalReq, percent } = calculateJobSheetProgress(vehicle.tasks);
     const isExpanded = Boolean(expandedCards[vehicle.id]);
-    const isVehiclePaused = Boolean(vehicle.is_paused || (vehicle.stage_logs[vehicle.stage_logs.length - 1]?.is_paused));
-    const canToggleTimer = canControlTimer(activeBay);
+    const lastStageLog = vehicle.stage_logs[vehicle.stage_logs.length - 1];
+    const isStageIdle = Boolean(lastStageLog && !lastStageLog.exited_at && !lastStageLog.work_started_at);
+    const canStart = canStartWork(activeBay);
+    const isUrgent = Boolean(vehicle.is_urgent);
+    const vehiclePinned = isPinned(vehicle.id);
 
     // Filter ONLY the task assigned to this active bay
     const bayTask = vehicle.tasks.find(t => t.task_type === activeTaskType && t.is_required) || vehicle.tasks.find(t => t.task_type === activeTaskType);
@@ -69,20 +86,26 @@ export const TechnicianStationView: React.FC = React.memo(() => {
         style={[
           styles.vehicleCardWrapper,
           {
-            backgroundColor: isCurrentTaskDone
+            backgroundColor: isUrgent
+              ? (isDark ? 'rgba(239, 68, 68, 0.07)' : 'rgba(239, 68, 68, 0.04)')
+              : isCurrentTaskDone
               ? (isDark ? 'rgba(16, 185, 129, 0.05)' : 'rgba(16, 185, 129, 0.03)')
-              : isVehiclePaused
+              : isStageIdle
               ? (isDark ? 'rgba(245, 158, 11, 0.05)' : 'rgba(245, 158, 11, 0.03)')
               : colors.surface,
-            borderColor: isCurrentTaskDone
+            borderColor: isUrgent
+              ? 'rgba(239, 68, 68, 0.4)'
+              : isCurrentTaskDone
               ? colors.successBorder
-              : isVehiclePaused
+              : isStageIdle
               ? colors.warningBorder
               : colors.borderGlass,
             borderLeftWidth: 4,
-            borderLeftColor: isCurrentTaskDone
+            borderLeftColor: isUrgent
+              ? '#ef4444'
+              : isCurrentTaskDone
               ? colors.success
-              : isVehiclePaused
+              : isStageIdle
               ? colors.warning
               : colors.primary,
           }
@@ -99,50 +122,61 @@ export const TechnicianStationView: React.FC = React.memo(() => {
             <View style={styles.plateWithStatusGroup}>
               <LicensePlate number={vehicle.vehicle_no} size="md" />
               {isCurrentTaskDone && (
-                <View style={[styles.readyBadge, { backgroundColor: colors.successDim, borderColor: colors.successBorder }]}>
-                  <CheckCircle2 size={11} color={colors.success} />
-                  <Text style={[styles.readyBadgeText, { color: colors.success }]}>TASK DONE</Text>
-                </View>
+                <StatusPill variant="success" label="TASK DONE" IconComponent={CheckCircle2} size="md" />
+              )}
+              {isUrgent && (
+                <TouchableOpacity
+                  onPress={() => showUrgentNote(vehicle.vehicle_no, vehicle.urgent_note)}
+                  hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                >
+                  <StatusPill variant="danger" label="⚡ URGENT" size="md" />
+                </TouchableOpacity>
               )}
             </View>
 
             <View style={styles.headerRightGroup}>
-              {/* Live Station Timer Pill */}
+              {/* Live Station Timer Pill (Amber if Idle, Cyan if Active) */}
               <TimerPill
                 elapsedText={elapsedTimes[vehicle.id] || '0m 00s'}
-                variant={isVehiclePaused ? 'amber' : 'cyan'}
-                isPaused={isVehiclePaused}
+                variant={isStageIdle ? 'amber' : 'cyan'}
+                isPaused={isStageIdle}
                 size="md"
               />
 
-              {/* Start / Stop Timer Button */}
+              {/* Start Work Action Button — Only shown when IDLE */}
+              {isStageIdle ? (
+                <TouchableOpacity
+                  style={[
+                    styles.startWorkBtn,
+                    !canStart && { opacity: 0.4 }
+                  ]}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    if (canStart) {
+                      startStageWork(vehicle.id, techName);
+                    }
+                  }}
+                  activeOpacity={0.7}
+                  disabled={!canStart}
+                >
+                  <Play size={11} color="#ffffff" fill="#ffffff" />
+                  <Text style={styles.startWorkBtnText}>Start Work</Text>
+                </TouchableOpacity>
+              ) : (
+                <StatusPill variant="timer" label="IN PROGRESS" size="md" />
+              )}
+
+              {/* Pin Toggle Button */}
               <TouchableOpacity
-                style={[
-                  styles.timerControlBtn,
-                  isVehiclePaused
-                    ? { backgroundColor: colors.successDim, borderColor: colors.successBorder }
-                    : { backgroundColor: colors.warningDim, borderColor: colors.warningBorder },
-                  !canToggleTimer && { opacity: 0.4 }
-                ]}
-                onPress={(e) => {
-                  if (canToggleTimer) {
-                    toggleStageTimer(vehicle.id, !isVehiclePaused, techName);
-                  }
-                }}
-                activeOpacity={0.7}
-                disabled={!canToggleTimer}
+                style={styles.pinBtn}
+                onPress={() => togglePin(vehicle.id)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                {isVehiclePaused ? (
-                  <>
-                    <Play size={12} color={colors.success} />
-                    <Text style={[styles.timerControlText, { color: colors.success }]}>Start</Text>
-                  </>
-                ) : (
-                  <>
-                    <Pause size={12} color={colors.warningLight} />
-                    <Text style={[styles.timerControlText, { color: colors.warningLight }]}>Stop</Text>
-                  </>
-                )}
+                <Bookmark
+                  size={16}
+                  color={vehiclePinned ? '#f59e0b' : colors.textMuted}
+                  fill={vehiclePinned ? '#f59e0b' : 'transparent'}
+                />
               </TouchableOpacity>
 
               {/* Expand / Collapse Chevron Icon */}
@@ -161,9 +195,7 @@ export const TechnicianStationView: React.FC = React.memo(() => {
                   {completedCount}/{totalReq} Tasks ({percent}%)
                 </Text>
                 {isCurrentTaskDone && (
-                  <View style={styles.tinyDoneIconGroup}>
-                    <CheckCircle2 size={12} color={colors.success} />
-                  </View>
+                  <StatusPill variant="success" label="✓" size="sm" />
                 )}
               </View>
             </View>
@@ -176,6 +208,19 @@ export const TechnicianStationView: React.FC = React.memo(() => {
                   {/* EXPANDED CONTENT AREA */}
                   {isExpanded && (
                     <>
+                      {/* Priority Alert Callout Banner if Urgent */}
+                      {isUrgent && (
+                        <View style={styles.urgentCalloutBox}>
+                          <View style={styles.urgentCalloutHeader}>
+                            <AlertOctagon size={14} color="#ef4444" />
+                            <Text style={styles.urgentCalloutTitle}>PRIORITY / URGENT VEHICLE</Text>
+                          </View>
+                          {Boolean(vehicle.urgent_note) && (
+                            <Text style={styles.urgentCalloutText}>{vehicle.urgent_note}</Text>
+                          )}
+                        </View>
+                      )}
+
                       {/* Vehicle Remarks / Special Instructions Box (Before Job Sheet Tasks) */}
                       {Boolean(vehicle.remarks && vehicle.remarks.trim()) && (
                         <View style={styles.remarksSection}>
@@ -189,11 +234,21 @@ export const TechnicianStationView: React.FC = React.memo(() => {
 
                       {/* Station Assigned Task Checklist */}
                       <View style={[styles.tasksSection, { borderTopColor: colors.borderGlass }]}>
-                        <Text style={[styles.sectionHeaderLabel, { color: colors.textMuted }]}>JOB SHEET TASKS ({vehicle.tasks.filter(t => t.is_required).length}):</Text>
+                        <View style={styles.tasksSectionHeaderRow}>
+                          <Text style={[styles.sectionHeaderLabel, { color: colors.textMuted }]}>
+                            JOB SHEET TASKS ({vehicle.tasks.filter(t => t.is_required).length}):
+                          </Text>
+                          {isStageIdle && (
+                            <View style={styles.idleNoticeBadge}>
+                              <Lock size={10} color="#f59e0b" />
+                              <Text style={styles.idleNoticeText}>LOCKED · START WORK TO EDIT</Text>
+                            </View>
+                          )}
+                        </View>
                         {vehicle.tasks.filter(t => t.is_required).map(task => {
                           const isVehicleInInspectionOrFinished = vehicle.current_zone === 'inspection' || vehicle.is_finished;
                           const isMyBayTask = task.task_type === activeTaskType;
-                          const isEditable = isMyBayTask && canMarkTaskDone(activeBay) && !isVehicleInInspectionOrFinished;
+                          const isEditable = isMyBayTask && canMarkTaskDone(activeBay) && !isVehicleInInspectionOrFinished && !isStageIdle;
 
                           return (
                             <TouchableOpacity
@@ -243,24 +298,46 @@ export const TechnicianStationView: React.FC = React.memo(() => {
                                   </Text>
                                 </View>
                               ) : (
-                                <View style={[styles.lockedTaskBadge, currentRole === 'supervisor' && styles.supervisorLockedBadge]}>
-                                  <Lock size={12} color={task.is_completed ? "#10b981" : currentRole === 'supervisor' ? "#38bdf8" : "#64748b"} />
-                                  <Text style={[styles.lockedTaskBadgeText, task.is_completed && styles.lockedTaskDoneText, currentRole === 'supervisor' && styles.supervisorLockedText]}>
-                                    {task.is_completed
-                                      ? 'DONE ✓'
-                                      : isVehicleInInspectionOrFinished
-                                      ? 'LOCKED'
-                                      : currentRole === 'supervisor'
-                                      ? 'READ-ONLY'
-                                      : task.task_type === 'general_service'
-                                      ? 'TECH 1 ONLY'
-                                      : task.task_type === 'wheel_alignment'
-                                      ? 'TECH 2 ONLY'
-                                      : task.task_type === 'hoist_service'
-                                      ? 'TECH 3 ONLY'
-                                      : 'OTHER TECH'}
-                                  </Text>
-                                </View>
+                                 <View style={[
+                                   styles.lockedTaskBadge,
+                                   (isStageIdle && isMyBayTask) && styles.idleLockedBadge,
+                                   currentRole === 'supervisor' && styles.supervisorLockedBadge
+                                 ]}>
+                                   <Lock
+                                     size={12}
+                                     color={
+                                       task.is_completed
+                                         ? "#10b981"
+                                         : (isStageIdle && isMyBayTask)
+                                         ? "#f59e0b"
+                                         : currentRole === 'supervisor'
+                                         ? "#38bdf8"
+                                         : "#64748b"
+                                     }
+                                   />
+                                   <Text style={[
+                                     styles.lockedTaskBadgeText,
+                                     task.is_completed && styles.lockedTaskDoneText,
+                                     (isStageIdle && isMyBayTask && !task.is_completed) && styles.idleLockedText,
+                                     currentRole === 'supervisor' && styles.supervisorLockedText
+                                   ]}>
+                                     {task.is_completed
+                                       ? 'DONE ✓'
+                                       : isVehicleInInspectionOrFinished
+                                       ? 'LOCKED'
+                                       : (isStageIdle && isMyBayTask)
+                                       ? 'START WORK FIRST'
+                                       : currentRole === 'supervisor'
+                                       ? 'READ-ONLY'
+                                       : task.task_type === 'general_service'
+                                       ? 'TECH 1 ONLY'
+                                       : task.task_type === 'wheel_alignment'
+                                       ? 'TECH 2 ONLY'
+                                       : task.task_type === 'hoist_service'
+                                       ? 'TECH 3 ONLY'
+                                       : 'OTHER TECH'}
+                                   </Text>
+                                 </View>
                               )}
                             </TouchableOpacity>
                           );
@@ -373,7 +450,7 @@ export const TechnicianStationView: React.FC = React.memo(() => {
         />
       ) : (
         <FlatList
-          data={bayVehicles}
+          data={sortedBayVehicles}
           keyExtractor={(item) => item.id}
           renderItem={renderVehicleItem}
           initialNumToRender={8}
@@ -437,10 +514,8 @@ const styles = StyleSheet.create({
   cardsGrid: { gap: 16 },
   vehicleCardWrapper: { backgroundColor: '#111827', borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)', padding: 16, gap: 14, ...(Platform.OS === 'web' ? ({ boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)' } as any) : { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 }) },
   cardHeaderArea: { gap: 12 },
-  cardTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 },
-  plateWithStatusGroup: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-  readyBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1 },
-  readyBadgeText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
+  cardTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  plateWithStatusGroup: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   plateWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#facc15', borderRadius: 6, borderWidth: 1, borderColor: '#eab308', overflow: 'hidden' },
   plateLeftBar: { backgroundColor: '#000000', paddingHorizontal: 6, paddingVertical: 4, alignItems: 'center', justifyContent: 'center' },
   plateFlag: { fontSize: 10 },
@@ -455,26 +530,30 @@ const styles = StyleSheet.create({
   dispatchHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   auditLogLink: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 6, paddingVertical: 2 },
   auditLogLinkText: { color: '#38bdf8', fontSize: 11, fontWeight: '600', textDecorationLine: 'underline' },
-  timerControlBtn: {
+  startWorkBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
+    backgroundColor: '#10b981',
+    borderColor: '#059669',
     borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    minHeight: 24,
+    borderRadius: 5,
   },
-  timerControlText: {
+  startWorkBtnText: {
+    color: '#ffffff',
     fontSize: 11,
     fontWeight: '800',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    letterSpacing: 0.5,
   },
-  timerPill: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(14, 165, 233, 0.15)', borderWidth: 1, borderColor: 'rgba(14, 165, 233, 0.3)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  timerPillText: { color: '#38bdf8', fontSize: 12, fontWeight: '700', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
   progressContainer: { gap: 4 },
   progressLabelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   progressLabelText: { color: '#64748b', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
   progressPercentGroup: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  tinyDoneIconGroup: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(16, 185, 129, 0.15)', borderRadius: 10, padding: 2 },
   progressPercentText: { color: '#38bdf8', fontSize: 11, fontWeight: '700' },
   progressBarBg: { height: 6, backgroundColor: 'rgba(255, 255, 255, 0.08)', borderRadius: 3, overflow: 'hidden' },
   progressBarFill: { height: '100%', backgroundColor: '#0ea5e9', borderRadius: 3 },
@@ -523,4 +602,37 @@ const styles = StyleSheet.create({
   cancelBtnText: { color: '#94a3b8', fontSize: 13, fontWeight: '700' },
   confirmDispatchBtn: { paddingHorizontal: 18, paddingVertical: 10, borderRadius: 8, backgroundColor: '#0ea5e9' },
   confirmDispatchBtnText: { color: '#ffffff', fontSize: 13, fontWeight: '800' },
+  urgentBadge: { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderColor: 'rgba(239, 68, 68, 0.4)', borderWidth: 1, borderRadius: 20, paddingHorizontal: 7, paddingVertical: 2 },
+  urgentBadgeText: { color: '#ef4444', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
+  pinBtn: { width: 28, height: 28, borderRadius: 6, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.08)', alignItems: 'center', justifyContent: 'center' },
+  tasksSectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
+  idleNoticeBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(245, 158, 11, 0.12)', borderWidth: 1, borderColor: 'rgba(245, 158, 11, 0.3)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
+  idleNoticeText: { color: '#fbbf24', fontSize: 9.5, fontWeight: '800', letterSpacing: 0.5 },
+  idleLockedBadge: { backgroundColor: 'rgba(245, 158, 11, 0.1)', borderColor: 'rgba(245, 158, 11, 0.3)' },
+  idleLockedText: { color: '#fbbf24' },
+  urgentCalloutBox: {
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.35)',
+    borderRadius: 10,
+    padding: 12,
+    gap: 6,
+  },
+  urgentCalloutHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  urgentCalloutTitle: {
+    color: '#ef4444',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+  urgentCalloutText: {
+    color: '#fca5a5',
+    fontSize: 12.5,
+    fontWeight: '600',
+    lineHeight: 18,
+  },
 });

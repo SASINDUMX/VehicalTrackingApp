@@ -9,6 +9,7 @@ import {
 } from 'lucide-react-native';
 
 import { LicensePlate } from './LicensePlate';
+import { StatusPill } from './StatusPill';
 import { getStageDurationBreakdown, formatDurationString, getActiveStageNetSeconds } from '../../utils/vehicleUtils';
 import { getNetWorkingSeconds, getCurrentActiveBreak } from '../../utils/workshopHoursUtils';
 import { useTheme } from '../../context/ThemeContext';
@@ -21,7 +22,7 @@ const getStageOrder = (themeColors: any) => [
 ];
 
 export const VehicleDetailsModal: React.FC = () => {
-  const { selectedVehicle, setSelectedVehicle, transferVehicleZone, updateVehicleJobOrder, deleteVehicle } = useVehicles();
+  const { selectedVehicle, setSelectedVehicle, transferVehicleZone, updateVehicleJobOrder, deleteVehicle, updateUrgency, showUrgentNote } = useVehicles();
   const { canRelocateVehicle, canAddVehicle, canDeleteVehicle, displayName } = usePermissions();
   const { colors, isDark } = useTheme();
 
@@ -33,6 +34,8 @@ export const VehicleDetailsModal: React.FC = () => {
   const [activeStageDuration, setActiveStageDuration] = useState<string>('0m 00s');
   const [totalElapsedStr, setTotalElapsedStr] = useState<string>('0m 00s');
   const [grossElapsedStr, setGrossElapsedStr] = useState<string>('0m 00s');
+  const [localIsUrgent, setLocalIsUrgent] = useState<boolean>(false);
+  const [localUrgentNote, setLocalUrgentNote] = useState<string>('');
 
   useEffect(() => {
     if (selectedVehicle) {
@@ -42,8 +45,10 @@ export const VehicleDetailsModal: React.FC = () => {
       setSelectedTasks(activeTaskTypes);
       setRemarks(selectedVehicle.remarks || '');
       setIsEditing(false);
+      setLocalIsUrgent(selectedVehicle.is_urgent || false);
+      setLocalUrgentNote(selectedVehicle.urgent_note || '');
     }
-  }, [selectedVehicle]);
+  }, [selectedVehicle?.id]);
 
   // Helper for Sri Lanka Standard Time (SLST) 12-hour AM/PM format
   const formatSLSTime = (dateStr?: string | null) => {
@@ -81,21 +86,21 @@ export const VehicleDetailsModal: React.FC = () => {
       const pausedSeconds = selectedVehicle.paused_seconds || (lastLog && lastLog.paused_seconds) || 0;
 
       if (lastLog && !lastLog.exited_at) {
-        const stageNetSec = getActiveStageNetSeconds(
-          lastLog.entered_at,
-          null,
-          isPaused,
-          pausedAt,
-          pausedSeconds
-        );
-        const stageTimeStr = formatDurationString(stageNetSec, true);
-        const activeBreak = getCurrentActiveBreak(now);
-        if (isPaused) {
-          setActiveStageDuration(`⏸ ${stageTimeStr} (Paused)`);
-        } else if (activeBreak) {
-          setActiveStageDuration(`⏸ ${stageTimeStr} (${activeBreak.name})`);
+        if (!lastLog.work_started_at) {
+          const enterMs = new Date(lastLog.entered_at).getTime();
+          const idleSec = Math.max(0, Math.floor((now.getTime() - enterMs) / 1000));
+          const timeStr = formatDurationString(idleSec, true);
+          setActiveStageDuration(`IDLE · ${timeStr}`);
         } else {
-          setActiveStageDuration(stageTimeStr);
+          const workStartMs = new Date(lastLog.work_started_at).getTime();
+          const activeSec = Math.max(0, Math.floor((now.getTime() - workStartMs) / 1000));
+          const timeStr = formatDurationString(activeSec, true);
+          const activeBreak = getCurrentActiveBreak(now);
+          if (activeBreak) {
+            setActiveStageDuration(`⏸ ${timeStr} (${activeBreak.name})`);
+          } else {
+            setActiveStageDuration(timeStr);
+          }
         }
       } else {
         setActiveStageDuration('0m 00s');
@@ -159,6 +164,14 @@ export const VehicleDetailsModal: React.FC = () => {
           <View style={[styles.header, { borderBottomColor: colors.borderGlass }]}>
             <View style={styles.headerLeftRow}>
               <LicensePlate number={selectedVehicle.vehicle_no} size="md" />
+              {Boolean(selectedVehicle.is_urgent) && (
+                <TouchableOpacity
+                  onPress={() => showUrgentNote(selectedVehicle.vehicle_no, selectedVehicle.urgent_note)}
+                  hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                >
+                  <StatusPill variant="danger" label="⚡ URGENT" size="md" />
+                </TouchableOpacity>
+              )}
             </View>
 
             <View style={styles.headerRightRow}>
@@ -407,13 +420,19 @@ export const VehicleDetailsModal: React.FC = () => {
                       let totalNetSec = 0;
                       let totalGrossSec = 0;
                       const breakNotes: string[] = [];
-                      const isPaused = Boolean(selectedVehicle.is_paused || (logsForZone[logsForZone.length - 1]?.is_paused));
+                      const latestLog = logsForZone[logsForZone.length - 1];
+                      const isStageIdle = Boolean(isCurrent && latestLog && !latestLog.exited_at && !latestLog.work_started_at);
 
                       logsForZone.forEach(l => {
-                        const isLogPaused = Boolean(l.is_paused || (isCurrent && selectedVehicle.is_paused));
-                        const logPausedAt = l.paused_at || (isCurrent ? selectedVehicle.paused_at : null);
-                        const logPausedSec = l.paused_seconds || (isCurrent ? selectedVehicle.paused_seconds : 0) || 0;
-                        const breakdown = getStageDurationBreakdown(l.entered_at, l.exited_at, isLogPaused, logPausedAt, logPausedSec);
+                        const breakdown = getStageDurationBreakdown(
+                          l.entered_at,
+                          l.exited_at,
+                          false,
+                          null,
+                          0,
+                          l.work_started_at,
+                          l.idle_seconds
+                        );
                         totalNetSec += breakdown.netSec;
                         totalGrossSec += breakdown.grossSec;
                         if (breakdown.breakNote) {
@@ -454,35 +473,17 @@ export const VehicleDetailsModal: React.FC = () => {
                                 {stageDef.name}
                               </Text>
                               {isCurrent ? (
-                                <View style={[
-                                  styles.currentBadge,
-                                  isPaused
-                                    ? { backgroundColor: colors.warningDim, borderColor: colors.warningBorder }
-                                    : { backgroundColor: `${stageDef.color}25`, borderColor: stageDef.color }
-                                ]}>
-                                  <View style={[
-                                    styles.pulsingDot,
-                                    { backgroundColor: isPaused ? colors.warning : stageDef.color }
-                                  ]} />
-                                  <Text style={[
-                                    styles.currentBadgeText,
-                                    { color: isPaused ? colors.warning : stageDef.color }
-                                  ]}>
-                                    {isPaused ? 'PAUSED' : 'ACTIVE'}
-                                  </Text>
-                                </View>
+                                <StatusPill
+                                  variant={isStageIdle ? 'warning' : 'timer'}
+                                  label={isStageIdle ? 'IDLE' : 'ACTIVE'}
+                                  size="sm"
+                                />
                               ) : isCompleted ? (
-                                <View style={[styles.doneBadge, { backgroundColor: colors.successDim, borderColor: colors.successBorder }]}>
-                                  <Text style={[styles.doneBadgeText, { color: colors.success }]}>COMPLETED</Text>
-                                </View>
+                                <StatusPill variant="success" label="COMPLETED" size="sm" />
                               ) : isCancelled ? (
-                                <View style={[styles.cancelledBadge, { backgroundColor: colors.dangerDim, borderColor: colors.dangerBorder }]}>
-                                  <Text style={[styles.cancelledBadgeText, { color: colors.danger }]}>CANCELLED</Text>
-                                </View>
+                                <StatusPill variant="danger" label="CANCELLED" size="sm" />
                               ) : (
-                                <View style={[styles.upcomingBadge, { backgroundColor: colors.surfaceOverlay, borderColor: colors.borderGlass }]}>
-                                  <Text style={[styles.upcomingBadgeText, { color: colors.textMuted }]}>PENDING</Text>
-                                </View>
+                                <StatusPill variant="neutral" label="PENDING" size="sm" />
                               )}
                             </View>
 
@@ -490,7 +491,7 @@ export const VehicleDetailsModal: React.FC = () => {
                               <View style={styles.timeTag}>
                                 <Clock size={12} color={isCurrent ? stageDef.color : isCancelled ? colors.danger : colors.textMuted} />
                                 <Text style={[styles.timeTagText, { color: colors.textSecondary }, isCurrent && { color: stageDef.color, fontWeight: '700' }, isCancelled && { color: colors.danger }]}>
-                                  {isCurrent ? `Active: ${spentStr}` : isCompleted ? `Spent: ${spentStr}` : isCancelled ? 'Bypassed / Cancelled' : 'Pending'}
+                                  {isCurrent ? `${isStageIdle ? 'Queue' : 'Active'}: ${spentStr}` : isCompleted ? `Spent: ${spentStr}` : isCancelled ? 'Bypassed / Cancelled' : 'Pending'}
                                 </Text>
                               </View>
                             </View>
@@ -499,6 +500,7 @@ export const VehicleDetailsModal: React.FC = () => {
                             {logsForZone.map((l, lIdx) => (
                               <Text key={lIdx} style={styles.logSubText}>
                                 • Entered {formatSLSTime(l.entered_at)}
+                                {l.work_started_at ? ` · Started ${formatSLSTime(l.work_started_at)}` : ''}
                                 {l.exited_at ? ` → Exited ${formatSLSTime(l.exited_at)}` : ' (Current)'}
                               </Text>
                             ))}
@@ -543,7 +545,44 @@ export const VehicleDetailsModal: React.FC = () => {
                 </TouchableOpacity>
               </View>
             ) : (
-              <View style={styles.footerStandardRow}>
+              <>
+                {/* Urgency Section — Supervisor Only */}
+                {canDeleteVehicle && (
+                  <View style={[styles.urgencySection, {
+                    borderColor: localIsUrgent ? 'rgba(239,68,68,0.3)' : colors.borderGlass,
+                    backgroundColor: localIsUrgent ? 'rgba(239,68,68,0.05)' : 'transparent'
+                  }]}>
+                    <TouchableOpacity
+                      style={styles.urgencyToggleRow}
+                      onPress={() => {
+                        const next = !localIsUrgent;
+                        setLocalIsUrgent(next);
+                        updateUrgency(selectedVehicle.id, next, localUrgentNote);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <AlertTriangle size={14} color={localIsUrgent ? '#ef4444' : colors.textMuted} />
+                      <Text style={[styles.urgencyToggleLabel, { color: localIsUrgent ? '#ef4444' : colors.textSecondary }]}>
+                        {localIsUrgent ? '⚡ URGENT — Tap to clear' : 'Mark as Urgent'}
+                      </Text>
+                    </TouchableOpacity>
+                    {localIsUrgent && (
+                      <TextInput
+                        style={[styles.urgencyNoteInput, { color: colors.textPrimary, borderColor: 'rgba(239,68,68,0.3)', backgroundColor: 'rgba(239,68,68,0.05)' }]}
+                        value={localUrgentNote}
+                        onChangeText={(t) => {
+                          setLocalUrgentNote(t);
+                          updateUrgency(selectedVehicle.id, true, t);
+                        }}
+                        placeholder="Urgency note..."
+                        placeholderTextColor={colors.textMuted}
+                        multiline
+                      />
+                    )}
+                  </View>
+                )}
+
+                <View style={styles.footerStandardRow}>
                 <View style={[styles.totalTimePill, { backgroundColor: colors.primaryDim, borderColor: colors.primaryBorder }]}>
                   <Clock size={15} color={colors.primaryLight} />
                   <View style={styles.totalTimeTextCol}>
@@ -574,6 +613,7 @@ export const VehicleDetailsModal: React.FC = () => {
                   </TouchableOpacity>
                 </View>
               </View>
+              </>
             )}
           </View>
 
@@ -708,15 +748,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
   },
-  currentBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
-  pulsingDot: { width: 6, height: 6, borderRadius: 3 },
-  currentBadgeText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
-  doneBadge: { backgroundColor: 'rgba(16, 185, 129, 0.15)', borderWidth: 1, borderColor: 'rgba(16, 185, 129, 0.3)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
-  doneBadgeText: { color: '#10b981', fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
-  cancelledBadge: { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
-  cancelledBadgeText: { color: '#fca5a5', fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
-  upcomingBadge: { backgroundColor: 'rgba(255, 255, 255, 0.03)', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.08)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
-  upcomingBadgeText: { color: '#64748b', fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
   stageTimeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   timeTag: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   timeTagText: { color: '#94a3b8', fontSize: 12, fontWeight: '500' },
@@ -746,6 +777,10 @@ const styles = StyleSheet.create({
   cancelEditText: { color: '#94a3b8', fontSize: 13, fontWeight: '600' },
   saveEditBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#0ea5e9', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
   saveEditText: { color: '#ffffff', fontSize: 13, fontWeight: '700' },
+  urgencySection: { borderWidth: 1, borderRadius: 12, padding: 12, marginHorizontal: 16, marginBottom: 8, gap: 8 },
+  urgencyToggleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  urgencyToggleLabel: { fontSize: 13, fontWeight: '700', flex: 1 },
+  urgencyNoteInput: { borderWidth: 1, borderRadius: 8, padding: 8, fontSize: 13, minHeight: 48, textAlignVertical: 'top' },
 });
 
 

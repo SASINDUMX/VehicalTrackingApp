@@ -1,12 +1,15 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform, ActivityIndicator } from 'react-native';
-import { Car, FileCheck, CheckCircle } from 'lucide-react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform, ActivityIndicator, Alert } from 'react-native';
+import { Car, FileCheck, CheckCircle, Bookmark } from 'lucide-react-native';
 import { LicensePlate } from '../shared/LicensePlate';
 import { EmptyStateCard } from '../shared/EmptyStateCard';
 import { TimerPill } from '../shared/TimerPill';
+import { StatusPill } from '../shared/StatusPill';
 import { calculateJobSheetProgress, getTaskTypeForBay } from '../../utils/vehicleUtils';
 import { useFloorPlan } from '../../hooks/useFloorPlan';
+import { usePinnedVehicles } from '../../hooks/usePinnedVehicles';
 import { useTheme } from '../../context/ThemeContext';
+import { useVehicles } from '../../context/VehicleContext';
 
 export const FloorPlan2D: React.FC = React.memo(() => {
   const {
@@ -20,6 +23,8 @@ export const FloorPlan2D: React.FC = React.memo(() => {
     getVehiclesInZone,
   } = useFloorPlan();
   const { colors, isDark } = useTheme();
+  const { togglePin, isPinned } = usePinnedVehicles();
+  const { showUrgentNote } = useVehicles();
 
   if (isSearchActive && totalMatchingVehicles === 0) {
     return (
@@ -75,13 +80,21 @@ export const FloorPlan2D: React.FC = React.memo(() => {
                         </View>
                       ) : (
                         <View style={styles.bayVehicleContainer}>
-                          {bayVehicles.map((vehicle) => {
+                          {[...bayVehicles].sort((a, b) => {
+                            if (a.is_urgent && !b.is_urgent) return -1;
+                            if (!a.is_urgent && b.is_urgent) return 1;
+                            if (isPinned(a.id) && !isPinned(b.id)) return -1;
+                            if (!isPinned(a.id) && isPinned(b.id)) return 1;
+                            return 0;
+                          }).map((vehicle) => {
                             const { completedCount, totalRequired: totalReq, percent } = calculateJobSheetProgress(vehicle.tasks);
                             const currentBayTaskType = getTaskTypeForBay(vehicle.current_zone);
                             const currentTask = vehicle.tasks.find(t => t.task_type === currentBayTaskType);
                             const isCurrentTaskDone = Boolean(currentTask && currentTask.is_completed);
-
-                            const isVehiclePaused = Boolean(vehicle.is_paused || (vehicle.stage_logs[vehicle.stage_logs.length - 1]?.is_paused));
+                            const lastStageLog = vehicle.stage_logs[vehicle.stage_logs.length - 1];
+                            const isStageIdle = Boolean(lastStageLog && !lastStageLog.exited_at && !lastStageLog.work_started_at);
+                            const isUrgent = Boolean(vehicle.is_urgent);
+                            const vehiclePinned = isPinned(vehicle.id);
 
                             return (
                               <TouchableOpacity
@@ -89,20 +102,26 @@ export const FloorPlan2D: React.FC = React.memo(() => {
                                 style={[
                                   styles.spatialVehicleCard,
                                   {
-                                    backgroundColor: isCurrentTaskDone
+                                    backgroundColor: isUrgent
+                                      ? (isDark ? 'rgba(239, 68, 68, 0.07)' : 'rgba(239, 68, 68, 0.04)')
+                                      : isCurrentTaskDone
                                       ? (isDark ? 'rgba(16, 185, 129, 0.08)' : 'rgba(16, 185, 129, 0.04)')
-                                      : isVehiclePaused
+                                      : isStageIdle
                                       ? (isDark ? 'rgba(245, 158, 11, 0.08)' : 'rgba(245, 158, 11, 0.04)')
                                       : colors.surface,
-                                    borderColor: isCurrentTaskDone
+                                    borderColor: isUrgent
+                                      ? 'rgba(239, 68, 68, 0.4)'
+                                      : isCurrentTaskDone
                                       ? colors.successBorder
-                                      : isVehiclePaused
+                                      : isStageIdle
                                       ? colors.warningBorder
                                       : colors.borderGlass,
                                     borderLeftWidth: 3,
-                                    borderLeftColor: isCurrentTaskDone
+                                    borderLeftColor: isUrgent
+                                      ? '#ef4444'
+                                      : isCurrentTaskDone
                                       ? colors.success
-                                      : isVehiclePaused
+                                      : isStageIdle
                                       ? colors.warning
                                       : bay.color,
                                   }
@@ -111,13 +130,39 @@ export const FloorPlan2D: React.FC = React.memo(() => {
                                 activeOpacity={0.8}
                               >
                               <View style={styles.cardHeaderTopRow}>
-                                <LicensePlate number={vehicle.vehicle_no} size="sm" />
-                                <TimerPill
-                                  elapsedText={elapsedTimes[vehicle.id] || '0m 00s'}
-                                  variant={isCurrentTaskDone ? 'cyan' : isVehiclePaused ? 'amber' : 'cyan'}
-                                  isPaused={isVehiclePaused}
-                                  size="sm"
-                                />
+                                <View style={styles.plateWithStatusGroup}>
+                                  <LicensePlate number={vehicle.vehicle_no} size="sm" />
+                                  {isCurrentTaskDone && (
+                                    <StatusPill variant="success" label="TASK DONE" IconComponent={CheckCircle} size="sm" />
+                                  )}
+                                  {isUrgent && (
+                                    <TouchableOpacity
+                                      onPress={() => showUrgentNote(vehicle.vehicle_no, vehicle.urgent_note)}
+                                      hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                                    >
+                                      <StatusPill variant="danger" label="⚡ URGENT" size="sm" />
+                                    </TouchableOpacity>
+                                  )}
+                                </View>
+                                <View style={styles.headerRightGroup}>
+                                  <TimerPill
+                                    elapsedText={elapsedTimes[vehicle.id] || '0m 00s'}
+                                    variant={isStageIdle ? 'amber' : 'cyan'}
+                                    isPaused={isStageIdle}
+                                    size="sm"
+                                  />
+                                  <TouchableOpacity
+                                    style={styles.pinBtn}
+                                    onPress={() => togglePin(vehicle.id)}
+                                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                                  >
+                                    <Bookmark
+                                      size={14}
+                                      color={vehiclePinned ? '#f59e0b' : colors.textMuted}
+                                      fill={vehiclePinned ? '#f59e0b' : 'transparent'}
+                                    />
+                                  </TouchableOpacity>
+                                </View>
                               </View>
 
                               <View style={[styles.spatialProgressBar, { backgroundColor: colors.progressBg }]}>
@@ -134,9 +179,7 @@ export const FloorPlan2D: React.FC = React.memo(() => {
                                   {completedCount}/{totalReq} Tasks Done ({percent}%)
                                 </Text>
                                 {isCurrentTaskDone && (
-                                  <View style={styles.tinyDoneIconGroup}>
-                                    <CheckCircle size={12} color="#10b981" />
-                                  </View>
+                                  <StatusPill variant="success" label="✓" size="sm" />
                                 )}
                               </View>
                             </TouchableOpacity>
@@ -278,19 +321,21 @@ const styles = StyleSheet.create({
     width: '100%',
     gap: 6,
   },
+  plateWithStatusGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  headerRightGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   spatialProgressRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginTop: 2,
-  },
-  tinyDoneIconGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    borderRadius: 10,
-    padding: 2,
   },
   plateWrapper: {
     flexDirection: 'row',
@@ -444,6 +489,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textAlign: 'center',
   },
+  pinBtn: { width: 20, height: 20, borderRadius: 4, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.08)', alignItems: 'center', justifyContent: 'center' },
 });
 
 

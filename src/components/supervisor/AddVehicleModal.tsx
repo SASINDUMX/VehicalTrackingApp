@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Modal, View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Platform } from 'react-native';
 import { useVehicles } from '../../context/VehicleContext';
 import { BayZone, TaskType } from '../../types/vehicle';
-import { X, Car, Wrench, Shield, Navigation, Send, CheckSquare, Square } from 'lucide-react-native';
+import { X, Car, Wrench, Shield, Navigation, Send, CheckSquare, Square, AlertTriangle } from 'lucide-react-native';
 
 import { formatVehicleNoInput, isValidVehicleNo } from '../../utils/vehicleNumberUtils';
 import { useTheme } from '../../context/ThemeContext';
@@ -20,6 +20,8 @@ export const AddVehicleModal: React.FC = () => {
   const [targetZone, setTargetZone] = useState<BayZone>('workshop');
   const [assignedTech, setAssignedTech] = useState<string>('Technician 1 (General Workshop)');
   const [remarks, setRemarks] = useState<string>('');
+  const [isUrgent, setIsUrgent] = useState<boolean>(false);
+  const [urgentNote, setUrgentNote] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   if (!isAddModalOpen) return null;
@@ -68,10 +70,12 @@ export const AddVehicleModal: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      await addVehicle(vehicleNo.trim(), selectedTasks, targetZone, assignedTech, remarks);
+      await addVehicle(vehicleNo.trim(), selectedTasks, targetZone, assignedTech, remarks, isUrgent, urgentNote);
       setIsAddModalOpen(false);
       setVehicleNo('');
       setRemarks('');
+      setIsUrgent(false);
+      setUrgentNote('');
     } catch (err) {
       console.error('Failed to add vehicle:', err);
     } finally {
@@ -292,6 +296,53 @@ export const AddVehicleModal: React.FC = () => {
                 multiline
                 numberOfLines={3}
               />
+            </View>
+
+            {/* Urgent Toggle */}
+            <View style={[styles.formGroup, { marginTop: 4 }]}>
+              <TouchableOpacity
+                style={[
+                  styles.urgentToggleRow,
+                  {
+                    backgroundColor: isUrgent
+                      ? 'rgba(239, 68, 68, 0.08)'
+                      : (isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)'),
+                    borderColor: isUrgent ? 'rgba(239, 68, 68, 0.4)' : colors.borderGlass,
+                  }
+                ]}
+                onPress={() => setIsUrgent(p => !p)}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.urgentIconWrap, { backgroundColor: isUrgent ? 'rgba(239,68,68,0.15)' : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)') }]}>
+                  <AlertTriangle size={16} color={isUrgent ? '#ef4444' : colors.textMuted} />
+                </View>
+                <Text style={[styles.urgentLabel, { color: isUrgent ? '#ef4444' : colors.textSecondary }]}>
+                  Mark as URGENT
+                </Text>
+                <View style={[styles.urgentCheckbox, { borderColor: isUrgent ? '#ef4444' : colors.borderGlass, backgroundColor: isUrgent ? '#ef4444' : 'transparent' }]}>
+                  {isUrgent && <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>✓</Text>}
+                </View>
+              </TouchableOpacity>
+              {isUrgent && (
+                <TextInput
+                  style={[
+                    styles.input,
+                    styles.textArea,
+                    {
+                      backgroundColor: 'rgba(239, 68, 68, 0.05)',
+                      borderColor: 'rgba(239, 68, 68, 0.3)',
+                      color: colors.textPrimary,
+                      marginTop: 8,
+                    }
+                  ]}
+                  placeholder="Urgency reason (e.g. VIP customer, fleet vehicle, warranty recall)"
+                  placeholderTextColor={colors.textMuted}
+                  value={urgentNote}
+                  onChangeText={setUrgentNote}
+                  multiline
+                  numberOfLines={2}
+                />
+              )}
             </View>
           </ScrollView>
 
@@ -544,6 +595,32 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontSize: 14,
     letterSpacing: 0.5,
+  },
+  urgentToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    padding: 12,
+    borderRadius: 12,
+  },
+  urgentIconWrap: {
+    padding: 6,
+    borderRadius: 8,
+  },
+  urgentLabel: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  urgentCheckbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
 

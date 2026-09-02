@@ -26,25 +26,31 @@ const computeVehicleTimersMap = (vehicleList: any[]) => {
     const pausedSeconds = v.paused_seconds || (lastLog && lastLog.paused_seconds) || 0;
 
     if (lastLog && !lastLog.exited_at) {
-      const netSec = getActiveStageNetSeconds(
-        lastLog.entered_at,
-        null,
-        isPaused,
-        pausedAt,
-        pausedSeconds
-      );
-      const hours = Math.floor(netSec / 3600);
-      const mins = Math.floor((netSec % 3600) / 60);
-      const secs = netSec % 60;
-      const padSec = secs < 10 ? `0${secs}` : `${secs}`;
-      const timeStr = hours > 0 ? `${hours}h ${mins}m ${padSec}s` : `${mins}m ${padSec}s`;
-
-      if (isPaused) {
-        updated[v.id] = timeStr;
-      } else if (activeBreak) {
-        updated[v.id] = `⏸ ${timeStr} (${activeBreak.name})`;
+      if (!lastLog.work_started_at) {
+        // IDLE state: waiting for technician to start work
+        const enterMs = new Date(lastLog.entered_at).getTime();
+        const idleSec = Math.max(0, Math.floor((now.getTime() - enterMs) / 1000));
+        const hours = Math.floor(idleSec / 3600);
+        const mins = Math.floor((idleSec % 3600) / 60);
+        const secs = idleSec % 60;
+        const padSec = secs < 10 ? `0${secs}` : `${secs}`;
+        const timeStr = hours > 0 ? `${hours}h ${mins}m ${padSec}s` : `${mins}m ${padSec}s`;
+        updated[v.id] = `IDLE · ${timeStr}`;
       } else {
-        updated[v.id] = timeStr;
+        // ACTIVE state: technician work in progress
+        const workStartMs = new Date(lastLog.work_started_at).getTime();
+        const activeSec = Math.max(0, Math.floor((now.getTime() - workStartMs) / 1000));
+        const hours = Math.floor(activeSec / 3600);
+        const mins = Math.floor((activeSec % 3600) / 60);
+        const secs = activeSec % 60;
+        const padSec = secs < 10 ? `0${secs}` : `${secs}`;
+        const timeStr = hours > 0 ? `${hours}h ${mins}m ${padSec}s` : `${mins}m ${padSec}s`;
+
+        if (activeBreak) {
+          updated[v.id] = `⏸ ${timeStr} (${activeBreak.name})`;
+        } else {
+          updated[v.id] = timeStr;
+        }
       }
     } else {
       updated[v.id] = "0m 00s";
@@ -55,8 +61,8 @@ const computeVehicleTimersMap = (vehicleList: any[]) => {
 };
 
 export const useTechnicianStation = () => {
-  const { vehicles, currentRole, toggleTaskCompletion, transferVehicleZone, toggleStageTimer, isLoading, searchQuery, setSelectedVehicle } = useVehicles();
-  const { canMarkTaskDone, canTransferVehicle, canControlTimer } = usePermissions();
+  const { vehicles, currentRole, toggleTaskCompletion, transferVehicleZone, toggleStageTimer, startStageWork, isLoading, searchQuery, setSelectedVehicle } = useVehicles();
+  const { canMarkTaskDone, canTransferVehicle, canControlTimer, canStartWork } = usePermissions();
 
   const activeBay = getRoleBay(currentRole);
   const techName = getTechName(currentRole);
@@ -122,9 +128,11 @@ export const useTechnicianStation = () => {
     canMarkTaskDone,
     canTransferVehicle,
     canControlTimer,
+    canStartWork,
     toggleExpand,
     toggleTaskCompletion,
     toggleStageTimer,
+    startStageWork,
     setSelectedVehicle,
     setPendingTransfer,
     handleRequestTransfer,
