@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   ScrollView,
   Platform,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { useVehicles } from '../../context/VehicleContext';
 import { useTheme } from '../../context/ThemeContext';
@@ -33,16 +34,21 @@ import {
   formatDuration,
   getStageSecondsForZone,
   getVehicleTotalPausedSeconds,
+  getVehicleIdleAndActiveTotals,
 } from '../../utils/reportExportUtils';
 import { getNetWorkingSeconds } from '../../utils/workshopHoursUtils';
 import { LicensePlate } from '../shared/LicensePlate';
+import { StatusPill } from '../shared/StatusPill';
+import { Vehicle } from '../../types/vehicle';
 
 export const ServiceReportsModal: React.FC = () => {
-  const { isReportsModalOpen, setIsReportsModalOpen, vehicles } = useVehicles();
+  const { isReportsModalOpen, setIsReportsModalOpen, vehicles, fetchHistoricalVehicles } = useVehicles();
   const { colors, isDark } = useTheme();
 
   const [datePreset, setDatePreset] = useState<DateFilterPreset>('today');
   const [statusPreset, setStatusPreset] = useState<StatusFilterPreset>('all');
+  const [reportVehicles, setReportVehicles] = useState<Vehicle[]>(vehicles);
+  const [isLoadingReport, setIsLoadingReport] = useState<boolean>(false);
 
   const DATE_PRESETS: { id: DateFilterPreset; label: string }[] = [
     { id: 'today', label: 'Today' },
@@ -58,9 +64,30 @@ export const ServiceReportsModal: React.FC = () => {
     { id: 'in_progress', label: 'In Progress Only' },
   ];
 
+  // Fetch historical data whenever preset or modal visibility changes
+  useEffect(() => {
+    if (!isReportsModalOpen) return;
+    let isCancelled = false;
+
+    if (datePreset === 'today') {
+      setReportVehicles(vehicles);
+    } else {
+      setIsLoadingReport(true);
+      fetchHistoricalVehicles(datePreset)
+        .then(data => {
+          if (!isCancelled) setReportVehicles(data);
+        })
+        .finally(() => {
+          if (!isCancelled) setIsLoadingReport(false);
+        });
+    }
+
+    return () => { isCancelled = true; };
+  }, [isReportsModalOpen, datePreset, vehicles, fetchHistoricalVehicles]);
+
   const filteredVehicles = useMemo(() => {
-    return filterVehiclesForReport(vehicles, datePreset, statusPreset);
-  }, [vehicles, datePreset, statusPreset]);
+    return filterVehiclesForReport(reportVehicles, datePreset, statusPreset);
+  }, [reportVehicles, datePreset, statusPreset]);
 
   const kpis = useMemo(() => {
     return calculateReportKPIs(filteredVehicles);
@@ -209,7 +236,14 @@ export const ServiceReportsModal: React.FC = () => {
               </Text>
             </View>
 
-            {filteredVehicles.length === 0 ? (
+            {isLoadingReport ? (
+              <View style={styles.emptyTable}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text style={[styles.emptyTableText, { color: colors.textSecondary, marginTop: 8 }]}>
+                  Loading historical service records from server...
+                </Text>
+              </View>
+            ) : filteredVehicles.length === 0 ? (
               <View style={styles.emptyTable}>
                 <Car size={32} color={colors.textMuted} />
                 <Text style={[styles.emptyTableText, { color: colors.textMuted }]}>
@@ -224,7 +258,8 @@ export const ServiceReportsModal: React.FC = () => {
                     <Text style={[styles.thCell, styles.colPlate, { color: colors.textSecondary }]}>PLATE</Text>
                     <Text style={[styles.thCell, styles.colStatus, { color: colors.textSecondary }]}>STATUS</Text>
                     <Text style={[styles.thCell, styles.colTime, { color: colors.textSecondary }]}>GROSS TAT</Text>
-                    <Text style={[styles.thCell, styles.colTime, { color: colors.textSecondary }]}>NET WORK</Text>
+                    <Text style={[styles.thCell, styles.colTime, { color: colors.textSecondary }]}>ACTIVE WORK</Text>
+                    <Text style={[styles.thCell, styles.colTime, { color: colors.textSecondary }]}>IDLE / QUEUE</Text>
                     <Text style={[styles.thCell, styles.colBay, { color: colors.textSecondary }]}>BAY 01</Text>
                     <Text style={[styles.thCell, styles.colBay, { color: colors.textSecondary }]}>BAY 03</Text>
                     <Text style={[styles.thCell, styles.colBay, { color: colors.textSecondary }]}>BAY 02</Text>
@@ -240,6 +275,8 @@ export const ServiceReportsModal: React.FC = () => {
                     const totalPausedSec = getVehicleTotalPausedSeconds(v);
                     const rawNetSec = getNetWorkingSeconds(start, end);
                     const netSec = Math.max(0, rawNetSec - totalPausedSec);
+                    const { totalIdleSec, totalActiveSec } = getVehicleIdleAndActiveTotals(v);
+                    const activeWorkSec = totalActiveSec > 0 ? totalActiveSec : netSec;
 
                     const workshopSec = getStageSecondsForZone(v, 'workshop');
                     const alignmentSec = getStageSecondsForZone(v, 'alignment');
@@ -255,20 +292,20 @@ export const ServiceReportsModal: React.FC = () => {
                           <LicensePlate number={v.vehicle_no} size="sm" />
                         </View>
                         <View style={[styles.tdCell, styles.colStatus]}>
-                          <View style={[
-                            styles.statusBadge,
-                            { backgroundColor: v.is_finished ? colors.successDim : colors.primaryDim, borderColor: v.is_finished ? colors.successBorder : colors.primaryBorder }
-                          ]}>
-                            <Text style={[styles.statusBadgeText, { color: v.is_finished ? colors.success : colors.primaryLight }]}>
-                              {v.is_finished ? 'DONE' : v.current_zone.toUpperCase()}
-                            </Text>
-                          </View>
+                          <StatusPill
+                            variant={v.is_finished ? 'success' : 'timer'}
+                            label={v.is_finished ? 'DONE' : v.current_zone.toUpperCase()}
+                            size="sm"
+                          />
                         </View>
                         <Text style={[styles.tdText, styles.colTime, { color: colors.primaryLight, fontWeight: '700' }]}>
                           {formatDuration(grossSec)}
                         </Text>
                         <Text style={[styles.tdText, styles.colTime, { color: colors.success, fontWeight: '700' }]}>
-                          {formatDuration(netSec)}
+                          {formatDuration(activeWorkSec)}
+                        </Text>
+                        <Text style={[styles.tdText, styles.colTime, { color: colors.warning, fontWeight: '700' }]}>
+                          {formatDuration(totalIdleSec)}
                         </Text>
                         <Text style={[styles.tdText, styles.colBay, { color: colors.textSecondary }]}>
                           {formatDuration(workshopSec)}
@@ -534,17 +571,6 @@ const styles = StyleSheet.create({
   colTime: { width: 95 },
   colBay: { width: 85 },
   colTasks: { width: 75 },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-    borderWidth: 1,
-    alignSelf: 'flex-start',
-  },
-  statusBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-  },
   footer: {
     flexDirection: 'row',
     alignItems: 'center',

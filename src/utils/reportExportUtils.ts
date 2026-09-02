@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import { Vehicle, BayZone } from '../types/vehicle';
 import { getBreakOverlap, getNetWorkingSeconds } from './workshopHoursUtils';
+import { getStageTiming } from './vehicleUtils';
 
 export interface ReportKPIs {
   totalVehicles: number;
@@ -137,6 +138,47 @@ export const getStageSecondsForZone = (v: Vehicle, zone: BayZone): number => {
   return total;
 };
 
+export const getStageTimingForZone = (v: Vehicle, zone: BayZone): { idleSec: number; activeSec: number; totalSec: number } => {
+  const logs = v.stage_logs.filter(l => l.to_zone === zone);
+  let idleSec = 0;
+  let activeSec = 0;
+  let totalSec = 0;
+
+  logs.forEach(l => {
+    const timing = getStageTiming(
+      l.entered_at,
+      l.work_started_at,
+      l.exited_at,
+      l.idle_seconds,
+      l.duration_seconds
+    );
+    idleSec += timing.idleSeconds;
+    activeSec += timing.activeSeconds;
+    totalSec += timing.totalStageSeconds;
+  });
+
+  return { idleSec, activeSec, totalSec };
+};
+
+export const getVehicleIdleAndActiveTotals = (v: Vehicle): { totalIdleSec: number; totalActiveSec: number } => {
+  let totalIdleSec = 0;
+  let totalActiveSec = 0;
+
+  v.stage_logs.forEach(l => {
+    const timing = getStageTiming(
+      l.entered_at,
+      l.work_started_at,
+      l.exited_at,
+      l.idle_seconds,
+      l.duration_seconds
+    );
+    totalIdleSec += timing.idleSeconds;
+    totalActiveSec += timing.activeSeconds;
+  });
+
+  return { totalIdleSec, totalActiveSec };
+};
+
 /**
  * Generates an Excel-compatible CSV with UTF-8 BOM encoding.
  */
@@ -152,12 +194,15 @@ export const exportServiceLogsToCSV = (
     'Completion Date & Time',
     'Gross TAT (Total Time)',
     'Net Active Work Time',
+    'Total Idle / Queue Time',
     'Deducted Break Time',
-    'Deducted Pause Time',
-    'General Workshop (Bay 01)',
-    'Wheel Alignment (Bay 03)',
-    'Hoist Service (Bay 02)',
-    'Inspection Zone',
+    'Bay 01 Active (Workshop)',
+    'Bay 01 Idle',
+    'Bay 03 Active (Alignment)',
+    'Bay 03 Idle',
+    'Bay 02 Active (Hoist)',
+    'Bay 02 Idle',
+    'Inspection Active',
     'Tasks Completed',
     'Technician / Lead',
     'Remarks / Instructions',
@@ -190,10 +235,11 @@ export const exportServiceLogsToCSV = (
     const netSec = Math.max(0, rawNetSec - totalPausedSec);
     const { breakSeconds } = getBreakOverlap(start, end);
 
-    const workshopSec = getStageSecondsForZone(v, 'workshop');
-    const alignmentSec = getStageSecondsForZone(v, 'alignment');
-    const hoistSec = getStageSecondsForZone(v, 'hoist');
-    const inspectionSec = getStageSecondsForZone(v, 'inspection');
+    const workshopTiming = getStageTimingForZone(v, 'workshop');
+    const alignmentTiming = getStageTimingForZone(v, 'alignment');
+    const hoistTiming = getStageTimingForZone(v, 'hoist');
+    const inspectionTiming = getStageTimingForZone(v, 'inspection');
+    const { totalIdleSec, totalActiveSec } = getVehicleIdleAndActiveTotals(v);
 
     const completedTasksStr = v.tasks
       .filter(t => t.is_completed)
@@ -207,13 +253,16 @@ export const exportServiceLogsToCSV = (
       escapeCSV(start.toLocaleString()),
       escapeCSV(v.completed_at ? new Date(v.completed_at).toLocaleString() : 'Pending'),
       escapeCSV(formatDuration(grossSec)),
-      escapeCSV(formatDuration(netSec)),
+      escapeCSV(formatDuration(totalActiveSec > 0 ? totalActiveSec : netSec)),
+      escapeCSV(formatDuration(totalIdleSec)),
       escapeCSV(formatDuration(breakSeconds)),
-      escapeCSV(formatDuration(totalPausedSec)),
-      escapeCSV(formatDuration(workshopSec)),
-      escapeCSV(formatDuration(alignmentSec)),
-      escapeCSV(formatDuration(hoistSec)),
-      escapeCSV(formatDuration(inspectionSec)),
+      escapeCSV(formatDuration(workshopTiming.activeSec)),
+      escapeCSV(formatDuration(workshopTiming.idleSec)),
+      escapeCSV(formatDuration(alignmentTiming.activeSec)),
+      escapeCSV(formatDuration(alignmentTiming.idleSec)),
+      escapeCSV(formatDuration(hoistTiming.activeSec)),
+      escapeCSV(formatDuration(hoistTiming.idleSec)),
+      escapeCSV(formatDuration(inspectionTiming.activeSec)),
       escapeCSV(completedTasksStr || 'None'),
       escapeCSV(v.assigned_tech || 'Unassigned'),
       escapeCSV(v.remarks || ''),
@@ -256,10 +305,11 @@ export const exportServiceLogsToPDF = (
     const netSec = Math.max(0, rawNetSec - totalPausedSec);
     const { breakSeconds } = getBreakOverlap(start, end);
 
-    const workshopSec = getStageSecondsForZone(v, 'workshop');
-    const alignmentSec = getStageSecondsForZone(v, 'alignment');
-    const hoistSec = getStageSecondsForZone(v, 'hoist');
-    const inspectionSec = getStageSecondsForZone(v, 'inspection');
+    const workshopTiming = getStageTimingForZone(v, 'workshop');
+    const alignmentTiming = getStageTimingForZone(v, 'alignment');
+    const hoistTiming = getStageTimingForZone(v, 'hoist');
+    const inspectionTiming = getStageTimingForZone(v, 'inspection');
+    const { totalIdleSec, totalActiveSec } = getVehicleIdleAndActiveTotals(v);
 
     const completedTasksCount = v.tasks.filter(t => t.is_completed).length;
     const totalTasksCount = v.tasks.filter(t => t.is_required).length;
@@ -281,25 +331,25 @@ export const exportServiceLogsToPDF = (
           ${formatDuration(grossSec)}
         </td>
         <td style="padding: 8px 10px; font-weight: 700; font-size: 11px; color: #16a34a; border-bottom: 1px solid #e2e8f0;">
-          ${formatDuration(netSec)}
+          ${formatDuration(totalActiveSec > 0 ? totalActiveSec : netSec)}
         </td>
-        <td style="padding: 8px 10px; font-size: 11px; color: #d97706; border-bottom: 1px solid #e2e8f0;">
+        <td style="padding: 8px 10px; font-weight: 700; font-size: 11px; color: #d97706; border-bottom: 1px solid #e2e8f0;">
+          ${formatDuration(totalIdleSec)}
+        </td>
+        <td style="padding: 8px 10px; font-size: 11px; color: #64748b; border-bottom: 1px solid #e2e8f0;">
           ${formatDuration(breakSeconds)}
         </td>
-        <td style="padding: 8px 10px; font-size: 11px; color: #ea580c; border-bottom: 1px solid #e2e8f0;">
-          ${formatDuration(totalPausedSec)}
+        <td style="padding: 8px 10px; font-size: 11px; color: #475569; border-bottom: 1px solid #e2e8f0;">
+          ${formatDuration(workshopTiming.activeSec)}
         </td>
         <td style="padding: 8px 10px; font-size: 11px; color: #475569; border-bottom: 1px solid #e2e8f0;">
-          ${formatDuration(workshopSec)}
+          ${formatDuration(alignmentTiming.activeSec)}
         </td>
         <td style="padding: 8px 10px; font-size: 11px; color: #475569; border-bottom: 1px solid #e2e8f0;">
-          ${formatDuration(alignmentSec)}
+          ${formatDuration(hoistTiming.activeSec)}
         </td>
         <td style="padding: 8px 10px; font-size: 11px; color: #475569; border-bottom: 1px solid #e2e8f0;">
-          ${formatDuration(hoistSec)}
-        </td>
-        <td style="padding: 8px 10px; font-size: 11px; color: #475569; border-bottom: 1px solid #e2e8f0;">
-          ${formatDuration(inspectionSec)}
+          ${formatDuration(inspectionTiming.activeSec)}
         </td>
         <td style="padding: 8px 10px; font-size: 11px; color: #0f172a; border-bottom: 1px solid #e2e8f0;">
           ${completedTasksCount}/${totalTasksCount} done
@@ -377,8 +427,8 @@ export const exportServiceLogsToPDF = (
               <th>Intake Time</th>
               <th>Gross TAT</th>
               <th>Net Active</th>
+              <th>Idle / Queue</th>
               <th>Breaks</th>
-              <th>Paused</th>
               <th>Bay 01 (Gen)</th>
               <th>Bay 03 (Align)</th>
               <th>Bay 02 (Hoist)</th>

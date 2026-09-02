@@ -66,12 +66,86 @@ export interface StageBreakdownResult {
   netSec: number;
   grossSec: number;
   breakSec: number;
+  idleSec: number;
+  activeSec: number;
+  isIdle: boolean;
   pausedSec: number;
   isPaused: boolean;
   netStr: string;
   grossStr: string;
   breakNote: string | null;
 }
+
+export interface StageTimingResult {
+  isIdle: boolean;
+  idleSeconds: number;
+  activeSeconds: number;
+  totalStageSeconds: number;
+  displaySeconds: number;
+  displayText: string;
+}
+
+/**
+ * Calculates Idle vs Active timing for a stage log:
+ * - If work_started_at is null: stage is IDLE (waiting in bay)
+ * - If work_started_at is set: stage is ACTIVE (work in progress)
+ */
+export const getStageTiming = (
+  enteredAt?: string | null,
+  workStartedAt?: string | null,
+  exitedAt?: string | null,
+  recordedIdleSeconds?: number,
+  recordedDurationSeconds?: number
+): StageTimingResult => {
+  if (!enteredAt) {
+    return {
+      isIdle: true,
+      idleSeconds: 0,
+      activeSeconds: 0,
+      totalStageSeconds: 0,
+      displaySeconds: 0,
+      displayText: '0m 00s',
+    };
+  }
+
+  const enteredMs = new Date(enteredAt).getTime();
+  const isClosed = Boolean(exitedAt);
+  const endMs = isClosed && exitedAt ? new Date(exitedAt).getTime() : Date.now();
+  const totalSec = recordedDurationSeconds && recordedDurationSeconds > 0
+    ? recordedDurationSeconds
+    : Math.max(0, Math.floor((endMs - enteredMs) / 1000));
+
+  if (!workStartedAt) {
+    // Work hasn't started yet -> this stage is IDLE
+    const idleSec = isClosed ? totalSec : totalSec;
+    return {
+      isIdle: true,
+      idleSeconds: idleSec,
+      activeSeconds: 0,
+      totalStageSeconds: totalSec,
+      displaySeconds: idleSec,
+      displayText: `IDLE · ${formatDurationString(idleSec, true)}`,
+    };
+  }
+
+  // Work has started -> this stage is ACTIVE
+  const workStartedMs = new Date(workStartedAt).getTime();
+  const idleSec = (typeof recordedIdleSeconds === 'number' && recordedIdleSeconds >= 0)
+    ? recordedIdleSeconds
+    : Math.max(0, Math.floor((workStartedMs - enteredMs) / 1000));
+
+  const activeEndMs = isClosed && exitedAt ? new Date(exitedAt).getTime() : Date.now();
+  const activeSec = Math.max(0, Math.floor((activeEndMs - workStartedMs) / 1000));
+
+  return {
+    isIdle: false,
+    idleSeconds: idleSec,
+    activeSeconds: activeSec,
+    totalStageSeconds: idleSec + activeSec,
+    displaySeconds: activeSec,
+    displayText: formatDurationString(activeSec, true),
+  };
+};
 
 export const getActiveStageNetSeconds = (
   enteredAt?: string | null,
@@ -94,13 +168,18 @@ export const getStageDurationBreakdown = (
   exitedAt?: string | null,
   isPaused: boolean = false,
   pausedAt?: string | null,
-  pausedSeconds: number = 0
+  pausedSeconds: number = 0,
+  workStartedAt?: string | null,
+  recordedIdleSeconds?: number
 ): StageBreakdownResult => {
   if (!enteredAt) {
     return {
       netSec: 0,
       grossSec: 0,
       breakSec: 0,
+      idleSec: 0,
+      activeSec: 0,
+      isIdle: true,
       pausedSec: 0,
       isPaused: false,
       netStr: '0m',
@@ -109,46 +188,46 @@ export const getStageDurationBreakdown = (
     };
   }
 
+  const timing = getStageTiming(enteredAt, workStartedAt, exitedAt, recordedIdleSeconds);
   const start = new Date(enteredAt);
-  const end = isPaused && pausedAt ? new Date(pausedAt) : (exitedAt ? new Date(exitedAt) : new Date());
+  const end = exitedAt ? new Date(exitedAt) : new Date();
 
   if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) {
     return {
       netSec: 0,
       grossSec: 0,
       breakSec: 0,
+      idleSec: timing.idleSeconds,
+      activeSec: timing.activeSeconds,
+      isIdle: timing.isIdle,
       pausedSec: 0,
-      isPaused,
+      isPaused: false,
       netStr: '0m',
       grossStr: '0m',
-      breakNote: isPaused ? '⏸ Timer Paused' : null,
+      breakNote: timing.isIdle ? '⏳ Waiting to start (IDLE)' : null,
     };
   }
 
   const grossSec = Math.floor((end.getTime() - start.getTime()) / 1000);
   const { breakSeconds, breakNames } = getBreakOverlap(start, end);
-  const totalPaused = pausedSeconds || 0;
-  const netSec = Math.max(0, grossSec - breakSeconds - totalPaused);
+  const netSec = Math.max(0, grossSec - breakSeconds);
 
-  const breakMins = Math.round(breakSeconds / 60);
-  const pausedMins = Math.round(totalPaused / 60);
   let breakNote: string | null = null;
-
-  if (isPaused) {
-    breakNote = `⏸ PAUSED · Active Work: ${formatDurationString(netSec, false)}`;
-  } else if (breakMins > 0 && breakNames.length > 0) {
-    const breakNamesStr = breakNames.join(', ');
-    breakNote = `Gross: ${formatDurationString(grossSec, false)} · ${breakMins}m ${breakNamesStr} deducted`;
-  } else if (pausedMins > 0) {
-    breakNote = `Gross: ${formatDurationString(grossSec, false)} · ${pausedMins}m paused time deducted`;
+  if (timing.isIdle) {
+    breakNote = `⏳ IDLE / Queue: ${formatDurationString(timing.idleSeconds, false)}`;
+  } else if (timing.idleSeconds > 0) {
+    breakNote = `Queue: ${formatDurationString(timing.idleSeconds, false)} · Active: ${formatDurationString(timing.activeSeconds, false)}`;
   }
 
   return {
     netSec,
     grossSec,
     breakSec: breakSeconds,
-    pausedSec: totalPaused,
-    isPaused,
+    idleSec: timing.idleSeconds,
+    activeSec: timing.activeSeconds,
+    isIdle: timing.isIdle,
+    pausedSec: 0,
+    isPaused: false,
     netStr: formatDurationString(netSec, true),
     grossStr: formatDurationString(grossSec, false),
     breakNote,

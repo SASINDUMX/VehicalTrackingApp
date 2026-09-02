@@ -32,6 +32,8 @@ export interface StageLog {
   is_paused?: boolean;
   paused_at?: string | null;
   paused_seconds?: number;
+  work_started_at?: string | null;
+  idle_seconds?: number;
 }
 
 export interface Vehicle {
@@ -44,6 +46,9 @@ export interface Vehicle {
   completed_at?: string | null;
   is_finished: boolean;
   created_at: string;
+  status?: 'active' | 'finished' | 'incomplete';
+  is_urgent?: boolean;
+  urgent_note?: string | null;
   tasks: VehicleTask[];
   stage_logs: StageLog[];
   is_paused?: boolean;
