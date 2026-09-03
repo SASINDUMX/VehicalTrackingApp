@@ -143,8 +143,8 @@ export const TechnicianStationView: React.FC = React.memo(() => {
                 size="md"
               />
 
-              {/* Start Work Action Button — Only shown when IDLE */}
-              {isStageIdle ? (
+              {/* Start Work Action Button — Arrowhead only to fit compactly */}
+              {isStageIdle && (
                 <TouchableOpacity
                   style={[
                     styles.startWorkBtn,
@@ -158,12 +158,10 @@ export const TechnicianStationView: React.FC = React.memo(() => {
                   }}
                   activeOpacity={0.7}
                   disabled={!canStart}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                 >
-                  <Play size={11} color="#ffffff" fill="#ffffff" />
-                  <Text style={styles.startWorkBtnText}>Start Work</Text>
+                  <Play size={12} color="#ffffff" fill="#ffffff" style={{ marginLeft: 2 }} />
                 </TouchableOpacity>
-              ) : (
-                <StatusPill variant="timer" label="IN PROGRESS" size="md" />
               )}
 
               {/* Pin Toggle Button */}
@@ -531,24 +529,14 @@ const styles = StyleSheet.create({
   auditLogLink: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 6, paddingVertical: 2 },
   auditLogLinkText: { color: '#38bdf8', fontSize: 11, fontWeight: '600', textDecorationLine: 'underline' },
   startWorkBtn: {
-    flexDirection: 'row',
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#059669',
+    backgroundColor: '#10b981',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
-    backgroundColor: '#10b981',
-    borderColor: '#059669',
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    minHeight: 24,
-    borderRadius: 5,
-  },
-  startWorkBtnText: {
-    color: '#ffffff',
-    fontSize: 11,
-    fontWeight: '800',
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-    letterSpacing: 0.5,
   },
   progressContainer: { gap: 4 },
   progressLabelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
