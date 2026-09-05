@@ -62,7 +62,7 @@ export interface VehicleContextType {
     vehicleId: string,
     targetZone: BayZone,
     targetZoneName: string
-  ) => Promise<void>;
+  ) => Promise<boolean>;
   toggleStageTimer: (
     vehicleId: string,
     pause: boolean,
@@ -75,7 +75,7 @@ export interface VehicleContextType {
   finishVehicleJobSheet: (
     vehicleId: string,
     advisorName: string
-  ) => Promise<void>;
+  ) => Promise<boolean>;
   deleteVehicle: (vehicleId: string) => Promise<void>;
   updateUrgency: (
     vehicleId: string,
@@ -521,77 +521,81 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
     }
   }, [vehicles]);
 
-  // 6. TRANSFER VEHICLE ZONE
-  const transferVehicleZone = useCallback(async (vehicleId: string, targetZone: BayZone, targetZoneName: string) => {
-    try { hapticService.triggerSuccessHaptic(); } catch { /* ignore */ }
+  // 6. TRANSFER VEHICLE ZONE (Waits for Backend Response)
+  const transferVehicleZone = useCallback(async (vehicleId: string, targetZone: BayZone, targetZoneName: string): Promise<boolean> => {
     const now = new Date().toISOString();
-    const prevVehicles = vehicles;
     const targetVehicle = vehicles.find(v => v.id === vehicleId);
-    const lastLog = targetVehicle?.stage_logs[targetVehicle.stage_logs.length - 1] || null;
-
-    setVehicles(prev =>
-      prev.map(v => {
-        if (v.id !== vehicleId) return v;
-        const updatedLogs = [...v.stage_logs];
-        const lastIdx = updatedLogs.length - 1;
-
-        if (lastIdx >= 0 && !updatedLogs[lastIdx].exited_at) {
-          const prevL = updatedLogs[lastIdx];
-          const entered = new Date(prevL.entered_at).getTime();
-          const dur = Math.floor((new Date(now).getTime() - entered) / 1000);
-          const idle = prevL.work_started_at
-            ? (prevL.idle_seconds || Math.floor((new Date(prevL.work_started_at).getTime() - entered) / 1000))
-            : dur;
-          updatedLogs[lastIdx] = {
-            ...prevL,
-            exited_at: now,
-            duration_seconds: dur,
-            idle_seconds: idle,
-          };
-        }
-
-        updatedLogs.push({
-          id: `log-${Date.now()}`,
-          vehicle_id: vehicleId,
-          from_zone: v.current_zone,
-          to_zone: targetZone,
-          entered_at: now,
-          exited_at: null,
-          duration_seconds: 0,
-          work_started_at: null,
-          idle_seconds: 0,
-        });
-
-        return {
-          ...v,
-          current_zone: targetZone,
-          stage_logs: updatedLogs,
-          is_paused: false,
-          paused_at: null,
-        };
-      })
-    );
+    if (!targetVehicle) return false;
+    const lastLog = targetVehicle.stage_logs[targetVehicle.stage_logs.length - 1] || null;
 
     try {
+      // 1. Await backend persistence first
       await vehicleService.transferZone(
         vehicleId,
         targetZone,
         targetZoneName,
-        targetVehicle?.current_zone,
+        targetVehicle.current_zone,
         now,
         lastLog?.id || null,
         lastLog?.entered_at || null,
         lastLog?.work_started_at || null,
         lastLog?.idle_seconds
       );
-    } catch (err) {
+
+      // 2. Only mutate client state after backend confirmation
+      try { hapticService.triggerSuccessHaptic(); } catch { /* ignore */ }
+
+      setVehicles(prev =>
+        prev.map(v => {
+          if (v.id !== vehicleId) return v;
+          const updatedLogs = [...v.stage_logs];
+          const lastIdx = updatedLogs.length - 1;
+
+          if (lastIdx >= 0 && !updatedLogs[lastIdx].exited_at) {
+            const prevL = updatedLogs[lastIdx];
+            const entered = new Date(prevL.entered_at).getTime();
+            const dur = Math.floor((new Date(now).getTime() - entered) / 1000);
+            const idle = prevL.work_started_at
+              ? (prevL.idle_seconds || Math.floor((new Date(prevL.work_started_at).getTime() - entered) / 1000))
+              : dur;
+            updatedLogs[lastIdx] = {
+              ...prevL,
+              exited_at: now,
+              duration_seconds: dur,
+              idle_seconds: idle,
+            };
+          }
+
+          updatedLogs.push({
+            id: `log-${Date.now()}`,
+            vehicle_id: vehicleId,
+            from_zone: v.current_zone,
+            to_zone: targetZone,
+            entered_at: now,
+            exited_at: null,
+            duration_seconds: 0,
+            work_started_at: null,
+            idle_seconds: 0,
+          });
+
+          return {
+            ...v,
+            current_zone: targetZone,
+            stage_logs: updatedLogs,
+            is_paused: false,
+            paused_at: null,
+          };
+        })
+      );
+      return true;
+    } catch (err: any) {
       console.error('[VehicleContext] transferVehicleZone error:', err);
       if (isMountedRef.current) {
-        setVehicles(prevVehicles);
-        showError('Transfer Failed', 'Could not move the vehicle. The change has been reverted.');
+        showError('Transfer Failed', err?.message || 'Could not move the vehicle. The change has been reverted.');
       }
+      return false;
     }
-  }, [vehicles]);
+  }, [vehicles, showError]);
 
   // 7. START STAGE WORK (Transitions from IDLE to ACTIVE)
   const startStageWork = useCallback(async (vehicleId: string, startedBy: string) => {
@@ -641,48 +645,15 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
     }
   }, [vehicles]);
 
-  // 8. FINISH VEHICLE JOB SHEET (Advisor Handover)
-  const finishVehicleJobSheet = useCallback(async (vehicleId: string, advisorName: string) => {
-    try { hapticService.triggerSuccessHaptic(); } catch { /* ignore */ }
+  // 8. FINISH VEHICLE JOB SHEET (Advisor Handover - Waits for Backend Response)
+  const finishVehicleJobSheet = useCallback(async (vehicleId: string, advisorName: string): Promise<boolean> => {
     const now = new Date().toISOString();
-    const prevVehicles = vehicles;
     const targetVehicle = vehicles.find(v => v.id === vehicleId);
-    const lastLog = targetVehicle?.stage_logs[targetVehicle.stage_logs.length - 1] || null;
-
-    setVehicles(prev =>
-      prev.map(v => {
-        if (v.id !== vehicleId) return v;
-        const updatedLogs = [...v.stage_logs];
-        const lastIdx = updatedLogs.length - 1;
-
-        if (lastIdx >= 0 && !updatedLogs[lastIdx].exited_at) {
-          const log = updatedLogs[lastIdx];
-          const entered = new Date(log.entered_at).getTime();
-          const dur = Math.floor((new Date(now).getTime() - entered) / 1000);
-          const idle = log.work_started_at
-            ? (log.idle_seconds || Math.floor((new Date(log.work_started_at).getTime() - entered) / 1000))
-            : dur;
-          updatedLogs[lastIdx] = {
-            ...log,
-            exited_at: now,
-            duration_seconds: dur,
-            idle_seconds: idle,
-          };
-        }
-
-        return {
-          ...v,
-          current_zone: 'completed' as BayZone,
-          is_finished: true,
-          completed_at: now,
-          is_paused: false,
-          paused_at: null,
-          stage_logs: updatedLogs,
-        };
-      })
-    );
+    if (!targetVehicle) return false;
+    const lastLog = targetVehicle.stage_logs[targetVehicle.stage_logs.length - 1] || null;
 
     try {
+      // 1. Await backend persistence first
       await vehicleService.finishJob(
         vehicleId,
         advisorName,
@@ -692,14 +663,51 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
         lastLog?.work_started_at || null,
         lastLog?.idle_seconds
       );
-    } catch (err) {
+
+      // 2. Only mutate client state after backend confirmation
+      try { hapticService.triggerSuccessHaptic(); } catch { /* ignore */ }
+
+      setVehicles(prev =>
+        prev.map(v => {
+          if (v.id !== vehicleId) return v;
+          const updatedLogs = [...v.stage_logs];
+          const lastIdx = updatedLogs.length - 1;
+
+          if (lastIdx >= 0 && !updatedLogs[lastIdx].exited_at) {
+            const log = updatedLogs[lastIdx];
+            const entered = new Date(log.entered_at).getTime();
+            const dur = Math.floor((new Date(now).getTime() - entered) / 1000);
+            const idle = log.work_started_at
+              ? (log.idle_seconds || Math.floor((new Date(log.work_started_at).getTime() - entered) / 1000))
+              : dur;
+            updatedLogs[lastIdx] = {
+              ...log,
+              exited_at: now,
+              duration_seconds: dur,
+              idle_seconds: idle,
+            };
+          }
+
+          return {
+            ...v,
+            current_zone: 'completed' as BayZone,
+            is_finished: true,
+            completed_at: now,
+            is_paused: false,
+            paused_at: null,
+            stage_logs: updatedLogs,
+          };
+        })
+      );
+      return true;
+    } catch (err: any) {
       console.error('[VehicleContext] finishJob error:', err);
       if (isMountedRef.current) {
-        setVehicles(prevVehicles);
-        showError('Finish Failed', 'Could not complete the vehicle job sheet. Please try again.');
+        showError('Finish Failed', err?.message || 'Could not complete the vehicle job sheet. Please try again.');
       }
+      return false;
     }
-  }, [vehicles]);
+  }, [vehicles, showError]);
 
   // 9. TOGGLE STAGE TIMER (Pause / Resume)
   const toggleStageTimer = useCallback(async (vehicleId: string, pause: boolean) => {

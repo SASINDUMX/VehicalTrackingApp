@@ -409,9 +409,8 @@ export const vehicleService = {
 
     const { error } = await client.rpc('transfer_vehicle_zone', {
       p_vehicle_id: vehicleId,
-      p_target_zone: targetZone,
-      p_target_zone_name: targetZoneName,
-      p_transferred_by: 'Staff',
+      p_to_zone: targetZone,
+      p_moved_by: 'Staff',
     });
 
     if (error) {
@@ -425,17 +424,19 @@ export const vehicleService = {
           ? (existingIdleSec || Math.max(0, Math.floor((new Date(workStartedAt).getTime() - entered) / 1000)))
           : duration;
 
-        await client
+        const { error: updateErr } = await client
           .from('stage_logs')
           .update({ exited_at: now, duration_seconds: duration, idle_seconds: idle })
           .eq('id', activeLogId);
+        if (updateErr) throw updateErr;
       } else {
-        const { data: dbLogs } = await client
+        const { data: dbLogs, error: selectErr } = await client
           .from('stage_logs')
           .select('*')
           .eq('vehicle_id', vehicleId)
           .is('exited_at', null)
           .order('entered_at', { ascending: false });
+        if (selectErr) throw selectErr;
 
         if (dbLogs && dbLogs.length > 0) {
           const activeLog = dbLogs[0];
@@ -444,15 +445,16 @@ export const vehicleService = {
           const idle = activeLog.work_started_at
             ? (activeLog.idle_seconds || Math.max(0, Math.floor((new Date(activeLog.work_started_at).getTime() - entered) / 1000)))
             : duration;
-          await client
+          const { error: updateActiveErr } = await client
             .from('stage_logs')
             .update({ exited_at: now, duration_seconds: duration, idle_seconds: idle })
             .eq('id', activeLog.id);
+          if (updateActiveErr) throw updateActiveErr;
         }
       }
 
       // Insert new stage log
-      await client.from('stage_logs').insert({
+      const { error: insertErr } = await client.from('stage_logs').insert({
         vehicle_id: vehicleId,
         from_zone: fromZone || null,
         to_zone: targetZone,
@@ -461,6 +463,7 @@ export const vehicleService = {
         idle_seconds: 0,
         duration_seconds: 0,
       });
+      if (insertErr) throw insertErr;
 
       // Update vehicle zone & unpause
       const { error: directErr } = await client
@@ -555,17 +558,19 @@ export const vehicleService = {
         const idle = workStartedAt
           ? (existingIdleSec || Math.max(0, Math.floor((new Date(workStartedAt).getTime() - entered) / 1000)))
           : duration;
-        await client
+        const { error: updateErr } = await client
           .from('stage_logs')
           .update({ exited_at: now, duration_seconds: duration, idle_seconds: idle })
           .eq('id', activeLogId);
+        if (updateErr) throw updateErr;
       } else {
-        const { data: dbLogs } = await client
+        const { data: dbLogs, error: selectErr } = await client
           .from('stage_logs')
           .select('*')
           .eq('vehicle_id', vehicleId)
           .is('exited_at', null)
           .order('entered_at', { ascending: false });
+        if (selectErr) throw selectErr;
 
         if (dbLogs && dbLogs.length > 0) {
           const activeLog = dbLogs[0];
@@ -574,10 +579,11 @@ export const vehicleService = {
           const idle = activeLog.work_started_at
             ? (activeLog.idle_seconds || Math.max(0, Math.floor((new Date(activeLog.work_started_at).getTime() - entered) / 1000)))
             : duration;
-          await client
+          const { error: updateActiveErr } = await client
             .from('stage_logs')
             .update({ exited_at: now, duration_seconds: duration, idle_seconds: idle })
             .eq('id', activeLog.id);
+          if (updateActiveErr) throw updateActiveErr;
         }
       }
 
