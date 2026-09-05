@@ -636,16 +636,18 @@ export const VehicleDetailsModal: React.FC = () => {
                       workCompletedAt,
                     } = node;
                     const isTaskDone = Boolean(workCompletedAt);
-                    const isFullyFinishedOrDone = isCompleted || (isCurrent && isTaskDone);
+                    // A stage is only fully finished/done if it has been exited (isCompleted), OR if the task is done and it is NOT idle (i.e. not in 2nd idle queue-out awaiting dispatch)
+                    const isFullyFinishedOrDone = isCompleted;
+                    const isSecondIdleDone = isCurrent && isTaskDone && isStageIdle;
                     const isWorkingActive = isCurrent && !isStageIdle && !isTaskDone;
 
                     // Icon color harmonizes with node state
-                    const nodeIconColor = isFullyFinishedOrDone
+                    const nodeIconColor = isStageIdle && isCurrent
+                      ? colors.warningLight
+                      : isFullyFinishedOrDone
                       ? colors.success
                       : isWorkingActive
                       ? colors.primaryLight
-                      : isStageIdle
-                      ? colors.warningLight
                       : isCancelled
                       ? colors.cancelled
                       : colors.textMuted;
@@ -658,9 +660,9 @@ export const VehicleDetailsModal: React.FC = () => {
                           <View style={[
                             styles.nodeCircle,
                             { backgroundColor: colors.surfaceElevated, borderColor: colors.borderGlassBright },
-                            isFullyFinishedOrDone && { borderColor: colors.success, backgroundColor: colors.successDim },
-                            isWorkingActive && { borderColor: colors.primary, backgroundColor: colors.primaryDim },
                             isCurrent && isStageIdle && { borderColor: colors.warning, backgroundColor: colors.warningDim },
+                            !isStageIdle && isFullyFinishedOrDone && { borderColor: colors.success, backgroundColor: colors.successDim },
+                            !isStageIdle && isWorkingActive && { borderColor: colors.primary, backgroundColor: colors.primaryDim },
                             isCancelled && { borderColor: colors.cancelled, backgroundColor: colors.cancelledDim },
                             !isCurrent && !isCompleted && !isCancelled && { borderColor: colors.borderGlassBright, backgroundColor: colors.surfaceOverlay }
                           ]}>
@@ -670,11 +672,13 @@ export const VehicleDetailsModal: React.FC = () => {
                             <>
                               {/* Background empty line */}
                               <View style={[styles.timelineLine, { backgroundColor: colors.borderGlassBright }]} />
-                              {/* 100% full green line when stage is completed/done */}
+                              {/* 100% full green line when stage has completed and exited */}
                               {isFullyFinishedOrDone && <View style={[styles.timelineLine, styles.timelineLineDone, { backgroundColor: colors.success }]} />}
+                              {/* 100% amber line when task finished but vehicle is in 2nd idle waiting for dispatch to next bay */}
+                              {isSecondIdleDone && <View style={[styles.timelineLine, styles.timelineLineDone, { backgroundColor: colors.warning }]} />}
                               {/* 50% blue line when stage is actively in progress */}
                               {isWorkingActive && <View style={[styles.timelineLine, styles.timelineLineHalf, { backgroundColor: colors.primary }]} />}
-                              {/* When arrived & idle: 0% line (only the amber circle is lit!) */}
+                              {/* When first arrived & idle (queue in): 0% line (only the amber circle is lit) */}
                             </>
                           )}
                         </View>
