@@ -10,10 +10,10 @@ export interface BayDefinition {
 }
 
 export const getBayDefinitions = (themeColors: ThemeColors = Colors): BayDefinition[] => [
-  { id: 'workshop', name: 'General Workshop Bay', code: 'BAY 01', color: themeColors.primary, assignedRole: 'tech_workshop' },
-  { id: 'alignment', name: 'Wheel Alignment Bay', code: 'BAY 02', color: themeColors.success, assignedRole: 'tech_alignment' },
-  { id: 'hoist', name: 'Hoist Service Bay', code: 'BAY 03', color: themeColors.warning, assignedRole: 'tech_hoist' },
-  { id: 'inspection', name: 'Advisor Inspection Zone', code: 'FINAL', color: themeColors.purple, assignedRole: 'advisor' },
+  { id: 'workshop', name: 'General Workshop Bay', code: 'BAY 01', color: themeColors.bayWorkshop, assignedRole: 'tech_workshop' },
+  { id: 'alignment', name: 'Wheel Alignment Bay', code: 'BAY 02', color: themeColors.bayAlignment, assignedRole: 'tech_alignment' },
+  { id: 'hoist', name: 'Hoist Service Bay', code: 'BAY 03', color: themeColors.bayHoist, assignedRole: 'tech_hoist' },
+  { id: 'inspection', name: 'Advisor Inspection Zone', code: 'FINAL', color: themeColors.bayInspection, assignedRole: 'advisor' },
 ];
 
 export const BAY_DEFINITIONS: BayDefinition[] = getBayDefinitions(Colors);
@@ -21,11 +21,11 @@ export const BAY_DEFINITIONS: BayDefinition[] = getBayDefinitions(Colors);
 export const getBayColor = (zone: BayZone, themeColors?: ThemeColors): string => {
   const currentTheme = themeColors || Colors;
   switch (zone) {
-    case 'workshop': return currentTheme.primary;
-    case 'alignment': return currentTheme.success;
-    case 'hoist': return currentTheme.warning;
-    case 'inspection': return currentTheme.purple;
-    default: return currentTheme.primary;
+    case 'workshop': return currentTheme.bayWorkshop;
+    case 'alignment': return currentTheme.bayAlignment;
+    case 'hoist': return currentTheme.bayHoist;
+    case 'inspection': return currentTheme.bayInspection;
+    default: return currentTheme.bayWorkshop;
   }
 };
 
