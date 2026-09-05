@@ -20,10 +20,12 @@ import {
   CheckCircle2,
   Clock,
   Wrench,
+  Navigation,
+  ShieldAlert,
   Car,
   Filter,
   Layers,
-  Coffee,
+  Info,
 } from 'lucide-react-native';
 import {
   DateFilterPreset,
@@ -33,13 +35,15 @@ import {
   exportServiceLogsToCSV,
   exportServiceLogsToPDF,
   formatDuration,
-  getStageSecondsForZone,
+  getStageTimingForZone,
   getVehicleTotalPausedSeconds,
   getVehicleIdleAndActiveTotals,
+  getVehicleEffectiveCompletion,
 } from '../../utils/reportExportUtils';
 import { getNetWorkingSeconds, getBreakOverlap } from '../../utils/workshopHoursUtils';
 import { LicensePlate } from '../shared/LicensePlate';
 import { StatusPill } from '../shared/StatusPill';
+import { BaseModal } from '../shared/BaseModal';
 import { Vehicle } from '../../types/vehicle';
 
 export const ServiceReportsModal: React.FC = () => {
@@ -95,48 +99,52 @@ export const ServiceReportsModal: React.FC = () => {
   }, [filteredVehicles]);
 
   const activeDateLabel = DATE_PRESETS.find(p => p.id === datePreset)?.label || 'All Time';
-
-  if (!isReportsModalOpen) return null;
+  const activeStatusLabel = STATUS_PRESETS.find(s => s.id === statusPreset)?.label || 'All Status';
+  const activeFilterLabel = `${activeDateLabel} · ${activeStatusLabel}`;
 
   return (
-    <View style={styles.modalOverlay}>
-      <TouchableOpacity
-        style={[styles.backdrop, { backgroundColor: colors.backdrop }]}
-        activeOpacity={1}
-        onPress={() => setIsReportsModalOpen(false)}
-      />
-
-      <View style={[
-        styles.modalContainer,
-        {
-          backgroundColor: colors.surface,
-          borderColor: colors.borderGlassBright,
-        }
-      ]}>
-        {/* Header */}
-        <View style={[styles.header, { borderBottomColor: colors.borderGlass }]}>
-          <View style={styles.headerTitleGroup}>
-            <View style={[styles.headerIconWrapper, { backgroundColor: colors.primaryDim, borderColor: colors.primaryBorder }]}>
-              <FileText size={20} color={colors.primaryLight} />
-            </View>
-            <View style={styles.headerTextContainer}>
-              <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Service Logs & Telemetry Reports</Text>
-              <Text style={[styles.headerSub, { color: colors.textMuted }]} numberOfLines={2}>
-                Export turnaround times (TAT), bay stage durations, and technician audit trails
-              </Text>
-            </View>
+    <BaseModal
+      visible={isReportsModalOpen}
+      onClose={() => setIsReportsModalOpen(false)}
+      maxWidth={1000}
+      cardStyle={{ width: '95%' }}
+      scrollable={true}
+      icon={<FileText size={20} color={colors.primaryLight} />}
+      title="Service Logs & Telemetry Reports"
+      subtitle="Export turnaround times (TAT), bay stage durations, and technician audit trails"
+      footer={
+        <View style={styles.footerInner}>
+          <View style={styles.footerLeft}>
+            <Text style={[styles.footerInfo, { color: colors.textMuted }]}>
+              {filteredVehicles.length} records ready for download
+            </Text>
           </View>
 
-          <TouchableOpacity
-            style={[styles.closeBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.05)', borderColor: colors.borderGlass }]}
-            onPress={() => setIsReportsModalOpen(false)}
-          >
-            <X size={18} color={colors.textSecondary} />
-          </TouchableOpacity>
-        </View>
+          <View style={styles.footerActionGroup}>
+            {/* Download Excel */}
+            <TouchableOpacity
+              style={[styles.exportBtn, { backgroundColor: colors.success }]}
+              onPress={() => exportServiceLogsToCSV(filteredVehicles, activeFilterLabel, kpis)}
+              activeOpacity={0.8}
+            >
+              <Download size={15} color="#ffffff" />
+              <Text style={styles.exportBtnText}>Download Excel</Text>
+            </TouchableOpacity>
 
-        {/* Scrollable Content */}
-        <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+            {/* Export PDF */}
+            <TouchableOpacity
+              style={[styles.exportBtn, { backgroundColor: colors.primary }]}
+              onPress={() => exportServiceLogsToPDF(filteredVehicles, kpis, activeFilterLabel)}
+              activeOpacity={0.8}
+            >
+              <Printer size={15} color="#ffffff" />
+              <Text style={styles.exportBtnText}>Export PDF</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      }
+    >
+      <View style={styles.modalBody}>
           {/* Filter Bar */}
           <View style={[styles.filterSection, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)', borderColor: colors.borderGlass }]}>
             <View style={styles.filterGroup}>
@@ -195,44 +203,136 @@ export const ServiceReportsModal: React.FC = () => {
           </View>
 
           {/* Executive KPI Metric Cards */}
-          <View style={styles.kpiGrid}>
-            <View style={[styles.kpiCard, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)', borderColor: colors.borderGlass }]}>
-              <Text style={[styles.kpiLabel, { color: colors.textMuted }]}>TOTAL VEHICLES</Text>
-              <View style={styles.kpiValRow}>
-                <Car size={18} color={colors.primaryLight} />
-                <Text style={[styles.kpiVal, { color: colors.textPrimary }]}>{kpis.totalVehicles}</Text>
+          <View style={styles.kpiContainer}>
+            {/* Top Summary Row: Total & Completed */}
+            <View style={styles.kpiSummaryRow}>
+              <View style={[styles.kpiCard, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)', borderColor: colors.borderGlass }]}>
+                <Text style={[styles.kpiLabel, { color: colors.textMuted }]}>TOTAL VEHICLES</Text>
+                <View style={styles.kpiValRow}>
+                  <Car size={18} color={colors.primaryLight} />
+                  <Text style={[styles.kpiVal, { color: colors.textPrimary }]}>{kpis.totalVehicles}</Text>
+                </View>
+                <Text style={[styles.kpiSubText, { color: colors.textMuted }]}>{kpis.inProgressCount} active · {kpis.completedCount} finished</Text>
+              </View>
+
+              <View style={[styles.kpiCard, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)', borderColor: colors.borderGlass }]}>
+                <Text style={[styles.kpiLabel, { color: colors.textMuted }]}>COMPLETED JOBS</Text>
+                <View style={styles.kpiValRow}>
+                  <CheckCircle2 size={18} color={colors.success} />
+                  <Text style={[styles.kpiVal, { color: colors.success }]}>{kpis.completedCount}</Text>
+                </View>
+                <Text style={[styles.kpiSubText, { color: colors.textMuted }]}>Delivered / Ready</Text>
               </View>
             </View>
 
-            <View style={[styles.kpiCard, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)', borderColor: colors.borderGlass }]}>
-              <Text style={[styles.kpiLabel, { color: colors.textMuted }]}>COMPLETED JOBS</Text>
-              <View style={styles.kpiValRow}>
-                <CheckCircle2 size={18} color={colors.success} />
-                <Text style={[styles.kpiVal, { color: colors.success }]}>{kpis.completedCount}</Text>
-              </View>
-            </View>
+            {/* Bay Velocity Row: 3 Bays in 1 Row */}
+            <View style={styles.kpiBayRow}>
+              {/* General Workshop Bay KPI */}
+              <View style={[styles.kpiCard, styles.kpiBayCard, { backgroundColor: colors.bayWorkshopDim, borderColor: colors.bayWorkshop }]}>
+                <View style={styles.kpiCardHeaderRow}>
+                  <Text style={[styles.kpiLabel, { color: colors.bayWorkshopLight }]}>WORKSHOP</Text>
+                </View>
 
-            <View style={[styles.kpiCard, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)', borderColor: colors.borderGlass }]}>
-              <Text style={[styles.kpiLabel, { color: colors.textMuted }]}>AVG GROSS TAT</Text>
-              <View style={styles.kpiValRow}>
-                <Clock size={18} color={colors.primaryLight} />
-                <Text style={[styles.kpiVal, { color: colors.primaryLight }]}>{formatDuration(kpis.avgGrossSeconds)}</Text>
-              </View>
-            </View>
+                {/* Gross Avg Bay Time */}
+                <View style={styles.kpiValRow}>
+                  <Wrench size={15} color={colors.bayWorkshopLight} />
+                  <View style={styles.kpiMetricCol}>
+                    <Text style={[styles.kpiVal, { color: colors.bayWorkshopLight }]}>
+                      {formatDuration(kpis.workshopBay.avgStageSec)}
+                    </Text>
+                    <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>GROSS AVG TIME</Text>
+                  </View>
+                </View>
 
-            <View style={[styles.kpiCard, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)', borderColor: colors.borderGlass }]}>
-              <Text style={[styles.kpiLabel, { color: colors.textMuted }]}>AVG NET WORK TIME</Text>
-              <View style={styles.kpiValRow}>
-                <Wrench size={18} color={colors.success} />
-                <Text style={[styles.kpiVal, { color: colors.success }]}>{formatDuration(kpis.avgNetSeconds)}</Text>
-              </View>
-            </View>
+                {/* Bay Avg Active Time */}
+                <View style={[styles.kpiValRow, styles.kpiActiveRow]}>
+                  <Clock size={13} color={colors.success} />
+                  <View style={styles.kpiMetricCol}>
+                    <Text style={[styles.kpiActiveVal, { color: colors.success }]}>
+                      {formatDuration(kpis.workshopBay.avgActiveSec)}
+                    </Text>
+                    <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>BAY AVG ACTIVE TIME</Text>
+                  </View>
+                </View>
 
-            <View style={[styles.kpiCard, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)', borderColor: colors.borderGlass }]}>
-              <Text style={[styles.kpiLabel, { color: colors.textMuted }]}>BREAKS DEDUCTED</Text>
-              <View style={styles.kpiValRow}>
-                <Coffee size={18} color="#fbbf24" />
-                <Text style={[styles.kpiVal, { color: '#fbbf24' }]}>{formatDuration(kpis.totalBreakSeconds)}</Text>
+                {/* Bottom Vehicle Count */}
+                <View style={styles.kpiBottomRow}>
+                  <Text style={[styles.kpiBottomText, { color: colors.textMuted }]}>
+                    {kpis.workshopBay.vehicleCount} vehicles
+                  </Text>
+                </View>
+              </View>
+
+              {/* Wheel Alignment Bay KPI */}
+              <View style={[styles.kpiCard, styles.kpiBayCard, { backgroundColor: colors.bayAlignmentDim, borderColor: colors.bayAlignment }]}>
+                <View style={styles.kpiCardHeaderRow}>
+                  <Text style={[styles.kpiLabel, { color: colors.bayAlignmentLight }]}>ALIGNMENT</Text>
+                </View>
+
+                {/* Gross Avg Bay Time */}
+                <View style={styles.kpiValRow}>
+                  <Navigation size={15} color={colors.bayAlignmentLight} />
+                  <View style={styles.kpiMetricCol}>
+                    <Text style={[styles.kpiVal, { color: colors.bayAlignmentLight }]}>
+                      {formatDuration(kpis.alignmentBay.avgStageSec)}
+                    </Text>
+                    <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>GROSS AVG TIME</Text>
+                  </View>
+                </View>
+
+                {/* Bay Avg Active Time */}
+                <View style={[styles.kpiValRow, styles.kpiActiveRow]}>
+                  <Clock size={13} color={colors.success} />
+                  <View style={styles.kpiMetricCol}>
+                    <Text style={[styles.kpiActiveVal, { color: colors.success }]}>
+                      {formatDuration(kpis.alignmentBay.avgActiveSec)}
+                    </Text>
+                    <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>BAY AVG ACTIVE TIME</Text>
+                  </View>
+                </View>
+
+                {/* Bottom Vehicle Count */}
+                <View style={styles.kpiBottomRow}>
+                  <Text style={[styles.kpiBottomText, { color: colors.textMuted }]}>
+                    {kpis.alignmentBay.vehicleCount} vehicles
+                  </Text>
+                </View>
+              </View>
+
+              {/* Hoist Service Bay KPI */}
+              <View style={[styles.kpiCard, styles.kpiBayCard, { backgroundColor: colors.bayHoistDim, borderColor: colors.bayHoist }]}>
+                <View style={styles.kpiCardHeaderRow}>
+                  <Text style={[styles.kpiLabel, { color: colors.bayHoistLight }]}>HOIST</Text>
+                </View>
+
+                {/* Gross Avg Bay Time */}
+                <View style={styles.kpiValRow}>
+                  <ShieldAlert size={15} color={colors.bayHoistLight} />
+                  <View style={styles.kpiMetricCol}>
+                    <Text style={[styles.kpiVal, { color: colors.bayHoistLight }]}>
+                      {formatDuration(kpis.hoistBay.avgStageSec)}
+                    </Text>
+                    <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>GROSS AVG TIME</Text>
+                  </View>
+                </View>
+
+                {/* Bay Avg Active Time */}
+                <View style={[styles.kpiValRow, styles.kpiActiveRow]}>
+                  <Clock size={13} color={colors.success} />
+                  <View style={styles.kpiMetricCol}>
+                    <Text style={[styles.kpiActiveVal, { color: colors.success }]}>
+                      {formatDuration(kpis.hoistBay.avgActiveSec)}
+                    </Text>
+                    <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>BAY AVG ACTIVE TIME</Text>
+                  </View>
+                </View>
+
+                {/* Bottom Vehicle Count */}
+                <View style={styles.kpiBottomRow}>
+                  <Text style={[styles.kpiBottomText, { color: colors.textMuted }]}>
+                    {kpis.hoistBay.vehicleCount} vehicles
+                  </Text>
+                </View>
               </View>
             </View>
           </View>
@@ -262,25 +362,58 @@ export const ServiceReportsModal: React.FC = () => {
             ) : (
               <ScrollView horizontal showsHorizontalScrollIndicator={true} contentContainerStyle={styles.tableScroll}>
                 <View>
-                  {/* Table Header */}
-                  <View style={[styles.thRow, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)', borderBottomColor: colors.borderGlass }]}>
+                  {/* Table Header Row 1: Top Grouped Categories */}
+                  <View style={[styles.thRowTop, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.05)', borderBottomColor: colors.borderGlass }]}>
                     <Text style={[styles.thCell, styles.colPlate, { color: colors.textSecondary }]}>PLATE</Text>
                     <Text style={[styles.thCell, styles.colStatus, { color: colors.textSecondary }]}>STATUS</Text>
+                    <Text style={[styles.thCell, styles.colTime, { color: colors.textSecondary }]}>INTAKE</Text>
+                    <Text style={[styles.thCell, styles.colTime, { color: colors.textSecondary }]}>FINISHED</Text>
                     <Text style={[styles.thCell, styles.colTime, { color: colors.textSecondary }]}>GROSS TAT</Text>
                     <Text style={[styles.thCell, styles.colTime, { color: colors.textSecondary }]}>ACTIVE WORK</Text>
-                    <Text style={[styles.thCell, styles.colTime, { color: colors.textSecondary }]}>IDLE / QUEUE</Text>
-                    <Text style={[styles.thCell, styles.colTime, { color: '#fbbf24' }]}>☕ BREAKS</Text>
-                    <Text style={[styles.thCell, styles.colBay, { color: colors.textSecondary }]}>BAY 01</Text>
-                    <Text style={[styles.thCell, styles.colBay, { color: colors.textSecondary }]}>BAY 03</Text>
-                    <Text style={[styles.thCell, styles.colBay, { color: colors.textSecondary }]}>BAY 02</Text>
-                    <Text style={[styles.thCell, styles.colBay, { color: colors.textSecondary }]}>INSPECT</Text>
+                    <Text style={[styles.thCell, styles.colTime, { color: colors.textSecondary }]}>TOTAL IDLE</Text>
+                    <Text style={[styles.thCell, styles.colTime, { color: '#fbbf24' }]}>BREAKS</Text>
+                    <View style={[styles.thGroupHeader, { borderColor: colors.borderGlass, backgroundColor: colors.bayWorkshopDim }]}>
+                      <Text style={[styles.thGroupHeaderText, { color: colors.bayWorkshopLight }]}>GENERAL WORKSHOP</Text>
+                    </View>
+                    <View style={[styles.thGroupHeader, { borderColor: colors.borderGlass, backgroundColor: colors.bayAlignmentDim }]}>
+                      <Text style={[styles.thGroupHeaderText, { color: colors.bayAlignmentLight }]}>WHEEL ALIGNMENT</Text>
+                    </View>
+                    <View style={[styles.thGroupHeader, { borderColor: colors.borderGlass, backgroundColor: colors.bayHoistDim }]}>
+                      <Text style={[styles.thGroupHeaderText, { color: colors.bayHoistLight }]}>HOIST SERVICE</Text>
+                    </View>
                     <Text style={[styles.thCell, styles.colTasks, { color: colors.textSecondary }]}>TASKS</Text>
+                  </View>
+
+                  {/* Table Header Row 2: Sub-Headers (Idle / Active / Breaks per bay) */}
+                  <View style={[styles.thRowSub, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)', borderBottomColor: colors.borderGlass }]}>
+                    <View style={styles.colPlate} />
+                    <View style={styles.colStatus} />
+                    <View style={styles.colTime} />
+                    <View style={styles.colTime} />
+                    <View style={styles.colTime} />
+                    <View style={styles.colTime} />
+                    <View style={styles.colTime} />
+                    <View style={styles.colTime} />
+                    {/* General Workshop sub-headers */}
+                    <Text style={[styles.thSubCell, styles.colSubBay, { color: colors.warning }]}>IDLE</Text>
+                    <Text style={[styles.thSubCell, styles.colSubBay, { color: colors.primaryLight }]}>ACTIVE</Text>
+                    <Text style={[styles.thSubCell, styles.colSubBay, { color: '#fbbf24' }]}>BREAKS</Text>
+                    {/* Wheel Alignment sub-headers */}
+                    <Text style={[styles.thSubCell, styles.colSubBay, { color: colors.warning }]}>IDLE</Text>
+                    <Text style={[styles.thSubCell, styles.colSubBay, { color: colors.primaryLight }]}>ACTIVE</Text>
+                    <Text style={[styles.thSubCell, styles.colSubBay, { color: '#fbbf24' }]}>BREAKS</Text>
+                    {/* Hoist Service sub-headers */}
+                    <Text style={[styles.thSubCell, styles.colSubBay, { color: colors.warning }]}>IDLE</Text>
+                    <Text style={[styles.thSubCell, styles.colSubBay, { color: colors.primaryLight }]}>ACTIVE</Text>
+                    <Text style={[styles.thSubCell, styles.colSubBay, { color: '#fbbf24' }]}>BREAKS</Text>
+                    <View style={styles.colTasks} />
                   </View>
 
                   {/* Rows */}
                   {filteredVehicles.map(v => {
+                    const { isEffectiveDone, effectiveCompletionDate } = getVehicleEffectiveCompletion(v);
                     const start = new Date(v.intake_at || v.created_at);
-                    const end = v.completed_at ? new Date(v.completed_at) : new Date();
+                    const end = effectiveCompletionDate ? effectiveCompletionDate : new Date();
                     const grossSec = Math.max(0, Math.floor((end.getTime() - start.getTime()) / 1000));
                     const totalPausedSec = getVehicleTotalPausedSeconds(v);
                     const rawNetSec = getNetWorkingSeconds(start, end);
@@ -289,10 +422,16 @@ export const ServiceReportsModal: React.FC = () => {
                     const activeWorkSec = totalActiveSec > 0 ? totalActiveSec : netSec;
                     const { breakSeconds } = getBreakOverlap(start, end);
 
-                    const workshopSec = getStageSecondsForZone(v, 'workshop');
-                    const alignmentSec = getStageSecondsForZone(v, 'alignment');
-                    const hoistSec = getStageSecondsForZone(v, 'hoist');
-                    const inspectionSec = getStageSecondsForZone(v, 'inspection');
+                    const intakeStr = !isNaN(start.getTime())
+                      ? start.toLocaleTimeString('en-US', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit', hour12: true })
+                      : '--:--';
+                    const finishedStr = isEffectiveDone && effectiveCompletionDate && !isNaN(effectiveCompletionDate.getTime())
+                      ? effectiveCompletionDate.toLocaleTimeString('en-US', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit', hour12: true })
+                      : 'In Progress';
+
+                    const workshopTiming = getStageTimingForZone(v, 'workshop');
+                    const alignmentTiming = getStageTimingForZone(v, 'alignment');
+                    const hoistTiming = getStageTimingForZone(v, 'hoist');
 
                     const completedTasks = v.tasks.filter(t => t.is_completed).length;
                     const totalTasks = v.tasks.filter(t => t.is_required).length;
@@ -304,11 +443,17 @@ export const ServiceReportsModal: React.FC = () => {
                         </View>
                         <View style={[styles.tdCell, styles.colStatus]}>
                           <StatusPill
-                            variant={v.is_finished ? 'success' : 'timer'}
-                            label={v.is_finished ? 'DONE' : v.current_zone.toUpperCase()}
+                            variant={isEffectiveDone ? 'DONE' : 'ACTIVE'}
+                            label={isEffectiveDone ? 'DONE' : v.current_zone.toUpperCase()}
                             size="sm"
                           />
                         </View>
+                        <Text style={[styles.tdText, styles.colTime, { color: colors.textSecondary }]}>
+                          {intakeStr}
+                        </Text>
+                        <Text style={[styles.tdText, styles.colTime, { color: isEffectiveDone ? colors.success : colors.warningLight, fontWeight: isEffectiveDone ? '700' : '400' }]}>
+                          {finishedStr}
+                        </Text>
                         <Text style={[styles.tdText, styles.colTime, { color: colors.primaryLight, fontWeight: '700' }]}>
                           {formatDuration(grossSec)}
                         </Text>
@@ -321,17 +466,35 @@ export const ServiceReportsModal: React.FC = () => {
                         <Text style={[styles.tdText, styles.colTime, { color: breakSeconds > 0 ? '#fbbf24' : colors.textMuted, fontWeight: '700' }]}>
                           {breakSeconds > 0 ? formatDuration(breakSeconds) : '-'}
                         </Text>
-                        <Text style={[styles.tdText, styles.colBay, { color: colors.textSecondary }]}>
-                          {formatDuration(workshopSec)}
+                        {/* General Workshop (Idle / Active / Breaks) */}
+                        <Text style={[styles.tdText, styles.colSubBay, { color: colors.warning }]}>
+                          {workshopTiming.idleSec > 0 ? formatDuration(workshopTiming.idleSec) : '-'}
                         </Text>
-                        <Text style={[styles.tdText, styles.colBay, { color: colors.textSecondary }]}>
-                          {formatDuration(alignmentSec)}
+                        <Text style={[styles.tdText, styles.colSubBay, { color: colors.primaryLight, fontWeight: '700' }]}>
+                          {workshopTiming.activeSec > 0 ? formatDuration(workshopTiming.activeSec) : '-'}
                         </Text>
-                        <Text style={[styles.tdText, styles.colBay, { color: colors.textSecondary }]}>
-                          {formatDuration(hoistSec)}
+                        <Text style={[styles.tdText, styles.colSubBay, { color: workshopTiming.breakSec > 0 ? '#fbbf24' : colors.textMuted }]}>
+                          {workshopTiming.breakSec > 0 ? formatDuration(workshopTiming.breakSec) : '-'}
                         </Text>
-                        <Text style={[styles.tdText, styles.colBay, { color: colors.textSecondary }]}>
-                          {formatDuration(inspectionSec)}
+                        {/* Wheel Alignment (Idle / Active / Breaks) */}
+                        <Text style={[styles.tdText, styles.colSubBay, { color: colors.warning }]}>
+                          {alignmentTiming.idleSec > 0 ? formatDuration(alignmentTiming.idleSec) : '-'}
+                        </Text>
+                        <Text style={[styles.tdText, styles.colSubBay, { color: colors.primaryLight, fontWeight: '700' }]}>
+                          {alignmentTiming.activeSec > 0 ? formatDuration(alignmentTiming.activeSec) : '-'}
+                        </Text>
+                        <Text style={[styles.tdText, styles.colSubBay, { color: alignmentTiming.breakSec > 0 ? '#fbbf24' : colors.textMuted }]}>
+                          {alignmentTiming.breakSec > 0 ? formatDuration(alignmentTiming.breakSec) : '-'}
+                        </Text>
+                        {/* Hoist Service (Idle / Active / Breaks) */}
+                        <Text style={[styles.tdText, styles.colSubBay, { color: colors.warning }]}>
+                          {hoistTiming.idleSec > 0 ? formatDuration(hoistTiming.idleSec) : '-'}
+                        </Text>
+                        <Text style={[styles.tdText, styles.colSubBay, { color: colors.primaryLight, fontWeight: '700' }]}>
+                          {hoistTiming.activeSec > 0 ? formatDuration(hoistTiming.activeSec) : '-'}
+                        </Text>
+                        <Text style={[styles.tdText, styles.colSubBay, { color: hoistTiming.breakSec > 0 ? '#fbbf24' : colors.textMuted }]}>
+                          {hoistTiming.breakSec > 0 ? formatDuration(hoistTiming.breakSec) : '-'}
                         </Text>
                         <Text style={[styles.tdText, styles.colTasks, { color: colors.textPrimary, fontWeight: '600' }]}>
                           {completedTasks}/{totalTasks}
@@ -343,123 +506,38 @@ export const ServiceReportsModal: React.FC = () => {
               </ScrollView>
             )}
           </View>
-        </ScrollView>
 
-        {/* Footer with Export Actions */}
-        <View style={[styles.footer, { borderTopColor: colors.borderGlass, backgroundColor: colors.surfaceElevated }]}>
-          <View style={styles.footerLeft}>
-            <Text style={[styles.footerInfo, { color: colors.textMuted }]}>
-              {filteredVehicles.length} records ready for download
+          {/* Operational Calculation & Audit Note */}
+          <View style={[styles.auditNoteCard, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)', borderColor: colors.borderGlass }]}>
+            <View style={styles.auditNoteTitleRow}>
+              <Info size={14} color={colors.primaryLight} />
+              <Text style={[styles.auditNoteTitle, { color: colors.textPrimary }]}>
+                Report Audit & Calculation Standard
+              </Text>
+            </View>
+            <Text style={[styles.auditNoteText, { color: colors.textSecondary }]}>
+              • <Text style={{ fontWeight: '700', color: colors.textPrimary }}>Gross Avg Time:</Text> Working bay occupancy (Active Labor + Idle Time) for completed and dispatched stages to the next station. In-progress/undispatched stages are excluded to prevent diluting averages. Scheduled workshop downtime (lunch & tea breaks) is deducted.
+            </Text>
+            <Text style={[styles.auditNoteText, { color: colors.textSecondary }]}>
+              • <Text style={{ fontWeight: '700', color: colors.textPrimary }}>Bay Avg Active Time:</Text> Pure technician hands-on labor duration for completed & dispatched stages.
             </Text>
           </View>
-
-          <View style={styles.footerActionGroup}>
-            {/* Download Excel */}
-            <TouchableOpacity
-              style={[styles.exportBtn, { backgroundColor: colors.success }]}
-              onPress={() => exportServiceLogsToCSV(filteredVehicles, activeDateLabel)}
-              activeOpacity={0.8}
-            >
-              <Download size={15} color="#ffffff" />
-              <Text style={styles.exportBtnText}>Download Excel</Text>
-            </TouchableOpacity>
-
-            {/* Export PDF */}
-            <TouchableOpacity
-              style={[styles.exportBtn, { backgroundColor: colors.primary }]}
-              onPress={() => exportServiceLogsToPDF(filteredVehicles, kpis, activeDateLabel)}
-              activeOpacity={0.8}
-            >
-              <Printer size={15} color="#ffffff" />
-              <Text style={styles.exportBtnText}>Export PDF</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
       </View>
-    </View>
+    </BaseModal>
   );
 };
 
 const styles = StyleSheet.create({
-  modalOverlay: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    left: 0,
-    right: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 9999,
-    padding: 16,
-  },
-  backdrop: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    left: 0,
-    right: 0,
-    ...(Platform.OS === 'web' ? { position: 'fixed' as any } : {}),
-  },
-  modalContainer: {
-    width: '100%',
-    maxWidth: 950,
-    maxHeight: '90%',
-    borderRadius: 16,
-    borderWidth: 1,
-    overflow: 'hidden',
-    zIndex: 10000,
-    ...(Platform.OS === 'web'
-      ? ({ boxShadow: '0px 16px 40px rgba(0, 0, 0, 0.4)' } as any)
-      : { shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.4, shadowRadius: 20, elevation: 12 }),
-  },
-  header: {
+  footerInner: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    gap: 12,
-  },
-  headerTitleGroup: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    minWidth: 0,
-  },
-  headerIconWrapper: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  headerTextContainer: {
-    flex: 1,
-    minWidth: 0,
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: '800',
-    letterSpacing: 0.3,
-  },
-  headerSub: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-  closeBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: '100%',
+    flexWrap: 'wrap',
+    gap: 8,
   },
   modalBody: {
-    padding: 20,
+    width: '100%',
   },
   filterSection: {
     padding: 14,
@@ -501,33 +579,93 @@ const styles = StyleSheet.create({
   activePillText: {
     fontWeight: '800',
   },
-  kpiGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  kpiContainer: {
     gap: 12,
     marginBottom: 16,
   },
+  kpiSummaryRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  kpiBayRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
   kpiCard: {
     flex: 1,
-    minWidth: 160,
-    padding: 14,
+    padding: 12,
     borderRadius: 12,
     borderWidth: 1,
     gap: 6,
   },
+  kpiBayCard: {
+    flex: 1,
+    minWidth: 0,
+    paddingHorizontal: 8,
+    paddingVertical: 10,
+  },
+  kpiMetricCol: {
+    flex: 1,
+    minWidth: 0,
+  },
   kpiLabel: {
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: '800',
     letterSpacing: 0.5,
+  },
+  kpiCardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 2,
+  },
+  kpiVehicleBadge: {
+    fontSize: 8.5,
+    fontWeight: '700',
+    paddingHorizontal: 4,
+    paddingVertical: 1.5,
+    borderRadius: 4,
   },
   kpiValRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   kpiVal: {
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: '900',
+  },
+  kpiSubLabel: {
+    fontSize: 8,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    marginTop: 1,
+  },
+  kpiActiveRow: {
+    marginTop: 4,
+    paddingTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  kpiActiveVal: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  kpiBottomRow: {
+    marginTop: 4,
+    paddingTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.05)',
+    alignItems: 'center',
+  },
+  kpiBottomText: {
+    fontSize: 8.5,
+    fontWeight: '700',
+  },
+  kpiSubText: {
+    fontSize: 11,
+    fontWeight: '500',
+    marginTop: 2,
   },
   tableContainer: {
     borderRadius: 12,
@@ -555,17 +693,44 @@ const styles = StyleSheet.create({
   tableScroll: {
     minWidth: '100%',
   },
-  thRow: {
+  thRowTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 6,
     paddingHorizontal: 10,
     borderBottomWidth: 1,
+  },
+  thRowSub: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderBottomWidth: 1,
+  },
+  thGroupHeader: {
+    width: 210,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
+  thGroupHeaderText: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
   thCell: {
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0.5,
+  },
+  thSubCell: {
+    fontSize: 8.5,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+    textAlign: 'center',
   },
   tdRow: {
     flexDirection: 'row',
@@ -583,18 +748,8 @@ const styles = StyleSheet.create({
   colPlate: { width: 130 },
   colStatus: { width: 100 },
   colTime: { width: 95 },
-  colBay: { width: 85 },
+  colSubBay: { width: 70, textAlign: 'center' },
   colTasks: { width: 75 },
-  footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    flexWrap: 'wrap',
-    gap: 8,
-  },
   footerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -621,5 +776,27 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 12,
     fontWeight: '700',
+  },
+  auditNoteCard: {
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    gap: 6,
+    marginBottom: 8,
+  },
+  auditNoteTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
+  },
+  auditNoteTitle: {
+    fontSize: 11.5,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+  auditNoteText: {
+    fontSize: 10.5,
+    lineHeight: 15,
   },
 });
