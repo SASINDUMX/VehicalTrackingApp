@@ -7,12 +7,95 @@ import { Vehicle, VehicleTask, StageLog, BayZone, TaskType } from '../types/vehi
  */
 export const vehicleService = {
   /**
+   * Reconciles overnight vehicles across day transitions for same-day service operations:
+   * 1. Vehicles left in 'inspection' zone from previous days are automatically marked completed.
+   * 2. Vehicles left unfinished in working bays ('workshop', 'alignment', 'hoist') from previous days
+   *    are deleted as out-of-scope for the new day.
+   * This guarantees that every morning starts with clean, fresh bays.
+   */
+  async reconcileDailyVehicles(): Promise<{ completedCount: number; deletedCount: number }> {
+    const client = supabase;
+    if (!client || !isSupabaseConnected) return { completedCount: 0, deletedCount: 0 };
+
+    try {
+      const now = new Date();
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+      const { data: unfinished, error } = await client
+        .from('vehicles')
+        .select('id, vehicle_no, current_zone, intake_at, created_at')
+        .eq('is_finished', false);
+
+      if (error || !unfinished || unfinished.length === 0) {
+        return { completedCount: 0, deletedCount: 0 };
+      }
+
+      const stale = unfinished.filter(v => {
+        const d = new Date(v.intake_at || v.created_at);
+        return !isNaN(d.getTime()) && d < startOfToday;
+      });
+
+      if (stale.length === 0) return { completedCount: 0, deletedCount: 0 };
+
+      // 1. Complete inspection vehicles from previous days
+      const inspectionVehicles = stale.filter(v => v.current_zone === 'inspection');
+      for (const iv of inspectionVehicles) {
+        const nowIso = now.toISOString();
+        const { data: logs } = await client
+          .from('stage_logs')
+          .select('*')
+          .eq('vehicle_id', iv.id)
+          .is('exited_at', null);
+
+        if (logs && logs.length > 0) {
+          for (const l of logs) {
+            const entered = new Date(l.entered_at).getTime();
+            const dur = Math.max(0, Math.floor((now.getTime() - entered) / 1000));
+            await client
+              .from('stage_logs')
+              .update({ exited_at: nowIso, duration_seconds: dur, idle_seconds: dur })
+              .eq('id', l.id);
+          }
+        }
+
+        await client
+          .from('vehicles')
+          .update({
+            current_zone: 'completed',
+            is_finished: true,
+            completed_at: nowIso,
+            is_paused: false,
+            paused_at: null,
+          })
+          .eq('id', iv.id);
+      }
+
+      // 2. Delete out-of-scope unfinished vehicles in working bays from previous days
+      const bayVehicles = stale.filter(v => v.current_zone !== 'inspection');
+      const bayIds = bayVehicles.map(v => v.id);
+      if (bayIds.length > 0) {
+        await client.from('stage_logs').delete().in('vehicle_id', bayIds);
+        await client.from('vehicle_tasks').delete().in('vehicle_id', bayIds);
+        await client.from('vehicles').delete().in('id', bayIds);
+      }
+
+      return { completedCount: inspectionVehicles.length, deletedCount: bayVehicles.length };
+    } catch (err) {
+      console.warn('[vehicleService] Daily reconciliation note:', err);
+      return { completedCount: 0, deletedCount: 0 };
+    }
+  },
+
+  /**
    * Option B Soft-Filtering: Queries active vehicles (is_finished = false)
    * plus jobs finished within the last 48 hours.
    */
   async fetchLiveVehicles(): Promise<Vehicle[]> {
     const client = supabase;
     if (!client || !isSupabaseConnected) return [];
+
+    // Automatically reconcile any overnight vehicles from previous days
+    await this.reconcileDailyVehicles();
 
     const cutoff48h = new Date(Date.now() - 48 * 3600 * 1000).toISOString();
     const liveFilter = `is_finished.eq.false,created_at.gte.${cutoff48h}`;

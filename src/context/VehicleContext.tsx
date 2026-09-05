@@ -139,6 +139,32 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
   // 1. Live Data Fetch via Service Repository
   const fetchSupabaseData = useCallback(async (isInitialLoad = false) => {
     if (!isSupabaseConnected) {
+      if (isMountedRef.current) {
+        // Offline reconciliation: clean overnight vehicles from local state & cache
+        setVehicles(prev => {
+          const now = new Date();
+          const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          const cleaned = prev
+            .map(v => {
+              const d = new Date(v.intake_at || v.created_at);
+              if (!v.is_finished && !isNaN(d.getTime()) && d < startOfToday) {
+                if (v.current_zone === 'inspection') {
+                  return {
+                    ...v,
+                    current_zone: 'completed' as BayZone,
+                    is_finished: true,
+                    completed_at: now.toISOString(),
+                  };
+                }
+                return null;
+              }
+              return v;
+            })
+            .filter((v): v is Vehicle => v !== null);
+          safeStorage.setItem('um_cached_vehicles', JSON.stringify(cleaned));
+          return cleaned;
+        });
+      }
       if (isInitialLoad && isMountedRef.current) setIsLoading(false);
       return;
     }
@@ -272,6 +298,35 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
       };
     }
   }, [fetchSupabaseData, debouncedRefetch, selectedVehicleState?.id]);
+
+  // 2b. Midnight Rollover: Automatically reconciles and resets bays at 12:00:01 AM every day
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+
+    const scheduleMidnightRollover = () => {
+      const now = new Date();
+      // Calculate next midnight in local time
+      const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 1);
+      const msUntilMidnight = Math.max(1000, nextMidnight.getTime() - now.getTime());
+
+      timer = setTimeout(async () => {
+        console.log('[VehicleContext] Midnight reached! Resetting bays for new service day...');
+        try {
+          await vehicleService.reconcileDailyVehicles();
+        } catch (err) {
+          console.warn('[VehicleContext] Midnight reconciliation error:', err);
+        }
+        fetchSupabaseData(false);
+        // Schedule next midnight rollover
+        scheduleMidnightRollover();
+      }, msUntilMidnight);
+    };
+
+    scheduleMidnightRollover();
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [fetchSupabaseData]);
 
   // 3. ADD VEHICLE (Optimistic + Service)
   const addVehicle = useCallback(async (
