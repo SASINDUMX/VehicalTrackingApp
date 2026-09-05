@@ -4,8 +4,7 @@ import { usePermissions } from "./usePermissions";
 import { getRoleBay, getTechName } from "../constants/bays";
 import { BayZone, TaskType } from "../types/vehicle";
 import { matchesVehicleSearch } from "../utils/searchUtils";
-import { getTaskTypeForBay, getActiveStageNetSeconds } from "../utils/vehicleUtils";
-import { getCurrentActiveBreak } from "../utils/workshopHoursUtils";
+import { getTaskTypeForBay, getActiveStageNetSeconds, computeVehicleTimersMap } from "../utils/vehicleUtils";
 
 export interface PendingTransfer {
   vehicleId: string;
@@ -14,54 +13,8 @@ export interface PendingTransfer {
   targetZoneName: string;
 }
 
-const computeVehicleTimersMap = (vehicleList: any[]) => {
-  const updated: Record<string, string> = {};
-  const now = new Date();
-  const activeBreak = getCurrentActiveBreak(now);
-
-  vehicleList.forEach((v) => {
-    const lastLog = v.stage_logs[v.stage_logs.length - 1];
-    const isPaused = Boolean(v.is_paused || (lastLog && lastLog.is_paused));
-    const pausedAt = v.paused_at || (lastLog && lastLog.paused_at);
-    const pausedSeconds = v.paused_seconds || (lastLog && lastLog.paused_seconds) || 0;
-
-    if (lastLog && !lastLog.exited_at) {
-      if (!lastLog.work_started_at) {
-        // IDLE state: waiting for technician to start work
-        const enterMs = new Date(lastLog.entered_at).getTime();
-        const idleSec = Math.max(0, Math.floor((now.getTime() - enterMs) / 1000));
-        const hours = Math.floor(idleSec / 3600);
-        const mins = Math.floor((idleSec % 3600) / 60);
-        const secs = idleSec % 60;
-        const padSec = secs < 10 ? `0${secs}` : `${secs}`;
-        const timeStr = hours > 0 ? `${hours}h ${mins}m ${padSec}s` : `${mins}m ${padSec}s`;
-        updated[v.id] = `IDLE · ${timeStr}`;
-      } else {
-        // ACTIVE state: technician work in progress
-        const workStartMs = new Date(lastLog.work_started_at).getTime();
-        const activeSec = Math.max(0, Math.floor((now.getTime() - workStartMs) / 1000));
-        const hours = Math.floor(activeSec / 3600);
-        const mins = Math.floor((activeSec % 3600) / 60);
-        const secs = activeSec % 60;
-        const padSec = secs < 10 ? `0${secs}` : `${secs}`;
-        const timeStr = hours > 0 ? `${hours}h ${mins}m ${padSec}s` : `${mins}m ${padSec}s`;
-
-        if (activeBreak) {
-          updated[v.id] = `⏸ ${timeStr} (${activeBreak.name})`;
-        } else {
-          updated[v.id] = timeStr;
-        }
-      }
-    } else {
-      updated[v.id] = "0m 00s";
-    }
-  });
-
-  return updated;
-};
-
 export const useTechnicianStation = () => {
-  const { vehicles, currentRole, toggleTaskCompletion, transferVehicleZone, toggleStageTimer, startStageWork, isLoading, searchQuery, setSelectedVehicle } = useVehicles();
+  const { vehicles, currentRole, toggleTaskCompletion, transferVehicleZone, toggleStageTimer, startStageWork, isLoading, searchQuery, showMyVehiclesOnly, setSelectedVehicle } = useVehicles();
   const { canMarkTaskDone, canTransferVehicle, canControlTimer, canStartWork } = usePermissions();
 
   const activeBay = getRoleBay(currentRole);
@@ -124,6 +77,7 @@ export const useTechnicianStation = () => {
     pendingTransfer,
     isLoading,
     searchQuery,
+    showMyVehiclesOnly,
     currentRole,
     canMarkTaskDone,
     canTransferVehicle,

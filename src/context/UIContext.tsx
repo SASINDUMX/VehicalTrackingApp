@@ -1,10 +1,15 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { hapticService } from '../lib/haptics';
 
-export interface UrgentModalData {
+export interface VehicleNoteModalData {
   vehicleNo: string;
-  note: string;
+  isUrgent?: boolean;
+  urgentNote?: string | null;
+  remarks?: string | null;
 }
+
+// Keep UrgentModalData alias for backwards compatibility
+export type UrgentModalData = VehicleNoteModalData;
 
 export interface UIContextType {
   // Modal Visibility Flags
@@ -19,8 +24,17 @@ export interface UIContextType {
   searchQuery: string;
   setSearchQuery: (query: string) => void;
 
-  // Urgent Note Callout Modal
-  urgentModalData: UrgentModalData | null;
+  // Filter: All vs My (Pinned) Vehicles
+  showMyVehiclesOnly: boolean;
+  setShowMyVehiclesOnly: (show: boolean) => void;
+
+  // Vehicle Note / Urgent Callout Modal
+  vehicleNoteModalData: VehicleNoteModalData | null;
+  showVehicleNotes: (data: VehicleNoteModalData) => void;
+  hideVehicleNotes: () => void;
+
+  // Backwards compatibility aliases
+  urgentModalData: VehicleNoteModalData | null;
   showUrgentNote: (vehicleNo: string, note?: string | null) => void;
   hideUrgentNote: () => void;
 }
@@ -32,16 +46,25 @@ export const UIProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [isConfigModalOpen, setIsConfigModalOpen] = useState<boolean>(false);
   const [isReportsModalOpen, setIsReportsModalOpen] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [urgentModalData, setUrgentModalData] = useState<UrgentModalData | null>(null);
+  const [showMyVehiclesOnly, setShowMyVehiclesOnly] = useState<boolean>(false);
+  const [vehicleNoteModalData, setVehicleNoteModalData] = useState<VehicleNoteModalData | null>(null);
+
+  const showVehicleNotes = useCallback((data: VehicleNoteModalData) => {
+    try { hapticService.triggerLightHaptic(); } catch { /* ignore */ }
+    setVehicleNoteModalData(data);
+  }, []);
+
+  const hideVehicleNotes = useCallback(() => {
+    setVehicleNoteModalData(null);
+  }, []);
 
   const showUrgentNote = useCallback((vehicleNo: string, note?: string | null) => {
-    try { hapticService.triggerLightHaptic(); } catch { /* ignore */ }
-    setUrgentModalData({ vehicleNo, note: note || '' });
-  }, []);
+    showVehicleNotes({ vehicleNo, isUrgent: true, urgentNote: note || '' });
+  }, [showVehicleNotes]);
 
   const hideUrgentNote = useCallback(() => {
-    setUrgentModalData(null);
-  }, []);
+    hideVehicleNotes();
+  }, [hideVehicleNotes]);
 
   return (
     <UIContext.Provider
@@ -54,7 +77,12 @@ export const UIProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
         setIsReportsModalOpen,
         searchQuery,
         setSearchQuery,
-        urgentModalData,
+        showMyVehiclesOnly,
+        setShowMyVehiclesOnly,
+        vehicleNoteModalData,
+        showVehicleNotes,
+        hideVehicleNotes,
+        urgentModalData: vehicleNoteModalData,
         showUrgentNote,
         hideUrgentNote,
       }}

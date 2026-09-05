@@ -29,7 +29,12 @@ export interface VehicleContextType {
   setIsReportsModalOpen: (open: boolean) => void;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
+  showMyVehiclesOnly: boolean;
+  setShowMyVehiclesOnly: (show: boolean) => void;
   urgentModalData: UrgentModalData | null;
+  vehicleNoteModalData: UrgentModalData | null;
+  showVehicleNotes: (data: UrgentModalData) => void;
+  hideVehicleNotes: () => void;
   showUrgentNote: (vehicleNo: string, note?: string | null) => void;
   hideUrgentNote: () => void;
 
@@ -343,7 +348,22 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
     setVehicles(prev => [newVehicle, ...prev]);
 
     try {
-      await vehicleService.createVehicle(newVehicle, tasksList);
+      const created = await vehicleService.createVehicle(
+        {
+          vehicle_no: cleanNo,
+          current_zone: targetZone,
+          assigned_tech: assignedTech || 'Unassigned',
+          remarks: remarks || '',
+          intake_at: now,
+          status: 'active',
+          is_urgent: isUrgent,
+          urgent_note: isUrgent ? (urgentNote?.trim() || null) : null,
+        },
+        tasksList
+      );
+      if (isMountedRef.current) {
+        setVehicles(prev => prev.map(v => (v.id === newVehicleId ? created : v)));
+      }
     } catch (err) {
       console.error('[VehicleContext] addVehicle error:', err);
       if (isMountedRef.current) {
@@ -749,7 +769,12 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
       setIsReportsModalOpen: ui.setIsReportsModalOpen,
       searchQuery: ui.searchQuery,
       setSearchQuery: ui.setSearchQuery,
+      showMyVehiclesOnly: ui.showMyVehiclesOnly,
+      setShowMyVehiclesOnly: ui.setShowMyVehiclesOnly,
       urgentModalData: ui.urgentModalData,
+      vehicleNoteModalData: ui.vehicleNoteModalData,
+      showVehicleNotes: ui.showVehicleNotes,
+      hideVehicleNotes: ui.hideVehicleNotes,
       showUrgentNote: ui.showUrgentNote,
       hideUrgentNote: ui.hideUrgentNote,
 

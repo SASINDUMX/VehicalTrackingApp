@@ -146,50 +146,92 @@ export const vehicleService = {
    * Intakes a new vehicle, creating initial stage_log and checklist tasks in database.
    */
   async createVehicle(
-    vehicle: Vehicle,
+    vehicleData: {
+      vehicle_no: string;
+      current_zone: BayZone;
+      assigned_tech: string;
+      remarks: string;
+      intake_at: string;
+      status: 'active' | 'finished' | 'incomplete';
+      is_urgent: boolean;
+      urgent_note: string | null;
+    },
     tasksList: { task_name: string; task_type: TaskType; is_required: boolean }[]
-  ): Promise<void> {
+  ): Promise<Vehicle> {
     const client = supabase;
-    if (!client || !isSupabaseConnected) return;
+    if (!client || !isSupabaseConnected) throw new Error('Database not connected');
 
-    const { error: vErr } = await client.from('vehicles').insert({
-      id: vehicle.id,
-      vehicle_no: vehicle.vehicle_no,
-      current_zone: vehicle.current_zone,
-      assigned_tech: vehicle.assigned_tech,
-      remarks: vehicle.remarks,
-      intake_at: vehicle.intake_at,
-      status: vehicle.status,
-      is_urgent: vehicle.is_urgent,
-      urgent_note: vehicle.urgent_note,
-      is_finished: false,
-    });
+    const { data: insertedV, error: vErr } = await client
+      .from('vehicles')
+      .insert({
+        vehicle_no: vehicleData.vehicle_no,
+        current_zone: vehicleData.current_zone,
+        assigned_tech: vehicleData.assigned_tech,
+        remarks: vehicleData.remarks,
+        intake_at: vehicleData.intake_at,
+        status: vehicleData.status,
+        is_urgent: vehicleData.is_urgent,
+        urgent_note: vehicleData.urgent_note,
+        is_finished: false,
+      })
+      .select()
+      .single();
+
     if (vErr) throw vErr;
 
-    const initialLog = vehicle.stage_logs[0];
-    if (initialLog) {
-      await client.from('stage_logs').insert({
-        id: initialLog.id,
-        vehicle_id: vehicle.id,
-        to_zone: initialLog.to_zone,
-        entered_at: initialLog.entered_at,
-        work_started_at: initialLog.work_started_at,
-        idle_seconds: initialLog.idle_seconds || 0,
+    const { data: insertedLog, error: lErr } = await client
+      .from('stage_logs')
+      .insert({
+        vehicle_id: insertedV.id,
+        to_zone: vehicleData.current_zone,
+        entered_at: vehicleData.intake_at,
+        work_started_at: null,
+        idle_seconds: 0,
         moved_by: 'Job Supervisor',
-      });
-    }
+      })
+      .select()
+      .single();
 
+    if (lErr) console.warn('[vehicleService] initial stage_log insert warning:', lErr.message);
+
+    let insertedTasks: VehicleTask[] = [];
     if (tasksList.length > 0) {
-      const taskInserts = tasksList.map((t, index) => ({
-        id: vehicle.tasks[index]?.id || `task-${Date.now()}-${index}`,
-        vehicle_id: vehicle.id,
+      const taskInserts = tasksList.map(t => ({
+        vehicle_id: insertedV.id,
         task_name: t.task_name,
         task_type: t.task_type,
         is_required: t.is_required,
         is_completed: false,
       }));
-      await client.from('vehicle_tasks').insert(taskInserts);
+
+      const { data: tData, error: tErr } = await client
+        .from('vehicle_tasks')
+        .insert(taskInserts)
+        .select();
+
+      if (tErr) console.warn('[vehicleService] vehicle_tasks insert warning:', tErr.message);
+      if (tData) insertedTasks = tData as VehicleTask[];
     }
+
+    return {
+      id: insertedV.id,
+      vehicle_no: insertedV.vehicle_no,
+      current_zone: insertedV.current_zone,
+      assigned_tech: insertedV.assigned_tech || 'Unassigned',
+      remarks: insertedV.remarks || '',
+      intake_at: insertedV.intake_at,
+      completed_at: insertedV.completed_at,
+      is_finished: insertedV.is_finished,
+      created_at: insertedV.created_at,
+      status: insertedV.status,
+      is_urgent: insertedV.is_urgent,
+      urgent_note: insertedV.urgent_note,
+      is_paused: insertedV.is_paused || false,
+      paused_at: insertedV.paused_at,
+      paused_seconds: insertedV.paused_seconds || 0,
+      tasks: insertedTasks,
+      stage_logs: insertedLog ? [insertedLog as StageLog] : [],
+    };
   },
 
   /**

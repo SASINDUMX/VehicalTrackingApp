@@ -1,5 +1,5 @@
 import { Vehicle, VehicleTask, BayZone, TaskType } from "../types/vehicle";
-import { getNetWorkingSeconds, getBreakOverlap } from "./workshopHoursUtils";
+import { getNetWorkingSeconds, getBreakOverlap, getCurrentActiveBreak } from "./workshopHoursUtils";
 
 export interface ProgressResult {
   completedCount: number;
@@ -67,7 +67,9 @@ export interface StageBreakdownResult {
   grossSec: number;
   breakSec: number;
   idleSec: number;
+  queueInSec: number;
   activeSec: number;
+  queueOutSec: number;
   isIdle: boolean;
   pausedSec: number;
   isPaused: boolean;
@@ -79,30 +81,39 @@ export interface StageBreakdownResult {
 
 export interface StageTimingResult {
   isIdle: boolean;
-  idleSeconds: number;
-  activeSeconds: number;
+  idleSeconds: number; // Total idle (queueIn + queueOut)
+  queueInSeconds: number; // Waiting for tech to start
+  activeSeconds: number; // True mechanical labor
+  queueOutSeconds: number; // Task done, waiting for dispatch
+  breakSeconds: number; // Shift breaks
   totalStageSeconds: number;
   displaySeconds: number;
   displayText: string;
 }
 
 /**
- * Calculates Idle vs Active timing for a stage log:
- * - If work_started_at is null: stage is IDLE (waiting in bay)
- * - If work_started_at is set: stage is ACTIVE (work in progress)
+ * Calculates 4-tier timing for a stage:
+ * 1. Queue In (Pre-Idle): entered_at -> work_started_at
+ * 2. Active Labor: work_started_at -> work_completed_at (excluding breaks)
+ * 3. Queue Out (Post-Idle): work_completed_at -> exited_at
+ * 4. Shift Breaks: overlap with scheduled breaks
  */
 export const getStageTiming = (
   enteredAt?: string | null,
   workStartedAt?: string | null,
   exitedAt?: string | null,
   recordedIdleSeconds?: number,
-  recordedDurationSeconds?: number
+  recordedDurationSeconds?: number,
+  workCompletedAt?: string | null
 ): StageTimingResult => {
   if (!enteredAt) {
     return {
       isIdle: true,
       idleSeconds: 0,
+      queueInSeconds: 0,
       activeSeconds: 0,
+      queueOutSeconds: 0,
+      breakSeconds: 0,
       totalStageSeconds: 0,
       displaySeconds: 0,
       displayText: '0m 00s',
@@ -112,37 +123,70 @@ export const getStageTiming = (
   const enteredMs = new Date(enteredAt).getTime();
   const isClosed = Boolean(exitedAt);
   const endMs = isClosed && exitedAt ? new Date(exitedAt).getTime() : Date.now();
-  const totalSec = recordedDurationSeconds && recordedDurationSeconds > 0
+  const rawTotalSec = recordedDurationSeconds && recordedDurationSeconds > 0
     ? recordedDurationSeconds
     : Math.max(0, Math.floor((endMs - enteredMs) / 1000));
 
+  const { breakSeconds } = getBreakOverlap(new Date(enteredAt), new Date(endMs));
+  // Deduct breaks from operational stage duration
+  const totalSec = Math.max(0, rawTotalSec - breakSeconds);
+
+  // Case 1: Work hasn't started yet -> 100% Queue In (Pre-Idle, excluding breaks)
   if (!workStartedAt) {
-    // Work hasn't started yet -> this stage is IDLE
-    const idleSec = isClosed ? totalSec : totalSec;
     return {
       isIdle: true,
-      idleSeconds: idleSec,
+      idleSeconds: totalSec,
+      queueInSeconds: totalSec,
       activeSeconds: 0,
+      queueOutSeconds: 0,
+      breakSeconds,
       totalStageSeconds: totalSec,
-      displaySeconds: idleSec,
-      displayText: `IDLE · ${formatDurationString(idleSec, true)}`,
+      displaySeconds: totalSec,
+      displayText: formatDurationString(totalSec, true),
     };
   }
 
-  // Work has started -> this stage is ACTIVE
+  // Work has started
   const workStartedMs = new Date(workStartedAt).getTime();
-  const idleSec = (typeof recordedIdleSeconds === 'number' && recordedIdleSeconds >= 0)
-    ? recordedIdleSeconds
-    : Math.max(0, Math.floor((workStartedMs - enteredMs) / 1000));
+  const queueInSec = Math.max(0, Math.floor((workStartedMs - enteredMs) / 1000));
 
-  const activeEndMs = isClosed && exitedAt ? new Date(exitedAt).getTime() : Date.now();
-  const activeSec = Math.max(0, Math.floor((activeEndMs - workStartedMs) / 1000));
+  // Case 2: Work has completed (Task marked Done)
+  if (workCompletedAt) {
+    const completedMs = new Date(workCompletedAt).getTime();
+    // Clamp completedMs between workStartedMs and endMs
+    const validCompletedMs = Math.min(Math.max(completedMs, workStartedMs), endMs);
+    const rawActiveSec = Math.max(0, Math.floor((validCompletedMs - workStartedMs) / 1000));
+    const activeSec = Math.max(0, rawActiveSec - breakSeconds);
+    const queueOutSec = Math.max(0, Math.floor((endMs - validCompletedMs) / 1000));
+    const totalIdleSec = queueInSec + queueOutSec;
+
+    return {
+      isIdle: false,
+      idleSeconds: totalIdleSec,
+      queueInSeconds: queueInSec,
+      activeSeconds: activeSec,
+      queueOutSeconds: queueOutSec,
+      breakSeconds,
+      totalStageSeconds: totalSec,
+      displaySeconds: activeSec,
+      displayText: isClosed
+        ? formatDurationString(activeSec, true)
+        : formatDurationString(queueOutSec, true),
+    };
+  }
+
+  // Case 3: Work started and currently IN PROGRESS
+  const rawActiveSec = Math.max(0, Math.floor((endMs - workStartedMs) / 1000));
+  const activeSec = Math.max(0, rawActiveSec - breakSeconds);
 
   return {
     isIdle: false,
-    idleSeconds: idleSec,
+    idleSeconds: queueInSec,
+    queueInSeconds: queueInSec,
     activeSeconds: activeSec,
-    totalStageSeconds: idleSec + activeSec,
+    queueOutSeconds: 0,
+    breakSeconds,
+    totalStageSeconds: totalSec,
     displaySeconds: activeSec,
     displayText: formatDurationString(activeSec, true),
   };
@@ -171,7 +215,8 @@ export const getStageDurationBreakdown = (
   pausedAt?: string | null,
   pausedSeconds: number = 0,
   workStartedAt?: string | null,
-  recordedIdleSeconds?: number
+  recordedIdleSeconds?: number,
+  workCompletedAt?: string | null
 ): StageBreakdownResult => {
   if (!enteredAt) {
     return {
@@ -179,7 +224,9 @@ export const getStageDurationBreakdown = (
       grossSec: 0,
       breakSec: 0,
       idleSec: 0,
+      queueInSec: 0,
       activeSec: 0,
+      queueOutSec: 0,
       isIdle: true,
       pausedSec: 0,
       isPaused: false,
@@ -189,7 +236,7 @@ export const getStageDurationBreakdown = (
     };
   }
 
-  const timing = getStageTiming(enteredAt, workStartedAt, exitedAt, recordedIdleSeconds);
+  const timing = getStageTiming(enteredAt, workStartedAt, exitedAt, recordedIdleSeconds, undefined, workCompletedAt);
   const start = new Date(enteredAt);
   const end = exitedAt ? new Date(exitedAt) : new Date();
 
@@ -199,13 +246,15 @@ export const getStageDurationBreakdown = (
       grossSec: 0,
       breakSec: 0,
       idleSec: timing.idleSeconds,
+      queueInSec: timing.queueInSeconds,
       activeSec: timing.activeSeconds,
+      queueOutSec: timing.queueOutSeconds,
       isIdle: timing.isIdle,
       pausedSec: 0,
       isPaused: false,
       netStr: '0m',
       grossStr: '0m',
-      breakNote: timing.isIdle ? '⏳ Waiting to start (IDLE)' : null,
+      breakNote: timing.isIdle ? '⏳ Waiting to start (Queue In)' : null,
     };
   }
 
@@ -215,16 +264,21 @@ export const getStageDurationBreakdown = (
 
   let queueNote: string | null = null;
   if (timing.isIdle) {
-    queueNote = `⏳ IDLE / Queue: ${formatDurationString(timing.idleSeconds, false)}`;
-  } else if (timing.idleSeconds > 0) {
-    queueNote = `Queue: ${formatDurationString(timing.idleSeconds, false)} · Active: ${formatDurationString(timing.activeSeconds, false)}`;
+    queueNote = `Idle: ${formatDurationString(timing.queueInSeconds, false)}`;
+  } else {
+    const parts: string[] = [];
+    parts.push(`Active: ${formatDurationString(timing.activeSeconds, false)}`);
+    if (timing.idleSeconds > 0) {
+      parts.push(`Idle: ${formatDurationString(timing.idleSeconds, false)}`);
+    }
+    queueNote = parts.join(' · ');
   }
 
   const breakMins = Math.round(breakSeconds / 60);
   let breakNote: string | null = null;
   if (breakMins > 0 && breakNames.length > 0) {
     const breakNamesStr = breakNames.join(', ');
-    breakNote = `☕ Deducted ${breakMins}m ${breakNamesStr} (scheduled break)`;
+    breakNote = `Deducted ${breakMins}m ${breakNamesStr}`;
   }
 
   return {
@@ -232,7 +286,9 @@ export const getStageDurationBreakdown = (
     grossSec,
     breakSec: breakSeconds,
     idleSec: timing.idleSeconds,
+    queueInSec: timing.queueInSeconds,
     activeSec: timing.activeSeconds,
+    queueOutSec: timing.queueOutSeconds,
     isIdle: timing.isIdle,
     pausedSec: 0,
     isPaused: false,
@@ -242,3 +298,73 @@ export const getStageDurationBreakdown = (
     queueNote,
   };
 };
+
+/**
+ * Computes live formatted timer strings for vehicles across bays.
+ * Standardizes:
+ * - Advisor inspection: always 'READY' (no timer countdown)
+ * - Idle state: 'IDLE · Xm Ys'
+ * - Active state: 'Xm Ys' (or paused break: '⏸ Xm Ys (Break Name)')
+ */
+export const computeVehicleTimersMap = (vehicleList: Vehicle[]): Record<string, string> => {
+  const updated: Record<string, string> = {};
+  const now = new Date();
+  const activeBreak = getCurrentActiveBreak(now);
+
+  vehicleList.forEach((v) => {
+    // Advisor inspection zone is the final handover staging area - zero labor, no countdown
+    if (v.current_zone === 'inspection') {
+      updated[v.id] = 'READY';
+      return;
+    }
+
+    const lastLog = v.stage_logs[v.stage_logs.length - 1];
+
+    if (lastLog && !lastLog.exited_at) {
+      if (!lastLog.work_started_at) {
+        // IDLE state: waiting for technician to start work
+        const enterMs = new Date(lastLog.entered_at).getTime();
+        const idleSec = Math.max(0, Math.floor((now.getTime() - enterMs) / 1000));
+        const hours = Math.floor(idleSec / 3600);
+        const mins = Math.floor((idleSec % 3600) / 60);
+        const secs = idleSec % 60;
+        const padSec = secs < 10 ? `0${secs}` : `${secs}`;
+        const timeStr = hours > 0 ? `${hours}h ${mins}m ${padSec}s` : `${mins}m ${padSec}s`;
+        updated[v.id] = timeStr;
+      } else {
+        // ACTIVE state: technician work in progress
+        const workStartMs = new Date(lastLog.work_started_at).getTime();
+        const activeSec = Math.max(0, Math.floor((now.getTime() - workStartMs) / 1000));
+        const hours = Math.floor(activeSec / 3600);
+        const mins = Math.floor((activeSec % 3600) / 60);
+        const secs = activeSec % 60;
+        const padSec = secs < 10 ? `0${secs}` : `${secs}`;
+        const timeStr = hours > 0 ? `${hours}h ${mins}m ${padSec}s` : `${mins}m ${padSec}s`;
+
+        // Check if task for current bay is already marked completed (Queue Out state)
+        const bayTaskType = getTaskTypeForBay(v.current_zone);
+        const currentTask = v.tasks.find(t => t.task_type === bayTaskType && t.is_required) || v.tasks.find(t => t.task_type === bayTaskType);
+
+        if (currentTask && currentTask.is_completed && currentTask.completed_at) {
+          const completedMs = new Date(currentTask.completed_at).getTime();
+          const queueOutSec = Math.max(0, Math.floor((now.getTime() - completedMs) / 1000));
+          const qHours = Math.floor(queueOutSec / 3600);
+          const qMins = Math.floor((queueOutSec % 3600) / 60);
+          const qSecs = queueOutSec % 60;
+          const padQ = qSecs < 10 ? `0${qSecs}` : `${qSecs}`;
+          const qTimeStr = qHours > 0 ? `${qHours}h ${qMins}m ${padQ}s` : `${qMins}m ${padQ}s`;
+          updated[v.id] = qTimeStr;
+        } else if (activeBreak) {
+          updated[v.id] = `⏸ ${timeStr} (${activeBreak.name})`;
+        } else {
+          updated[v.id] = timeStr;
+        }
+      }
+    } else {
+      updated[v.id] = '0m 00s';
+    }
+  });
+
+  return updated;
+};
+
