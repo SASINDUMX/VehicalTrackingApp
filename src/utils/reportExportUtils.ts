@@ -102,6 +102,62 @@ export const filterVehiclesForReport = (
   });
 };
 
+/**
+ * Returns user-friendly date boundary description for a given preset, e.g. "05 Sep 2026" or "29 Aug – 05 Sep 2026".
+ */
+export const getDatePresetRangeDescription = (
+  preset: DateFilterPreset,
+  vehicles?: Vehicle[]
+): { label: string; rangeStr: string; isMultiDate: boolean } => {
+  const now = new Date();
+  const formatFullDate = (d: Date) =>
+    d.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Colombo' });
+  const formatShortDate = (d: Date) =>
+    d.toLocaleDateString('en-US', { day: '2-digit', month: 'short', timeZone: 'Asia/Colombo' });
+
+  const todayStr = formatFullDate(now);
+
+  switch (preset) {
+    case 'today':
+      return { label: 'Today', rangeStr: todayStr, isMultiDate: false };
+
+    case 'yesterday': {
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      return { label: 'Yesterday', rangeStr: formatFullDate(yesterday), isMultiDate: false };
+    }
+
+    case '7days': {
+      const past7 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      return { label: 'Last 7 Days', rangeStr: `${formatShortDate(past7)} – ${todayStr}`, isMultiDate: true };
+    }
+
+    case 'month': {
+      const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      return { label: 'This Month', rangeStr: `${formatShortDate(firstOfMonth)} – ${todayStr}`, isMultiDate: true };
+    }
+
+    case 'all': {
+      if (vehicles && vehicles.length > 0) {
+        const timestamps = vehicles
+          .map(v => new Date(v.intake_at || v.created_at).getTime())
+          .filter(t => !isNaN(t));
+        if (timestamps.length > 0) {
+          const earliest = new Date(Math.min(...timestamps));
+          return {
+            label: 'All Time',
+            rangeStr: `${formatShortDate(earliest)} – ${todayStr}`,
+            isMultiDate: true,
+          };
+        }
+      }
+      return { label: 'All Time', rangeStr: `Up to ${todayStr}`, isMultiDate: true };
+    }
+
+    default:
+      return { label: 'All Time', rangeStr: todayStr, isMultiDate: false };
+  }
+};
+
 export const getVehicleTotalPausedSeconds = (v: Vehicle): number => {
   let total = 0;
   v.stage_logs.forEach(l => {
@@ -138,7 +194,7 @@ export const calculateReportKPIs = (filteredVehicles: Vehicle[]): ReportKPIs => 
       totalVehicles: 0,
       completedCount: 0,
       inProgressCount: 0,
-      workshopBay: emptyBayKPI('workshop', 'General Workshop'),
+      workshopBay: emptyBayKPI('workshop', 'General Service'),
       alignmentBay: emptyBayKPI('alignment', 'Wheel Alignment'),
       hoistBay: emptyBayKPI('hoist', 'Hoist Service'),
       totalBreakSeconds: 0,
@@ -207,7 +263,7 @@ export const calculateReportKPIs = (filteredVehicles: Vehicle[]): ReportKPIs => 
     inProgressCount: filteredVehicles.length - completed,
     workshopBay: {
       zone: 'workshop',
-      name: 'General Workshop',
+      name: 'General Service',
       vehicleCount: workshopVehicles,
       totalActiveSec: workshopActive,
       avgActiveSec: workshopVehicles > 0 ? Math.floor(workshopActive / workshopVehicles) : 0,
@@ -377,11 +433,12 @@ export const exportServiceLogsToCSV = (
     '',
     '',
     '',
+    '',
     'OVERALL EFFICIENCY',
     '',
     '',
     '',
-    'GENERAL WORKSHOP',
+    'GENERAL SERVICE',
     '',
     '',
     'WHEEL ALIGNMENT',
@@ -400,13 +457,14 @@ export const exportServiceLogsToCSV = (
     'Vehicle Reg No',
     'Status',
     'Current Station',
+    'Intake Date',
     'Intake Time',
     'Completion Time',
     'Gross TAT',
     'Net Active Work',
     'Total Idle Time',
     'Total Shift Breaks',
-    // General Workshop
+    // General Service
     'Idle',
     'Active',
     'Breaks',
@@ -447,19 +505,26 @@ export const exportServiceLogsToCSV = (
       .map(t => `${t.task_name} (by ${t.completed_by || 'Tech'})`)
       .join('; ');
 
-    const statusLabel = isEffectiveDone ? 'DONE' : v.current_zone.toUpperCase();
+    const statusLabel = isEffectiveDone ? 'DONE' : (v.current_zone === 'workshop' ? 'GENERAL' : v.current_zone.toUpperCase());
+    const intakeDateStr = !isNaN(start.getTime())
+      ? start.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Colombo' })
+      : '--';
+    const intakeTimeStr = !isNaN(start.getTime())
+      ? start.toLocaleTimeString('en-US', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit', hour12: true })
+      : '--:--';
 
     const row = [
       escapeCSV(v.vehicle_no),
       escapeCSV(statusLabel),
-      escapeCSV(v.is_finished ? 'Delivered' : (isEffectiveDone ? 'Inspection' : v.current_zone.toUpperCase())),
-      escapeCSV(start.toLocaleString()),
-      escapeCSV(effectiveCompletionDate ? effectiveCompletionDate.toLocaleString() : 'Pending'),
+      escapeCSV(v.is_finished ? 'Delivered' : (isEffectiveDone ? 'Inspection' : (v.current_zone === 'workshop' ? 'General' : v.current_zone.toUpperCase()))),
+      escapeCSV(intakeDateStr),
+      escapeCSV(intakeTimeStr),
+      escapeCSV(effectiveCompletionDate ? effectiveCompletionDate.toLocaleString('en-US', { timeZone: 'Asia/Colombo' }) : 'Pending'),
       escapeCSV(formatDuration(grossSec)),
       escapeCSV(formatDuration(totalActiveSec > 0 ? totalActiveSec : netSec)),
       escapeCSV(formatDuration(totalIdleSec)),
       escapeCSV(formatDuration(breakSeconds)),
-      // General Workshop (Idle | Active | Breaks)
+      // General Service (Idle | Active | Breaks)
       escapeCSV(formatDuration(workshopTiming.idleSec)),
       escapeCSV(formatDuration(workshopTiming.activeSec)),
       escapeCSV(workshopTiming.breakSec > 0 ? formatDuration(workshopTiming.breakSec) : '-'),
@@ -529,9 +594,16 @@ export const exportServiceLogsToPDF = (
     const completedTasksCount = v.tasks.filter(t => t.is_completed).length;
     const totalTasksCount = v.tasks.filter(t => t.is_required).length;
 
-    const statusLabel = isEffectiveDone ? 'DONE' : v.current_zone.toUpperCase();
+    const statusLabel = isEffectiveDone ? 'DONE' : (v.current_zone === 'workshop' ? 'GENERAL' : v.current_zone.toUpperCase());
     const statusBg = isEffectiveDone ? '#dcfce7' : v.current_zone === 'workshop' ? '#e0f2fe' : v.current_zone === 'alignment' ? '#ecfdf5' : '#fef3c7';
     const statusColor = isEffectiveDone ? '#15803d' : v.current_zone === 'workshop' ? '#0369a1' : v.current_zone === 'alignment' ? '#047857' : '#b45309';
+
+    const intakeDateStr = !isNaN(start.getTime())
+      ? start.toLocaleDateString('en-US', { day: '2-digit', month: 'short', timeZone: 'Asia/Colombo' })
+      : '--';
+    const intakeTimeStr = !isNaN(start.getTime())
+      ? start.toLocaleTimeString('en-US', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit', hour12: true })
+      : '--:--';
 
     return `
       <tr style="background: ${i % 2 === 0 ? '#ffffff' : '#f8fafc'};">
@@ -543,11 +615,14 @@ export const exportServiceLogsToPDF = (
             ${statusLabel}
           </span>
         </td>
-        <td style="padding: 8px 10px; font-size: 11px; color: #475569; border-bottom: 1px solid #e2e8f0;">
-          ${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        <td style="padding: 8px 6px; font-size: 11px; font-weight: 600; color: #475569; border-bottom: 1px solid #e2e8f0;">
+          ${intakeDateStr}
+        </td>
+        <td style="padding: 8px 8px; font-size: 11px; color: #475569; border-bottom: 1px solid #e2e8f0;">
+          ${intakeTimeStr}
         </td>
         <td style="padding: 8px 10px; font-size: 11px; font-weight: ${isEffectiveDone ? '700' : '400'}; color: ${isEffectiveDone ? '#16a34a' : '#d97706'}; border-bottom: 1px solid #e2e8f0;">
-          ${isEffectiveDone && effectiveCompletionDate ? effectiveCompletionDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'In Progress'}
+          ${isEffectiveDone && effectiveCompletionDate ? effectiveCompletionDate.toLocaleTimeString('en-US', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit', hour12: true }) : 'In Progress'}
         </td>
         <td style="padding: 8px 10px; font-weight: 700; font-size: 11px; color: #0284c7; border-bottom: 1px solid #e2e8f0;">
           ${formatDuration(grossSec)}
@@ -638,16 +713,20 @@ export const exportServiceLogsToPDF = (
 
         <div class="kpi-row">
           <div class="kpi-card">
-            <div class="kpi-label">Total Vehicles</div>
-            <div class="kpi-val">${kpis.totalVehicles}</div>
-            <div style="font-size: 9px; color: #64748b; margin-top: 2px;">${kpis.inProgressCount} active · ${kpis.completedCount} finished</div>
+            <div class="kpi-label" style="color: #0284c7;">Status</div>
+            <div style="margin-top: 4px;">
+              <div style="font-size: 14px; font-weight: 900; color: #0284c7;">${kpis.inProgressCount}</div>
+              <div style="font-size: 8px; font-weight: 700; color: #64748b; letter-spacing: 0.3px;">ACTIVE IN PROGRESS</div>
+            </div>
+            <div style="margin-top: 4px; padding-top: 4px; border-top: 1px solid #e2e8f0;">
+              <div style="font-size: 12px; font-weight: 800; color: #16a34a;">${kpis.completedCount}</div>
+              <div style="font-size: 8px; font-weight: 700; color: #64748b; letter-spacing: 0.3px;">COMPLETED JOBS</div>
+            </div>
+            <div style="margin-top: 4px; padding-top: 4px; border-top: 1px solid #e2e8f0; font-size: 8.5px; font-weight: 700; color: #64748b; text-align: center;">
+              ${kpis.totalVehicles} total vehicles
+            </div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Completed Jobs</div>
-            <div class="kpi-val" style="color: #16a34a;">${kpis.completedCount}</div>
-            <div style="font-size: 9px; color: #16a34a; margin-top: 2px;">Delivered / Ready</div>
-          </div>
-          <div class="kpi-card" style="border-left: 3px solid #0284c7;">
             <div class="kpi-label" style="color: #0284c7;">Workshop</div>
             <div style="margin-top: 4px;">
               <div style="font-size: 14px; font-weight: 900; color: #0284c7;">${formatDuration(kpis.workshopBay.avgStageSec)}</div>
@@ -661,7 +740,7 @@ export const exportServiceLogsToPDF = (
               ${kpis.workshopBay.vehicleCount} vehicles
             </div>
           </div>
-          <div class="kpi-card" style="border-left: 3px solid #16a34a;">
+          <div class="kpi-card">
             <div class="kpi-label" style="color: #16a34a;">Alignment</div>
             <div style="margin-top: 4px;">
               <div style="font-size: 14px; font-weight: 900; color: #16a34a;">${formatDuration(kpis.alignmentBay.avgStageSec)}</div>
@@ -675,7 +754,7 @@ export const exportServiceLogsToPDF = (
               ${kpis.alignmentBay.vehicleCount} vehicles
             </div>
           </div>
-          <div class="kpi-card" style="border-left: 3px solid #d97706;">
+          <div class="kpi-card">
             <div class="kpi-label" style="color: #d97706;">Hoist</div>
             <div style="margin-top: 4px;">
               <div style="font-size: 14px; font-weight: 900; color: #d97706;">${formatDuration(kpis.hoistBay.avgStageSec)}</div>
@@ -696,19 +775,20 @@ export const exportServiceLogsToPDF = (
             <tr style="background: #0f172a; color: #ffffff;">
               <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Vehicle No</th>
               <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Status</th>
+              <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Date</th>
               <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Intake</th>
               <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Finished</th>
               <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Gross TAT</th>
               <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Net Active</th>
               <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Total Idle</th>
               <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Breaks</th>
-              <th colspan="3" style="padding: 6px; text-align: center; background: #0369a1; border-right: 1px solid #334155;">GENERAL WORKSHOP</th>
+              <th colspan="3" style="padding: 6px; text-align: center; background: #0369a1; border-right: 1px solid #334155;">GENERAL SERVICE</th>
               <th colspan="3" style="padding: 6px; text-align: center; background: #047857; border-right: 1px solid #334155;">WHEEL ALIGNMENT</th>
               <th colspan="3" style="padding: 6px; text-align: center; background: #b45309; border-right: 1px solid #334155;">HOIST SERVICE</th>
               <th rowspan="2" style="padding: 8px 6px; text-align: left;">Tasks</th>
             </tr>
             <tr style="background: #1e293b; color: #94a3b8;">
-              <!-- General Workshop -->
+              <!-- General Service -->
               <th style="padding: 4px; text-align: center; font-size: 8.5px; color: #fbbf24; border-right: 1px solid #334155;">Idle</th>
               <th style="padding: 4px; text-align: center; font-size: 8.5px; color: #34d399; border-right: 1px solid #334155;">Active</th>
               <th style="padding: 4px; text-align: center; font-size: 8.5px; color: #f59e0b; border-right: 1px solid #334155;">Breaks</th>
