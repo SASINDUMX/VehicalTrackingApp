@@ -26,6 +26,27 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
   const { togglePin, isPinned } = usePinnedVehicles();
   const { showUrgentNote } = useVehicles();
   const [showPinnedOnly, setShowPinnedOnly] = useState<boolean>(false);
+  const [pendingHandover, setPendingHandover] = useState<{
+    id: string;
+    plate: string;
+    incompleteCount: number;
+  } | null>(null);
+
+  const handleRequestHandover = (vehicle: Vehicle) => {
+    const incomplete = vehicle.tasks.filter(t => t.is_required && !t.is_completed).length;
+    setPendingHandover({
+      id: vehicle.id,
+      plate: vehicle.vehicle_no,
+      incompleteCount: incomplete,
+    });
+  };
+
+  const handleConfirmHandover = () => {
+    if (pendingHandover && canFinishJob) {
+      finishVehicleJobSheet(pendingHandover.id, 'Service Advisor');
+      setPendingHandover(null);
+    }
+  };
 
   // Sort: urgent first, then pinned, then normal; optionally filter to pinned only
   const sortedVehicles = [...readyVehicles]
@@ -152,7 +173,7 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
                 !canFinishJob && { opacity: 0.4, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }
               ]}
               onPress={() => {
-                if (canFinishJob) finishVehicleJobSheet(vehicle.id, 'Service Advisor');
+                if (canFinishJob) handleRequestHandover(vehicle);
               }}
               activeOpacity={canFinishJob ? 0.7 : 1}
             >
@@ -208,6 +229,49 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
         contentContainerStyle={[styles.content, { gap: 16 }]}
         showsVerticalScrollIndicator={false}
       />
+
+      {/* Confirmation Modal for Final Handover */}
+      {pendingHandover && (
+        <View style={styles.confirmOverlay}>
+          <TouchableOpacity
+            style={styles.confirmBackdrop}
+            activeOpacity={1}
+            onPress={() => setPendingHandover(null)}
+          />
+          <View style={[styles.confirmCard, { backgroundColor: colors.surface, borderColor: colors.borderGlassBright }]}>
+            <View style={styles.confirmHeader}>
+              <Sparkles size={22} color={colors.success} />
+              <Text style={[styles.confirmTitle, { color: colors.textPrimary }]}>Confirm Final Handover</Text>
+            </View>
+
+            {pendingHandover.incompleteCount > 0 ? (
+              <Text style={[styles.confirmBodyText, { color: '#fca5a5' }]}>
+                ⚠️ Attention: <Text style={styles.confirmBoldPlate}>{pendingHandover.plate}</Text> has <Text style={{ fontWeight: '800', color: '#ef4444' }}>{pendingHandover.incompleteCount} incomplete task(s)</Text>. Are you sure you want to finish and handover?
+              </Text>
+            ) : (
+              <Text style={[styles.confirmBodyText, { color: colors.textSecondary }]}>
+                All required job sheet tasks are verified. Deliver vehicle <Text style={styles.confirmBoldPlate}>{pendingHandover.plate}</Text> to customer?
+              </Text>
+            )}
+
+            <View style={styles.confirmBtnRow}>
+              <TouchableOpacity
+                style={[styles.cancelBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)', borderColor: colors.borderGlass }]}
+                onPress={() => setPendingHandover(null)}
+              >
+                <Text style={[styles.cancelBtnText, { color: colors.textSecondary }]}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.confirmHandoverBtn, { backgroundColor: colors.success }]}
+                onPress={handleConfirmHandover}
+              >
+                <Text style={styles.confirmHandoverBtnText}>Confirm Handover ✓</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
     </View>
   );
 });
@@ -301,5 +365,17 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     lineHeight: 18,
   },
+  confirmOverlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, justifyContent: 'center', alignItems: 'center', zIndex: 999 },
+  confirmBackdrop: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0, 0, 0, 0.75)', ...(Platform.OS === 'web' ? { position: 'fixed' as any } : {}) },
+  confirmCard: { width: '90%', maxWidth: 420, backgroundColor: '#0f172a', borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)', padding: 20, gap: 16, zIndex: 1000, ...(Platform.OS === 'web' ? ({ boxShadow: '0px 10px 20px rgba(0, 0, 0, 0.5)' } as any) : { shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.5, shadowRadius: 20, elevation: 12 }) },
+  confirmHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  confirmTitle: { color: '#ffffff', fontSize: 16, fontWeight: '800' },
+  confirmBodyText: { color: '#cbd5e1', fontSize: 13, lineHeight: 20 },
+  confirmBoldPlate: { color: '#facc15', fontWeight: '800' },
+  confirmBtnRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 12, marginTop: 4 },
+  cancelBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)', backgroundColor: 'rgba(255, 255, 255, 0.05)' },
+  cancelBtnText: { color: '#94a3b8', fontSize: 13, fontWeight: '700' },
+  confirmHandoverBtn: { paddingHorizontal: 18, paddingVertical: 10, borderRadius: 8, backgroundColor: '#10b981' },
+  confirmHandoverBtnText: { color: '#ffffff', fontSize: 13, fontWeight: '800' },
 });
 

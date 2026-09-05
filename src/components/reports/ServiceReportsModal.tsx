@@ -23,6 +23,7 @@ import {
   Car,
   Filter,
   Layers,
+  Coffee,
 } from 'lucide-react-native';
 import {
   DateFilterPreset,
@@ -36,7 +37,7 @@ import {
   getVehicleTotalPausedSeconds,
   getVehicleIdleAndActiveTotals,
 } from '../../utils/reportExportUtils';
-import { getNetWorkingSeconds } from '../../utils/workshopHoursUtils';
+import { getNetWorkingSeconds, getBreakOverlap } from '../../utils/workshopHoursUtils';
 import { LicensePlate } from '../shared/LicensePlate';
 import { StatusPill } from '../shared/StatusPill';
 import { Vehicle } from '../../types/vehicle';
@@ -226,6 +227,14 @@ export const ServiceReportsModal: React.FC = () => {
                 <Text style={[styles.kpiVal, { color: colors.success }]}>{formatDuration(kpis.avgNetSeconds)}</Text>
               </View>
             </View>
+
+            <View style={[styles.kpiCard, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)', borderColor: colors.borderGlass }]}>
+              <Text style={[styles.kpiLabel, { color: colors.textMuted }]}>BREAKS DEDUCTED</Text>
+              <View style={styles.kpiValRow}>
+                <Coffee size={18} color="#fbbf24" />
+                <Text style={[styles.kpiVal, { color: '#fbbf24' }]}>{formatDuration(kpis.totalBreakSeconds)}</Text>
+              </View>
+            </View>
           </View>
 
           {/* Table Preview */}
@@ -260,6 +269,7 @@ export const ServiceReportsModal: React.FC = () => {
                     <Text style={[styles.thCell, styles.colTime, { color: colors.textSecondary }]}>GROSS TAT</Text>
                     <Text style={[styles.thCell, styles.colTime, { color: colors.textSecondary }]}>ACTIVE WORK</Text>
                     <Text style={[styles.thCell, styles.colTime, { color: colors.textSecondary }]}>IDLE / QUEUE</Text>
+                    <Text style={[styles.thCell, styles.colTime, { color: '#fbbf24' }]}>☕ BREAKS</Text>
                     <Text style={[styles.thCell, styles.colBay, { color: colors.textSecondary }]}>BAY 01</Text>
                     <Text style={[styles.thCell, styles.colBay, { color: colors.textSecondary }]}>BAY 03</Text>
                     <Text style={[styles.thCell, styles.colBay, { color: colors.textSecondary }]}>BAY 02</Text>
@@ -277,6 +287,7 @@ export const ServiceReportsModal: React.FC = () => {
                     const netSec = Math.max(0, rawNetSec - totalPausedSec);
                     const { totalIdleSec, totalActiveSec } = getVehicleIdleAndActiveTotals(v);
                     const activeWorkSec = totalActiveSec > 0 ? totalActiveSec : netSec;
+                    const { breakSeconds } = getBreakOverlap(start, end);
 
                     const workshopSec = getStageSecondsForZone(v, 'workshop');
                     const alignmentSec = getStageSecondsForZone(v, 'alignment');
@@ -306,6 +317,9 @@ export const ServiceReportsModal: React.FC = () => {
                         </Text>
                         <Text style={[styles.tdText, styles.colTime, { color: colors.warning, fontWeight: '700' }]}>
                           {formatDuration(totalIdleSec)}
+                        </Text>
+                        <Text style={[styles.tdText, styles.colTime, { color: breakSeconds > 0 ? '#fbbf24' : colors.textMuted, fontWeight: '700' }]}>
+                          {breakSeconds > 0 ? formatDuration(breakSeconds) : '-'}
                         </Text>
                         <Text style={[styles.tdText, styles.colBay, { color: colors.textSecondary }]}>
                           {formatDuration(workshopSec)}

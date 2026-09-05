@@ -44,6 +44,7 @@ CREATE TABLE vehicles (
   status VARCHAR(20) NOT NULL DEFAULT 'active',
   is_urgent BOOLEAN NOT NULL DEFAULT FALSE,
   urgent_note TEXT,
+  branch_id VARCHAR(50) NOT NULL DEFAULT 'main_workshop',
   is_paused BOOLEAN NOT NULL DEFAULT FALSE,
   paused_at TIMESTAMPTZ,
   paused_seconds INT NOT NULL DEFAULT 0,
@@ -77,6 +78,7 @@ CREATE TABLE stage_logs (
   is_paused BOOLEAN NOT NULL DEFAULT FALSE,
   paused_at TIMESTAMPTZ,
   paused_seconds INT NOT NULL DEFAULT 0,
+  branch_id VARCHAR(50) NOT NULL DEFAULT 'main_workshop',
   moved_by VARCHAR(100)
 );
 
@@ -85,12 +87,14 @@ CREATE TABLE IF NOT EXISTS user_profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   display_name VARCHAR(100) NOT NULL,
   role user_role NOT NULL DEFAULT 'tech_workshop',
+  branch_id VARCHAR(50) NOT NULL DEFAULT 'main_workshop',
   theme_preference VARCHAR(20) NOT NULL DEFAULT 'system',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Ensure theme_preference exists if table already existed
+-- Ensure theme_preference and branch_id exist if table already existed
 ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS theme_preference VARCHAR(20) NOT NULL DEFAULT 'system';
+ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS branch_id VARCHAR(50) NOT NULL DEFAULT 'main_workshop';
 
 -- 7. REPLICA IDENTITY FULL (Ensures Realtime broadcast includes full deleted records)
 ALTER TABLE vehicles REPLICA IDENTITY FULL;

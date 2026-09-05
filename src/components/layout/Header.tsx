@@ -133,12 +133,18 @@ export const Header: React.FC = () => {
               <View style={[styles.statusDot, isRealtimeConnected ? styles.dotOnline : styles.dotOffline]} />
             </View>
           </View>
-          <Text style={[styles.brandSub, { color: colors.textMuted }]}>
-            {timeStr}
-            {activeBreak && (
-              <Text style={styles.breakPillText}> · ☕ {activeBreak.name} (Until {activeBreak.endStr})</Text>
+          <View style={styles.brandSubRow}>
+            <Text style={[styles.brandSub, { color: colors.textMuted }]}>{timeStr}</Text>
+            {activeBreak ? (
+              <View style={styles.activeBreakBadge}>
+                <Text style={styles.activeBreakBadgeText}>☕ {activeBreak.name.toUpperCase()} ACTIVE (UNTIL {activeBreak.endStr})</Text>
+              </View>
+            ) : (
+              <View style={[styles.scheduledBreakBadge, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.04)', borderColor: colors.borderGlass }]}>
+                <Text style={[styles.scheduledBreakBadgeText, { color: colors.textMuted }]}>☕ Auto Breaks: 9:45 AM · 12:30 PM (Lunch) · 2:45 PM</Text>
+              </View>
             )}
-          </Text>
+          </View>
         </View>
       </View>
 
@@ -377,11 +383,42 @@ const styles = StyleSheet.create({
     borderRadius: 7,
     backgroundColor: '#10b981',
   },
+  brandSubRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
   brandSub: {
     color: '#64748b',
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 0.5,
+  },
+  activeBreakBadge: {
+    backgroundColor: 'rgba(245, 158, 11, 0.2)',
+    borderWidth: 1,
+    borderColor: '#f59e0b',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  activeBreakBadgeText: {
+    color: '#fbbf24',
+    fontWeight: '800',
+    fontSize: 10,
+    letterSpacing: 0.5,
+  },
+  scheduledBreakBadge: {
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  scheduledBreakBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 0.3,
   },
   breakPillText: {
     color: '#fbbf24',

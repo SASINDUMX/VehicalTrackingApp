@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { StyleSheet, View, Text, SafeAreaView, StatusBar, Platform, ActivityIndicator, Animated, Easing } from 'react-native';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { VehicleProvider, useVehicles } from './src/context/VehicleContext';
+import { UIProvider } from './src/context/UIContext';
 import { LoginScreen } from './src/components/auth/LoginScreen';
 import { Header } from './src/components/layout/Header';
 import { SearchBarRow, SegmentedTabs } from './src/components/layout/RoleSwitcher';
@@ -173,9 +174,11 @@ const AuthGate: React.FC = () => {
   }
 
   return (
-    <VehicleProvider>
-      <AppContent />
-    </VehicleProvider>
+    <UIProvider>
+      <VehicleProvider>
+        <AppContent />
+      </VehicleProvider>
+    </UIProvider>
   );
 };
 

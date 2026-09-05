@@ -420,6 +420,7 @@ export const VehicleDetailsModal: React.FC = () => {
                       let totalNetSec = 0;
                       let totalGrossSec = 0;
                       const breakNotes: string[] = [];
+                      const queueNotes: string[] = [];
                       const latestLog = logsForZone[logsForZone.length - 1];
                       const isStageIdle = Boolean(isCurrent && latestLog && !latestLog.exited_at && !latestLog.work_started_at);
 
@@ -435,6 +436,9 @@ export const VehicleDetailsModal: React.FC = () => {
                         );
                         totalNetSec += breakdown.netSec;
                         totalGrossSec += breakdown.grossSec;
+                        if (breakdown.queueNote) {
+                          queueNotes.push(breakdown.queueNote);
+                        }
                         if (breakdown.breakNote) {
                           breakNotes.push(breakdown.breakNote);
                         }
@@ -505,10 +509,17 @@ export const VehicleDetailsModal: React.FC = () => {
                               </Text>
                             ))}
 
-                            {/* Break Time Deducted Subtext */}
+                            {/* Queue / Active Timing Subtext */}
+                            {queueNotes.map((note, qIdx) => (
+                              <Text key={`qn-${qIdx}`} style={styles.queueNoteSubText}>
+                                {note}
+                              </Text>
+                            ))}
+
+                            {/* Break Time Deducted Subtext (Lunch / Tea) */}
                             {breakNotes.map((note, nIdx) => (
                               <Text key={`bn-${nIdx}`} style={styles.breakNoteSubText}>
-                                ☕ {note}
+                                {note}
                               </Text>
                             ))}
                           </View>
@@ -753,6 +764,7 @@ const styles = StyleSheet.create({
   timeTagText: { color: '#94a3b8', fontSize: 12, fontWeight: '500' },
   bayCodeText: { color: '#475569', fontSize: 10, fontWeight: '700' },
   logSubText: { color: '#64748b', fontSize: 10, marginTop: 2 },
+  queueNoteSubText: { color: '#38bdf8', fontSize: 10.5, marginTop: 2 },
   breakNoteSubText: { color: '#fbbf24', fontSize: 10.5, marginTop: 2, fontStyle: 'italic' },
   sectionTitle: { color: '#94a3b8', fontWeight: '700', fontSize: 11, letterSpacing: 1, marginTop: 8 },
   btnRow: { flexDirection: 'row', gap: 10 },

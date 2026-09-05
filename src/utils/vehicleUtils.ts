@@ -74,6 +74,7 @@ export interface StageBreakdownResult {
   netStr: string;
   grossStr: string;
   breakNote: string | null;
+  queueNote?: string | null;
 }
 
 export interface StageTimingResult {
@@ -212,11 +213,18 @@ export const getStageDurationBreakdown = (
   const { breakSeconds, breakNames } = getBreakOverlap(start, end);
   const netSec = Math.max(0, grossSec - breakSeconds);
 
-  let breakNote: string | null = null;
+  let queueNote: string | null = null;
   if (timing.isIdle) {
-    breakNote = `⏳ IDLE / Queue: ${formatDurationString(timing.idleSeconds, false)}`;
+    queueNote = `⏳ IDLE / Queue: ${formatDurationString(timing.idleSeconds, false)}`;
   } else if (timing.idleSeconds > 0) {
-    breakNote = `Queue: ${formatDurationString(timing.idleSeconds, false)} · Active: ${formatDurationString(timing.activeSeconds, false)}`;
+    queueNote = `Queue: ${formatDurationString(timing.idleSeconds, false)} · Active: ${formatDurationString(timing.activeSeconds, false)}`;
+  }
+
+  const breakMins = Math.round(breakSeconds / 60);
+  let breakNote: string | null = null;
+  if (breakMins > 0 && breakNames.length > 0) {
+    const breakNamesStr = breakNames.join(', ');
+    breakNote = `☕ Deducted ${breakMins}m ${breakNamesStr} (scheduled break)`;
   }
 
   return {
@@ -231,5 +239,6 @@ export const getStageDurationBreakdown = (
     netStr: formatDurationString(netSec, true),
     grossStr: formatDurationString(grossSec, false),
     breakNote,
+    queueNote,
   };
 };
