@@ -106,12 +106,15 @@ UnitedMoters-VehicalTrackingApp/
 
 ## ⚡ 3. State Management & Realtime Synchronization Standards
 
-### Rule 3.1: Optimistic UI with Guaranteed Rollback
-All user-triggered state mutations (`startStageWork`, `toggleTaskCompletion`, `transferVehicleZone`, `finishVehicleJobSheet`, `deleteVehicle`) must execute **optimistically in < 16ms**:
-1. Take an immutable snapshot of current state (`const prevVehicles = vehicles`).
-2. Mutate local React state immediately so the technician sees instant feedback.
-3. Asynchronously trigger the Tier 3 Service call.
-4. If the server request rejects, **immediately restore `prevVehicles`** and display an in-app error banner.
+### Rule 3.1: Optimistic UI vs. Awaited Dispatch Operations
+1. **Stationary Micro-Mutations (`startStageWork`, `toggleTaskCompletion`, `toggleStageTimer`)**:
+   Execute **optimistically in < 16ms** with immediate React state mutation and guaranteed rollback on server failure.
+2. **Zone Transitions & Dispatch Actions (`transferVehicleZone`, `finishVehicleJobSheet`)**:
+   **MUST STRICTLY WAIT FOR BACKEND RESPONSE CONFIRMATION** before updating client state:
+   * Do not prematurely remove the vehicle card from the current bay queue.
+   * Modals and dispatch confirmation triggers must display active progress indicators (`ActivityIndicator`, `"Dispatching..."`, `"Handing Over..."`).
+   * Confirmation dialogs, buttons, and backdrop dismissals must be locked during transit to prevent double-submitting or race conditions.
+   * Only mutate local state and close modals after the Supabase database/RPC response successfully returns. On failure, surface an error toast and leave the vehicle undisturbed in its current station.
 
 ### Rule 3.2: Derived & Reactive Selection (No Stale Modals)
 When a vehicle is opened in a modal or inspector, **NEVER** freeze it as an isolated static object.
