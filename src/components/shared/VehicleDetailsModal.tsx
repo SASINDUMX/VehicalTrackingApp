@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet, TextInput, Platform } from 'react-native';
 import { useVehicles } from '../../context/VehicleContext';
 import { usePermissions } from '../../hooks/usePermissions';
-import { BayZone, TaskType } from '../../types/vehicle';
+import { BayZone, TaskType, Vehicle } from '../../types/vehicle';
 import { 
   X, Wrench, Shield, Navigation, Pencil, Save, CheckSquare, Square, Lock, 
   Clock, CheckCircle2, Circle, ArrowRight, UserCheck, Calendar, Trash2, AlertTriangle
@@ -10,32 +10,101 @@ import {
 
 import { LicensePlate } from './LicensePlate';
 import { StatusPill } from './StatusPill';
-import { getStageDurationBreakdown, formatDurationString, getActiveStageNetSeconds } from '../../utils/vehicleUtils';
+import { BaseModal } from './BaseModal';
+import { ConfirmModal } from './ConfirmModal';
+import { VehicleNotePill } from './VehicleNotePill';
+import { getStageDurationBreakdown, formatDurationString, getActiveStageNetSeconds, getTaskTypeForBay } from '../../utils/vehicleUtils';
 import { getNetWorkingSeconds, getCurrentActiveBreak } from '../../utils/workshopHoursUtils';
 import { useTheme } from '../../context/ThemeContext';
+import { getBayDefinitions } from '../../constants/bays';
 
-const getStageOrder = (themeColors: any) => [
-  { zone: 'workshop' as BayZone, name: 'General Workshop Bay', code: 'BAY 01', icon: Wrench, color: themeColors.primary },
-  { zone: 'alignment' as BayZone, name: 'Wheel Alignment Bay', code: 'BAY 03', icon: Navigation, color: themeColors.success },
-  { zone: 'hoist' as BayZone, name: 'Hoist Service Bay', code: 'BAY 02', icon: Shield, color: themeColors.warning },
-  { zone: 'inspection' as BayZone, name: 'Advisor Inspection Zone', code: 'FINAL', icon: CheckCircle2, color: themeColors.purple },
-];
+const STAGE_ICONS: Record<BayZone, any> = {
+  workshop: Wrench,
+  alignment: Navigation,
+  hoist: Shield,
+  inspection: CheckCircle2,
+  completed: CheckCircle2,
+};
+
+const getStageOrder = (themeColors: any) =>
+  getBayDefinitions(themeColors).map(bay => ({
+    zone: bay.id,
+    name: bay.name,
+    code: bay.code,
+    icon: STAGE_ICONS[bay.id] || Wrench,
+    color: bay.color,
+  }));
+
+const calculateTimers = (vehicle: Vehicle) => {
+  const now = new Date();
+
+  // Net & Gross Elapsed Time since Intake
+  const rawNetSec = getNetWorkingSeconds(vehicle.intake_at, now);
+  const totalPausedSec = vehicle.stage_logs.reduce((sum, l) => sum + (l.paused_seconds || 0), 0) +
+    (vehicle.is_paused && vehicle.paused_at ? Math.max(0, Math.floor((now.getTime() - new Date(vehicle.paused_at).getTime()) / 1000)) : (vehicle.paused_seconds || 0));
+  const netSec = Math.max(0, rawNetSec - totalPausedSec);
+  const grossSec = Math.max(0, Math.floor((now.getTime() - new Date(vehicle.intake_at).getTime()) / 1000));
+
+  let stageDuration = '0m 00s';
+  const lastLog = vehicle.stage_logs[vehicle.stage_logs.length - 1];
+
+  if (vehicle.current_zone === 'inspection') {
+    stageDuration = 'READY';
+  } else if (lastLog && !lastLog.exited_at) {
+    const bayTaskType = getTaskTypeForBay(vehicle.current_zone);
+    const currentTask = vehicle.tasks.find(t => t.task_type === bayTaskType && t.is_required) || vehicle.tasks.find(t => t.task_type === bayTaskType);
+
+    if (!lastLog.work_started_at) {
+      const enterMs = new Date(lastLog.entered_at).getTime();
+      const idleSec = Math.max(0, Math.floor((now.getTime() - enterMs) / 1000));
+      stageDuration = `IDLE · ${formatDurationString(idleSec, true)}`;
+    } else if (currentTask && currentTask.is_completed && currentTask.completed_at) {
+      const completedMs = new Date(currentTask.completed_at).getTime();
+      const postIdleSec = Math.max(0, Math.floor((now.getTime() - completedMs) / 1000));
+      stageDuration = `IDLE · ${formatDurationString(postIdleSec, true)}`;
+    } else {
+      const workStartMs = new Date(lastLog.work_started_at).getTime();
+      const activeSec = Math.max(0, Math.floor((now.getTime() - workStartMs) / 1000));
+      const timeStr = formatDurationString(activeSec, true);
+      const activeBreak = getCurrentActiveBreak(now);
+      if (activeBreak) {
+        stageDuration = `⏸ ${timeStr} (${activeBreak.name})`;
+      } else {
+        stageDuration = timeStr;
+      }
+    }
+  }
+
+  return {
+    totalElapsedStr: formatDurationString(netSec, true),
+    grossElapsedStr: formatDurationString(grossSec, true),
+    activeStageDuration: stageDuration,
+  };
+};
 
 export const VehicleDetailsModal: React.FC = () => {
-  const { selectedVehicle, setSelectedVehicle, transferVehicleZone, updateVehicleJobOrder, deleteVehicle, updateUrgency, showUrgentNote } = useVehicles();
+  const { selectedVehicle, setSelectedVehicle, transferVehicleZone, updateVehicleJobOrder, deleteVehicle, updateUrgency } = useVehicles();
   const { canRelocateVehicle, canAddVehicle, canDeleteVehicle, displayName } = usePermissions();
   const { colors, isDark } = useTheme();
 
   const [isEditing, setIsEditing] = useState<boolean>(false);
-  const [selectedTasks, setSelectedTasks] = useState<TaskType[]>([]);
-  const [remarks, setRemarks] = useState<string>('');
+  const [selectedTasks, setSelectedTasks] = useState<TaskType[]>(() =>
+    selectedVehicle ? selectedVehicle.tasks.filter(t => t.is_required).map(t => t.task_type) : []
+  );
+  const [remarks, setRemarks] = useState<string>(() => selectedVehicle?.remarks || '');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<boolean>(false);
-  const [activeStageDuration, setActiveStageDuration] = useState<string>('0m 00s');
-  const [totalElapsedStr, setTotalElapsedStr] = useState<string>('0m 00s');
-  const [grossElapsedStr, setGrossElapsedStr] = useState<string>('0m 00s');
-  const [localIsUrgent, setLocalIsUrgent] = useState<boolean>(false);
-  const [localUrgentNote, setLocalUrgentNote] = useState<string>('');
+
+  const initialTimers = useMemo(() => {
+    if (!selectedVehicle) return { totalElapsedStr: '0m 00s', grossElapsedStr: '0m 00s', activeStageDuration: '0m 00s' };
+    return calculateTimers(selectedVehicle);
+  }, [selectedVehicle?.id]);
+
+  const [activeStageDuration, setActiveStageDuration] = useState<string>(initialTimers.activeStageDuration);
+  const [totalElapsedStr, setTotalElapsedStr] = useState<string>(initialTimers.totalElapsedStr);
+  const [grossElapsedStr, setGrossElapsedStr] = useState<string>(initialTimers.grossElapsedStr);
+  const [localIsUrgent, setLocalIsUrgent] = useState<boolean>(() => selectedVehicle?.is_urgent || false);
+  const [localUrgentNote, setLocalUrgentNote] = useState<string>(() => selectedVehicle?.urgent_note || '');
 
   useEffect(() => {
     if (selectedVehicle) {
@@ -47,6 +116,11 @@ export const VehicleDetailsModal: React.FC = () => {
       setIsEditing(false);
       setLocalIsUrgent(selectedVehicle.is_urgent || false);
       setLocalUrgentNote(selectedVehicle.urgent_note || '');
+
+      const current = calculateTimers(selectedVehicle);
+      setActiveStageDuration(current.activeStageDuration);
+      setTotalElapsedStr(current.totalElapsedStr);
+      setGrossElapsedStr(current.grossElapsedStr);
     }
   }, [selectedVehicle?.id]);
 
@@ -68,49 +142,153 @@ export const VehicleDetailsModal: React.FC = () => {
     if (!selectedVehicle) return;
 
     const updateTimers = () => {
-      const now = new Date();
-
-      // Net & Gross Elapsed Time since Intake
-      const rawNetSec = getNetWorkingSeconds(selectedVehicle.intake_at, now);
-      const totalPausedSec = selectedVehicle.stage_logs.reduce((sum, l) => sum + (l.paused_seconds || 0), 0) +
-        (selectedVehicle.is_paused && selectedVehicle.paused_at ? Math.max(0, Math.floor((now.getTime() - new Date(selectedVehicle.paused_at).getTime()) / 1000)) : (selectedVehicle.paused_seconds || 0));
-      const netSec = Math.max(0, rawNetSec - totalPausedSec);
-      const grossSec = Math.max(0, Math.floor((now.getTime() - new Date(selectedVehicle.intake_at).getTime()) / 1000));
-      setTotalElapsedStr(formatDurationString(netSec, true));
-      setGrossElapsedStr(formatDurationString(grossSec, true));
-
-      // Active Stage Duration
-      const lastLog = selectedVehicle.stage_logs[selectedVehicle.stage_logs.length - 1];
-      const isPaused = Boolean(selectedVehicle.is_paused || (lastLog && lastLog.is_paused));
-      const pausedAt = selectedVehicle.paused_at || (lastLog && lastLog.paused_at);
-      const pausedSeconds = selectedVehicle.paused_seconds || (lastLog && lastLog.paused_seconds) || 0;
-
-      if (lastLog && !lastLog.exited_at) {
-        if (!lastLog.work_started_at) {
-          const enterMs = new Date(lastLog.entered_at).getTime();
-          const idleSec = Math.max(0, Math.floor((now.getTime() - enterMs) / 1000));
-          const timeStr = formatDurationString(idleSec, true);
-          setActiveStageDuration(`IDLE · ${timeStr}`);
-        } else {
-          const workStartMs = new Date(lastLog.work_started_at).getTime();
-          const activeSec = Math.max(0, Math.floor((now.getTime() - workStartMs) / 1000));
-          const timeStr = formatDurationString(activeSec, true);
-          const activeBreak = getCurrentActiveBreak(now);
-          if (activeBreak) {
-            setActiveStageDuration(`⏸ ${timeStr} (${activeBreak.name})`);
-          } else {
-            setActiveStageDuration(timeStr);
-          }
-        }
-      } else {
-        setActiveStageDuration('0m 00s');
-      }
+      const timers = calculateTimers(selectedVehicle);
+      setTotalElapsedStr(timers.totalElapsedStr);
+      setGrossElapsedStr(timers.grossElapsedStr);
+      setActiveStageDuration(timers.activeStageDuration);
     };
 
-    updateTimers();
     const interval = setInterval(updateTimers, 1000);
     return () => clearInterval(interval);
-  }, [selectedVehicle]);
+  }, [selectedVehicle?.id]);
+
+  const currentZone = selectedVehicle?.current_zone;
+
+  // Memoize timeline stage calculation so it only recalculates when vehicle data or active stage duration changes
+  // NOTE: must be declared BEFORE the early return to satisfy React Rules of Hooks
+  const timelineStagesData = useMemo(() => {
+    if (!selectedVehicle) return [];
+
+    const requiredTaskTypes = selectedVehicle.tasks
+      .filter(t => t.is_required)
+      .map(t => t.task_type);
+
+    const isWorkshopReq = requiredTaskTypes.includes('general_service');
+    const isAlignmentReq = requiredTaskTypes.includes('wheel_alignment');
+    const isHoistReq = requiredTaskTypes.includes('hoist_service');
+
+    const isRequiredForZone = (zone: BayZone) => {
+      if (zone === 'workshop') return isWorkshopReq;
+      if (zone === 'alignment') return isAlignmentReq;
+      if (zone === 'hoist') return isHoistReq;
+      if (zone === 'inspection') return true;
+      return false;
+    };
+
+    const masterStages = getStageOrder(colors).map(s => ({
+      ...s,
+      isRequired: isRequiredForZone(s.zone),
+    }));
+
+    // Filter only required stages or stages already visited/active
+    const relevantStages = masterStages.filter(s => {
+      const hasLogs = selectedVehicle.stage_logs.some(l => l.to_zone === s.zone);
+      const isCurrent = selectedVehicle.current_zone === s.zone;
+      return s.isRequired || hasLogs || isCurrent;
+    });
+
+    // Strictly sort: 1. Completed (visited & exited) -> 2. Active Current -> 3. Upcoming (Pending)
+    const completedNodes: typeof relevantStages = [];
+    let activeNode: typeof relevantStages[0] | null = null;
+    const pendingNodes: typeof relevantStages = [];
+
+    const currentZoneInner = selectedVehicle.current_zone;
+    relevantStages.forEach(s => {
+      const isCurrent = currentZoneInner === s.zone;
+      const logsForZone = selectedVehicle.stage_logs.filter(l => l.to_zone === s.zone);
+      const hasExitedAll = logsForZone.length > 0 && logsForZone.every(l => Boolean(l.exited_at));
+
+      if (isCurrent) {
+        activeNode = s;
+      } else if (hasExitedAll && !isCurrent) {
+        completedNodes.push(s);
+      } else {
+        pendingNodes.push(s);
+      }
+    });
+
+    const orderedTimelineNodes = [...completedNodes];
+    if (activeNode) {
+      orderedTimelineNodes.push(activeNode);
+    }
+    orderedTimelineNodes.push(...pendingNodes);
+
+    return orderedTimelineNodes.map((stageDef, idx) => {
+      const isCurrent = currentZoneInner === stageDef.zone;
+      const logsForZone = selectedVehicle.stage_logs.filter(l => l.to_zone === stageDef.zone);
+      const hasVisited = logsForZone.length > 0;
+      const hasExitedAll = hasVisited && logsForZone.every(l => Boolean(l.exited_at));
+      const isCompleted = hasExitedAll && !isCurrent;
+      const isLastInOrder = idx === orderedTimelineNodes.length - 1;
+
+      const isInspection = stageDef.zone === 'inspection';
+
+      // Inspection zone has zero labor machinery: short-circuit cleanly
+      if (isInspection) {
+        return {
+          stageDef,
+          isCurrent,
+          logsForZone,
+          isCompleted,
+          isCancelled: false,
+          isLastInOrder,
+          isInspection: true,
+          isStageIdle: false,
+          spentStr: '',
+          breakNotes: [],
+          queueNotes: [],
+          workCompletedAt: null,
+        };
+      }
+
+      const bayTaskType = getTaskTypeForBay(stageDef.zone);
+      const currentTask = selectedVehicle.tasks.find(t => t.task_type === bayTaskType && t.is_required) || selectedVehicle.tasks.find(t => t.task_type === bayTaskType);
+      const workCompletedAt = currentTask?.is_completed ? currentTask.completed_at : null;
+
+      const latestLog = logsForZone[logsForZone.length - 1];
+      const isStageIdle = Boolean(
+        isCurrent && latestLog && !latestLog.exited_at && (!latestLog.work_started_at || Boolean(workCompletedAt))
+      );
+
+      let totalNetSec = 0;
+      const breakNotes: string[] = [];
+      const queueNotes: string[] = [];
+
+      logsForZone.forEach(l => {
+        const breakdown = getStageDurationBreakdown(
+          l.entered_at,
+          l.exited_at,
+          false,
+          null,
+          0,
+          l.work_started_at,
+          l.idle_seconds,
+          workCompletedAt
+        );
+        totalNetSec += breakdown.netSec;
+        if (breakdown.breakNote) breakNotes.push(breakdown.breakNote);
+        if (breakdown.queueNote) queueNotes.push(breakdown.queueNote);
+      });
+
+      const spentStr = isCurrent ? activeStageDuration : formatDurationString(totalNetSec, true);
+      const isCancelled = stageDef.zone !== 'inspection' && !isCurrent && !isCompleted && (currentZoneInner === 'inspection' || selectedVehicle.is_finished);
+
+      return {
+        stageDef,
+        isCurrent,
+        logsForZone,
+        isCompleted,
+        isCancelled,
+        isLastInOrder,
+        isInspection: false,
+        isStageIdle,
+        spentStr,
+        breakNotes,
+        queueNotes,
+        workCompletedAt,
+      };
+    });
+  }, [selectedVehicle, colors, activeStageDuration]);
 
   if (!selectedVehicle) return null;
 
@@ -145,6 +323,7 @@ export const VehicleDetailsModal: React.FC = () => {
     setIsSubmitting(true);
     try {
       await updateVehicleJobOrder(selectedVehicle.id, selectedTasks, remarks);
+      await updateUrgency(selectedVehicle.id, localIsUrgent, localIsUrgent ? localUrgentNote : null);
       setIsEditing(false);
       setSelectedVehicle(null);
     } catch (err) {
@@ -154,47 +333,93 @@ export const VehicleDetailsModal: React.FC = () => {
     }
   };
 
-  const currentZone = selectedVehicle.current_zone;
-
   return (
-    <Modal visible={Boolean(selectedVehicle)} animationType="fade" transparent>
-      <View style={[styles.backdrop, { backgroundColor: colors.backdrop }]}>
-        <View style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.borderGlass }]}>
-          {/* Header */}
-          <View style={[styles.header, { borderBottomColor: colors.borderGlass }]}>
-            <View style={styles.headerLeftRow}>
-              <LicensePlate number={selectedVehicle.vehicle_no} size="md" />
-              {Boolean(selectedVehicle.is_urgent) && (
-                <TouchableOpacity
-                  onPress={() => showUrgentNote(selectedVehicle.vehicle_no, selectedVehicle.urgent_note)}
-                  hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-                >
-                  <StatusPill variant="danger" label="⚡ URGENT" size="md" />
-                </TouchableOpacity>
-              )}
-            </View>
-
-            <View style={styles.headerRightRow}>
-              {canAddVehicle && !isEditing && (
-                <TouchableOpacity
-                  style={[styles.editPencilBtn, { backgroundColor: colors.primaryDim, borderColor: colors.primaryBorder }]}
-                  onPress={() => setIsEditing(true)}
-                  activeOpacity={0.7}
-                >
-                  <Pencil size={16} color={colors.primaryLight} />
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity 
-                style={[styles.closeBtnIcon, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)' }]} 
-                onPress={() => setSelectedVehicle(null)}
+    <>
+      <BaseModal
+        visible={Boolean(selectedVehicle)}
+        onClose={() => setSelectedVehicle(null)}
+        maxWidth={680}
+        scrollable={true}
+        headerLeft={
+          <View style={styles.headerLeftRow}>
+            <LicensePlate number={selectedVehicle.vehicle_no} size="md" />
+            <VehicleNotePill vehicle={selectedVehicle} size="md" />
+          </View>
+        }
+        headerRight={
+          canAddVehicle && !isEditing ? (
+            <TouchableOpacity
+              style={[styles.editPencilBtn, { backgroundColor: colors.primaryDim, borderColor: colors.primaryBorder }]}
+              onPress={() => setIsEditing(true)}
+              activeOpacity={0.7}
+            >
+              <Pencil size={16} color={colors.primaryLight} />
+            </TouchableOpacity>
+          ) : null
+        }
+        footer={
+          isEditing ? (
+            <View style={styles.editFooterRow}>
+              <TouchableOpacity
+                style={[styles.cancelEditBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)' }]}
+                onPress={() => {
+                  setIsEditing(false);
+                  setRemarks(selectedVehicle.remarks || '');
+                  setLocalIsUrgent(selectedVehicle.is_urgent || false);
+                  setLocalUrgentNote(selectedVehicle.urgent_note || '');
+                }}
               >
-                <X size={18} color={colors.textSecondary} />
+                <Text style={[styles.cancelEditText, { color: colors.textSecondary }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.saveEditBtn,
+                  { backgroundColor: colors.primary },
+                  isSubmitting && { opacity: 0.5, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }
+                ]}
+                onPress={() => { if (!isSubmitting) handleSaveJobOrder(); }}
+                activeOpacity={isSubmitting ? 1 : 0.7}
+              >
+                <Save size={16} color="#ffffff" />
+                <Text style={styles.saveEditText}>{isSubmitting ? 'Saving...' : 'Save Job Order'}</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          ) : (
+            <View style={styles.footerStandardRow}>
+              <View style={[styles.totalTimePill, { backgroundColor: colors.primaryDim, borderColor: colors.primaryBorder }]}>
+                <Clock size={15} color={colors.primaryLight} />
+                <View style={styles.totalTimeTextCol}>
+                  <Text style={[styles.totalTimeText, { color: colors.primaryLight }]}>Net Work: {totalElapsedStr}</Text>
+                  {grossElapsedStr !== totalElapsedStr && (
+                    <Text style={[styles.grossTimeSubText, { color: colors.textMuted }]}>Total Shop: {grossElapsedStr}</Text>
+                  )}
+                </View>
+              </View>
 
-          {/* Body Content */}
-          <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent} showsVerticalScrollIndicator={false}>
+              <View style={styles.footerRightButtons}>
+                {canDeleteVehicle && (
+                  <TouchableOpacity
+                    style={[styles.deleteBtn, { backgroundColor: colors.dangerDim, borderColor: colors.dangerBorder }]}
+                    onPress={() => setShowDeleteConfirm(true)}
+                    activeOpacity={0.7}
+                  >
+                    <Trash2 size={14} color={colors.danger} />
+                    <Text style={[styles.deleteBtnText, { color: colors.danger }]}>Delete</Text>
+                  </TouchableOpacity>
+                )}
+
+                <TouchableOpacity
+                  style={[styles.closeBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }]}
+                  onPress={() => setSelectedVehicle(null)}
+                >
+                  <Text style={[styles.closeText, { color: colors.textPrimary }]}>Close</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )
+        }
+      >
+        <View style={styles.bodyContent}>
             {isEditing ? (
               /* --- EDIT JOB ORDER FORM MODE --- */
               <View style={styles.editContainer}>
@@ -214,12 +439,12 @@ export const VehicleDetailsModal: React.FC = () => {
                           styles.taskChip,
                           {
                             backgroundColor: isSelected 
-                              ? colors.primaryDim 
+                              ? colors.bayWorkshopDim 
                               : isCompleted 
                               ? colors.successDim 
                               : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
                             borderColor: isSelected 
-                              ? colors.primary 
+                              ? colors.bayWorkshop 
                               : isCompleted 
                               ? colors.successBorder 
                               : colors.borderGlass
@@ -236,7 +461,7 @@ export const VehicleDetailsModal: React.FC = () => {
                           </>
                         ) : (
                           <>
-                            {isSelected ? <CheckSquare size={16} color={colors.primary} /> : <Square size={16} color={colors.textMuted} />}
+                            {isSelected ? <CheckSquare size={16} color={colors.bayWorkshopLight} /> : <Square size={16} color={colors.textMuted} />}
                             <Text style={[styles.chipText, { color: isSelected ? colors.textPrimary : colors.textSecondary }]}>General Service</Text>
                           </>
                         )}
@@ -254,12 +479,12 @@ export const VehicleDetailsModal: React.FC = () => {
                           styles.taskChip,
                           {
                             backgroundColor: isSelected 
-                              ? colors.successDim 
+                              ? colors.bayAlignmentDim 
                               : isCompleted 
                               ? colors.successDim 
                               : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
                             borderColor: isSelected 
-                              ? colors.success 
+                              ? colors.bayAlignment 
                               : isCompleted 
                               ? colors.successBorder 
                               : colors.borderGlass
@@ -276,7 +501,7 @@ export const VehicleDetailsModal: React.FC = () => {
                           </>
                         ) : (
                           <>
-                            {isSelected ? <CheckSquare size={16} color={colors.success} /> : <Square size={16} color={colors.textMuted} />}
+                            {isSelected ? <CheckSquare size={16} color={colors.bayAlignmentLight} /> : <Square size={16} color={colors.textMuted} />}
                             <Text style={[styles.chipText, { color: isSelected ? colors.textPrimary : colors.textSecondary }]}>Wheel Alignment</Text>
                           </>
                         )}
@@ -294,12 +519,12 @@ export const VehicleDetailsModal: React.FC = () => {
                           styles.taskChip,
                           {
                             backgroundColor: isSelected 
-                              ? colors.warningDim 
+                              ? colors.bayHoistDim 
                               : isCompleted 
                               ? colors.successDim 
                               : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
                             borderColor: isSelected 
-                              ? colors.warning 
+                              ? colors.bayHoist 
                               : isCompleted 
                               ? colors.successBorder 
                               : colors.borderGlass
@@ -316,13 +541,56 @@ export const VehicleDetailsModal: React.FC = () => {
                           </>
                         ) : (
                           <>
-                            {isSelected ? <CheckSquare size={16} color={colors.warning} /> : <Square size={16} color={colors.textMuted} />}
+                            {isSelected ? <CheckSquare size={16} color={colors.bayHoistLight} /> : <Square size={16} color={colors.textMuted} />}
                             <Text style={[styles.chipText, { color: isSelected ? colors.textPrimary : colors.textSecondary }]}>Hoist Service</Text>
                           </>
                         )}
                       </TouchableOpacity>
                     );
                   })()}
+                </View>
+
+                {/* Urgency Section — Edit Mode */}
+                <View style={styles.remarksEditGroup}>
+                  <Text style={[styles.editSectionTitle, { color: colors.textSecondary }]}>VEHICLE PRIORITY / URGENCY:</Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.urgencyToggleCard,
+                      {
+                        borderColor: localIsUrgent ? colors.dangerBorder : colors.borderGlass,
+                        backgroundColor: localIsUrgent ? colors.dangerDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)')
+                      }
+                    ]}
+                    onPress={() => setLocalIsUrgent(!localIsUrgent)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.urgencyToggleRow}>
+                      <AlertTriangle size={16} color={localIsUrgent ? colors.danger : colors.textMuted} />
+                      <Text style={[styles.urgencyToggleLabel, { color: localIsUrgent ? colors.danger : colors.textSecondary }]}>
+                        {localIsUrgent ? '⚡ URGENT VEHICLE — Priority Flagged' : 'Mark as Urgent Vehicle'}
+                      </Text>
+                    </View>
+                    {localIsUrgent && <CheckSquare size={16} color={colors.danger} />}
+                  </TouchableOpacity>
+
+                  {localIsUrgent && (
+                    <TextInput
+                      style={[
+                        styles.textAreaInput,
+                        {
+                          backgroundColor: isDark ? 'rgba(0, 0, 0, 0.2)' : 'rgba(0, 0, 0, 0.04)',
+                          borderColor: 'rgba(239, 68, 68, 0.4)',
+                          color: colors.textPrimary,
+                        }
+                      ]}
+                      value={localUrgentNote}
+                      onChangeText={setLocalUrgentNote}
+                      placeholder="Add urgent note (e.g. Customer waiting in lounge, delivery by 11:30 AM)..."
+                      placeholderTextColor={colors.textMuted}
+                      multiline
+                      numberOfLines={3}
+                    />
+                  )}
                 </View>
 
                 <View style={styles.remarksEditGroup}>
@@ -348,336 +616,184 @@ export const VehicleDetailsModal: React.FC = () => {
             ) : (
               /* --- HIGH-TECH STEPPER TIMELINE STAGE AUDIT MODE --- */
               <View style={styles.stepperContainer}>
-                {Boolean(selectedVehicle.remarks && selectedVehicle.remarks.trim()) && (
-                  <View style={[styles.remarksBox, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderGlass }]}>
-                    <Text style={[styles.remarksLabel, { color: colors.textMuted }]}>CUSTOMER REMARKS / SPECIAL INSTRUCTIONS:</Text>
-                    <Text style={[styles.remarksText, { color: colors.textPrimary }]}>{selectedVehicle.remarks}</Text>
-                  </View>
-                )}
-
                 <Text style={[styles.stepperTitle, { color: colors.textMuted }]}>WORKSHOP STAGE TIMELINE & AUDIT LOG:</Text>
 
                 {/* Vertical Stepper Timeline list */}
                 <View style={styles.timelineList}>
-                  {/* Dynamic Nodes: Completed -> Active -> Upcoming (Pending) */}
-                  {(() => {
-                    const requiredTaskTypes = selectedVehicle.tasks
-                      .filter(t => t.is_required)
-                      .map(t => t.task_type);
+                  {timelineStagesData.map((node) => {
+                    const {
+                      stageDef,
+                      isCurrent,
+                      logsForZone,
+                      isCompleted,
+                      isCancelled,
+                      isLastInOrder,
+                      isInspection,
+                      isStageIdle,
+                      spentStr,
+                      breakNotes,
+                      queueNotes,
+                      workCompletedAt,
+                    } = node;
+                    const isTaskDone = Boolean(workCompletedAt);
+                    const isFullyFinishedOrDone = isCompleted || (isCurrent && isTaskDone);
+                    const isWorkingActive = isCurrent && !isStageIdle && !isTaskDone;
 
-                    const isWorkshopReq = requiredTaskTypes.includes('general_service');
-                    const isAlignmentReq = requiredTaskTypes.includes('wheel_alignment');
-                    const isHoistReq = requiredTaskTypes.includes('hoist_service');
+                    // Icon color harmonizes with node state
+                    const nodeIconColor = isFullyFinishedOrDone
+                      ? colors.success
+                      : isWorkingActive
+                      ? colors.primaryLight
+                      : isStageIdle
+                      ? colors.warningLight
+                      : isCancelled
+                      ? colors.cancelled
+                      : colors.textMuted;
 
-                    const masterStages = [
-                      { zone: 'workshop' as BayZone, name: 'General Workshop Bay', code: 'BAY 01', icon: Wrench, color: colors.primary, isRequired: isWorkshopReq },
-                      { zone: 'alignment' as BayZone, name: 'Wheel Alignment Bay', code: 'BAY 03', icon: Navigation, color: colors.success, isRequired: isAlignmentReq },
-                      { zone: 'hoist' as BayZone, name: 'Hoist Service Bay', code: 'BAY 02', icon: Shield, color: colors.warning, isRequired: isHoistReq },
-                      { zone: 'inspection' as BayZone, name: 'Advisor Inspection Zone', code: 'FINAL', icon: CheckCircle2, color: colors.purple, isRequired: true }
-                    ];
+                    const StageIconComponent = stageDef.icon;
 
-                    // Filter only required stages or stages already visited/active
-                    const relevantStages = masterStages.filter(s => {
-                      const hasLogs = selectedVehicle.stage_logs.some(l => l.to_zone === s.zone);
-                      const isCurrent = selectedVehicle.current_zone === s.zone;
-                      return s.isRequired || hasLogs || isCurrent;
-                    });
-
-                    // Strictly sort: 1. Completed (visited & exited) -> 2. Active Current -> 3. Upcoming (Pending)
-                    const completedNodes: typeof relevantStages = [];
-                    let activeNode: typeof relevantStages[0] | null = null;
-                    const pendingNodes: typeof relevantStages = [];
-
-                    relevantStages.forEach(s => {
-                      const isCurrent = currentZone === s.zone;
-                      const logsForZone = selectedVehicle.stage_logs.filter(l => l.to_zone === s.zone);
-                      const hasExitedAll = logsForZone.length > 0 && logsForZone.every(l => Boolean(l.exited_at));
-
-                      if (isCurrent) {
-                        activeNode = s;
-                      } else if (hasExitedAll && !isCurrent) {
-                        completedNodes.push(s);
-                      } else {
-                        pendingNodes.push(s);
-                      }
-                    });
-
-                    const orderedTimelineNodes = [...completedNodes];
-                    if (activeNode) {
-                      orderedTimelineNodes.push(activeNode);
-                    }
-                    orderedTimelineNodes.push(...pendingNodes);
-
-                    return orderedTimelineNodes.map((stageDef, idx) => {
-                      const StageIcon = stageDef.icon;
-                      const isCurrent = currentZone === stageDef.zone;
-                      const logsForZone = selectedVehicle.stage_logs.filter(l => l.to_zone === stageDef.zone);
-                      const hasVisited = logsForZone.length > 0;
-                      const hasExitedAll = hasVisited && logsForZone.every(l => Boolean(l.exited_at));
-                      const isCompleted = hasExitedAll && !isCurrent;
-                      const isLastInOrder = idx === orderedTimelineNodes.length - 1;
-
-                      let totalNetSec = 0;
-                      let totalGrossSec = 0;
-                      const breakNotes: string[] = [];
-                      const queueNotes: string[] = [];
-                      const latestLog = logsForZone[logsForZone.length - 1];
-                      const isStageIdle = Boolean(isCurrent && latestLog && !latestLog.exited_at && !latestLog.work_started_at);
-
-                      logsForZone.forEach(l => {
-                        const breakdown = getStageDurationBreakdown(
-                          l.entered_at,
-                          l.exited_at,
-                          false,
-                          null,
-                          0,
-                          l.work_started_at,
-                          l.idle_seconds
-                        );
-                        totalNetSec += breakdown.netSec;
-                        totalGrossSec += breakdown.grossSec;
-                        if (breakdown.queueNote) {
-                          queueNotes.push(breakdown.queueNote);
-                        }
-                        if (breakdown.breakNote) {
-                          breakNotes.push(breakdown.breakNote);
-                        }
-                      });
-
-                      const spentStr = isCurrent ? activeStageDuration : formatDurationString(totalNetSec, true);
-
-                      const isInspectionOrFinished = currentZone === 'inspection' || selectedVehicle.is_finished;
-                      const isCancelled = stageDef.zone !== 'inspection' && !isCurrent && !isCompleted && isInspectionOrFinished;
-
-                      return (
-                        <View key={stageDef.zone} style={styles.timelineItem}>
-                          <View style={styles.timelineNodeColumn}>
-                            <View style={[
-                              styles.nodeCircle,
-                              { backgroundColor: colors.surfaceElevated, borderColor: colors.borderGlassBright },
-                              isCurrent && { borderColor: stageDef.color, backgroundColor: `${stageDef.color}25` },
-                              isCompleted && { borderColor: colors.success, backgroundColor: colors.successDim },
-                              isCancelled && { borderColor: colors.danger, backgroundColor: colors.dangerDim },
-                              !isCurrent && !isCompleted && !isCancelled && { borderColor: colors.borderGlassBright, backgroundColor: colors.surfaceOverlay }
-                            ]}>
-                              <StageIcon size={16} color={isCurrent ? stageDef.color : isCompleted ? colors.success : isCancelled ? colors.danger : colors.textMuted} />
-                            </View>
-                            {!isLastInOrder && (
-                              <>
-                                <View style={[styles.timelineLine, { backgroundColor: colors.borderGlassBright }]} />
-                                {isCompleted && <View style={[styles.timelineLine, styles.timelineLineDone, { backgroundColor: colors.success }]} />}
-                                {isCurrent && <View style={[styles.timelineLine, styles.timelineLineHalf, { backgroundColor: stageDef.color }]} />}
-                              </>
-                            )}
+                    return (
+                      <View key={stageDef.zone} style={styles.timelineItem}>
+                        <View style={styles.timelineNodeColumn}>
+                          <View style={[
+                            styles.nodeCircle,
+                            { backgroundColor: colors.surfaceElevated, borderColor: colors.borderGlassBright },
+                            isFullyFinishedOrDone && { borderColor: colors.success, backgroundColor: colors.successDim },
+                            isWorkingActive && { borderColor: colors.primary, backgroundColor: colors.primaryDim },
+                            isCurrent && isStageIdle && { borderColor: colors.warning, backgroundColor: colors.warningDim },
+                            isCancelled && { borderColor: colors.cancelled, backgroundColor: colors.cancelledDim },
+                            !isCurrent && !isCompleted && !isCancelled && { borderColor: colors.borderGlassBright, backgroundColor: colors.surfaceOverlay }
+                          ]}>
+                            <StageIconComponent size={16} color={nodeIconColor} />
                           </View>
+                          {!isLastInOrder && (
+                            <>
+                              {/* Background empty line */}
+                              <View style={[styles.timelineLine, { backgroundColor: colors.borderGlassBright }]} />
+                              {/* 100% full green line when stage is completed/done */}
+                              {isFullyFinishedOrDone && <View style={[styles.timelineLine, styles.timelineLineDone, { backgroundColor: colors.success }]} />}
+                              {/* 50% blue line when stage is actively in progress */}
+                              {isWorkingActive && <View style={[styles.timelineLine, styles.timelineLineHalf, { backgroundColor: colors.primary }]} />}
+                              {/* When arrived & idle: 0% line (only the amber circle is lit!) */}
+                            </>
+                          )}
+                        </View>
 
-                          <View style={styles.timelineContent}>
-                            <View style={styles.timelineHeaderRow}>
-                              <Text style={[styles.stageNameText, { color: colors.textPrimary }, isCurrent && { color: stageDef.color, fontWeight: '800' }, isCancelled && { color: colors.textMuted, textDecorationLine: 'line-through' }]}>
-                                {stageDef.name}
-                              </Text>
-                              {isCurrent ? (
+                        <View style={styles.timelineContent}>
+                          <View style={styles.timelineHeaderRow}>
+                            <Text style={[styles.stageNameText, { color: colors.textPrimary }, isCurrent && { fontWeight: '800' }, isCancelled && { color: colors.textMuted, textDecorationLine: 'line-through' }]}>
+                              {stageDef.name}
+                            </Text>
+                            {isCurrent ? (
+                              isInspection ? (
+                                <StatusPill variant="READY" label="READY" size="sm" />
+                              ) : (
                                 <StatusPill
-                                  variant={isStageIdle ? 'warning' : 'timer'}
+                                  variant={isStageIdle ? 'IDLE' : 'ACTIVE'}
                                   label={isStageIdle ? 'IDLE' : 'ACTIVE'}
                                   size="sm"
                                 />
-                              ) : isCompleted ? (
-                                <StatusPill variant="success" label="COMPLETED" size="sm" />
-                              ) : isCancelled ? (
-                                <StatusPill variant="danger" label="CANCELLED" size="sm" />
-                              ) : (
-                                <StatusPill variant="neutral" label="PENDING" size="sm" />
-                              )}
-                            </View>
-
-                            <View style={styles.stageTimeRow}>
-                              <View style={styles.timeTag}>
-                                <Clock size={12} color={isCurrent ? stageDef.color : isCancelled ? colors.danger : colors.textMuted} />
-                                <Text style={[styles.timeTagText, { color: colors.textSecondary }, isCurrent && { color: stageDef.color, fontWeight: '700' }, isCancelled && { color: colors.danger }]}>
-                                  {isCurrent ? `${isStageIdle ? 'Queue' : 'Active'}: ${spentStr}` : isCompleted ? `Spent: ${spentStr}` : isCancelled ? 'Bypassed / Cancelled' : 'Pending'}
-                                </Text>
-                              </View>
-                            </View>
-
-                            {/* Historical Log Timestamps */}
-                            {logsForZone.map((l, lIdx) => (
-                              <Text key={lIdx} style={styles.logSubText}>
-                                • Entered {formatSLSTime(l.entered_at)}
-                                {l.work_started_at ? ` · Started ${formatSLSTime(l.work_started_at)}` : ''}
-                                {l.exited_at ? ` → Exited ${formatSLSTime(l.exited_at)}` : ' (Current)'}
-                              </Text>
-                            ))}
-
-                            {/* Queue / Active Timing Subtext */}
-                            {queueNotes.map((note, qIdx) => (
-                              <Text key={`qn-${qIdx}`} style={styles.queueNoteSubText}>
-                                {note}
-                              </Text>
-                            ))}
-
-                            {/* Break Time Deducted Subtext (Lunch / Tea) */}
-                            {breakNotes.map((note, nIdx) => (
-                              <Text key={`bn-${nIdx}`} style={styles.breakNoteSubText}>
-                                {note}
-                              </Text>
-                            ))}
+                              )
+                            ) : isCompleted ? (
+                              <StatusPill variant="DONE" label="DONE" size="sm" />
+                            ) : isCancelled ? (
+                              <StatusPill variant="SKIPPED" label="SKIPPED" size="sm" />
+                            ) : (
+                              <StatusPill variant="PENDING" label="PENDING" size="sm" />
+                            )}
                           </View>
+
+                          {isInspection ? (
+                            /* Final Inspection: Pure, minimal dispatch entry */
+                            logsForZone[0] ? (
+                              <Text style={styles.logSubText}>
+                                • Entered {formatSLSTime(logsForZone[0].entered_at)}
+                              </Text>
+                            ) : null
+                          ) : (
+                            /* Service Bays: Active/Idle status, timestamps, breaks & queue notes */
+                            <>
+                              <View style={styles.stageTimeRow}>
+                                <View style={styles.timeTag}>
+                                  <Clock size={12} color={isCurrent ? (isStageIdle ? colors.warning : colors.primary) : isCancelled ? colors.cancelled : colors.textMuted} />
+                                  <Text style={[styles.timeTagText, { color: isCurrent ? (isStageIdle ? colors.warningLight : colors.primaryLight) : colors.textSecondary }, isCurrent && { fontWeight: '700' }, isCancelled && { color: colors.cancelled }]}>
+                                    {isCurrent ? (
+                                      `${isStageIdle ? 'Idle' : 'Active'}: ${spentStr}`
+                                    ) : isCompleted ? `Spent: ${spentStr}` : isCancelled ? 'Skipped' : 'Pending'}
+                                  </Text>
+                                </View>
+                              </View>
+
+                              {/* Historical Log Timestamps (2 Rows: Entry/Start and Finish/Exit) */}
+                              {logsForZone.map((l, lIdx) => {
+                                const entryStartStr = `• Entered ${formatSLSTime(l.entered_at)}${l.work_started_at ? ` · Started ${formatSLSTime(l.work_started_at)}` : ''}`;
+                                const finishExitParts: string[] = [];
+                                if (workCompletedAt) finishExitParts.push(`Finished ${formatSLSTime(workCompletedAt)}`);
+                                if (l.exited_at) finishExitParts.push(`Exited ${formatSLSTime(l.exited_at)}`);
+                                const finishExitStr = finishExitParts.length > 0 ? `• ${finishExitParts.join(' · ')}` : null;
+
+                                return (
+                                  <View key={lIdx} style={styles.logSubRowContainer}>
+                                    <Text style={styles.logSubText}>
+                                      {entryStartStr}
+                                    </Text>
+                                    {finishExitStr && (
+                                      <Text style={styles.logSubText}>
+                                        {finishExitStr}
+                                      </Text>
+                                    )}
+                                  </View>
+                                );
+                              })}
+
+                              {/* Break Deductions & Active/Idle Subtext */}
+                              {breakNotes.map((note, nIdx) => (
+                                <Text key={`bn-${nIdx}`} style={styles.breakNoteSubText}>
+                                  {note}
+                                </Text>
+                              ))}
+
+                              {queueNotes.map((note, qIdx) => (
+                                <Text key={`qn-${qIdx}`} style={styles.queueNoteSubText}>
+                                  {note}
+                                </Text>
+                              ))}
+                            </>
+                          )}
                         </View>
-                      );
-                    });
-                  })()}
+                      </View>
+                    );
+                  })}
                 </View>
               </View>
             )}
-          </ScrollView>
-
-          {/* Footer */}
-          <View style={[styles.footer, { borderTopColor: colors.borderGlass }]}>
-            {isEditing ? (
-              <View style={styles.editFooterRow}>
-                <TouchableOpacity
-                  style={[styles.cancelEditBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)' }]}
-                  onPress={() => setIsEditing(false)}
-                >
-                  <Text style={[styles.cancelEditText, { color: colors.textSecondary }]}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.saveEditBtn,
-                    { backgroundColor: colors.primary },
-                    isSubmitting && { opacity: 0.5, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }
-                  ]}
-                  onPress={() => { if (!isSubmitting) handleSaveJobOrder(); }}
-                  activeOpacity={isSubmitting ? 1 : 0.7}
-                >
-                  <Save size={16} color="#ffffff" />
-                  <Text style={styles.saveEditText}>{isSubmitting ? 'Saving...' : 'Save Job Order'}</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <>
-                {/* Urgency Section — Supervisor Only */}
-                {canDeleteVehicle && (
-                  <View style={[styles.urgencySection, {
-                    borderColor: localIsUrgent ? 'rgba(239,68,68,0.3)' : colors.borderGlass,
-                    backgroundColor: localIsUrgent ? 'rgba(239,68,68,0.05)' : 'transparent'
-                  }]}>
-                    <TouchableOpacity
-                      style={styles.urgencyToggleRow}
-                      onPress={() => {
-                        const next = !localIsUrgent;
-                        setLocalIsUrgent(next);
-                        updateUrgency(selectedVehicle.id, next, localUrgentNote);
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <AlertTriangle size={14} color={localIsUrgent ? '#ef4444' : colors.textMuted} />
-                      <Text style={[styles.urgencyToggleLabel, { color: localIsUrgent ? '#ef4444' : colors.textSecondary }]}>
-                        {localIsUrgent ? '⚡ URGENT — Tap to clear' : 'Mark as Urgent'}
-                      </Text>
-                    </TouchableOpacity>
-                    {localIsUrgent && (
-                      <TextInput
-                        style={[styles.urgencyNoteInput, { color: colors.textPrimary, borderColor: 'rgba(239,68,68,0.3)', backgroundColor: 'rgba(239,68,68,0.05)' }]}
-                        value={localUrgentNote}
-                        onChangeText={(t) => {
-                          setLocalUrgentNote(t);
-                          updateUrgency(selectedVehicle.id, true, t);
-                        }}
-                        placeholder="Urgency note..."
-                        placeholderTextColor={colors.textMuted}
-                        multiline
-                      />
-                    )}
-                  </View>
-                )}
-
-                <View style={styles.footerStandardRow}>
-                <View style={[styles.totalTimePill, { backgroundColor: colors.primaryDim, borderColor: colors.primaryBorder }]}>
-                  <Clock size={15} color={colors.primaryLight} />
-                  <View style={styles.totalTimeTextCol}>
-                    <Text style={[styles.totalTimeText, { color: colors.primaryLight }]}>Net Work: {totalElapsedStr}</Text>
-                    {grossElapsedStr !== totalElapsedStr && (
-                      <Text style={[styles.grossTimeSubText, { color: colors.textMuted }]}>Total Shop: {grossElapsedStr}</Text>
-                    )}
-                  </View>
-                </View>
-
-                <View style={styles.footerRightButtons}>
-                  {canDeleteVehicle && (
-                    <TouchableOpacity
-                      style={[styles.deleteBtn, { backgroundColor: colors.dangerDim, borderColor: colors.dangerBorder }]}
-                      onPress={() => setShowDeleteConfirm(true)}
-                      activeOpacity={0.7}
-                    >
-                      <Trash2 size={14} color={colors.danger} />
-                      <Text style={[styles.deleteBtnText, { color: colors.danger }]}>Delete</Text>
-                    </TouchableOpacity>
-                  )}
-
-                  <TouchableOpacity
-                    style={[styles.closeBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }]}
-                    onPress={() => setSelectedVehicle(null)}
-                  >
-                    <Text style={[styles.closeText, { color: colors.textPrimary }]}>Close</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-              </>
-            )}
-          </View>
-
-          {/* Delete Confirmation Dialog */}
-          {showDeleteConfirm && (
-            <View style={styles.confirmOverlay}>
-              <TouchableOpacity
-                style={styles.confirmBackdrop}
-                onPress={() => setShowDeleteConfirm(false)}
-                activeOpacity={1}
-              />
-              <View style={[styles.confirmCard, { backgroundColor: colors.surfaceElevated, borderColor: colors.dangerBorder }]}>
-                <View style={styles.confirmHeader}>
-                  <View style={[styles.confirmIconCircle, { backgroundColor: colors.dangerDim }]}>
-                    <AlertTriangle size={20} color={colors.danger} />
-                  </View>
-                  <View style={styles.confirmTitleGroup}>
-                    <Text style={[styles.confirmTitle, { color: colors.textPrimary }]}>Delete Job Sheet?</Text>
-                    <Text style={[styles.confirmSub, { color: colors.textMuted }]}>Permanent Action</Text>
-                  </View>
-                </View>
-
-                <Text style={[styles.confirmBodyText, { color: colors.textSecondary }]}>
-                  Are you sure you want to permanently delete vehicle <Text style={[styles.confirmBoldPlate, { color: colors.warningLight }]}>{selectedVehicle.vehicle_no}</Text>?
-                  {'\n\n'}This will remove the job sheet, task checklist, and all stage timing logs.
-                </Text>
-
-                <View style={styles.confirmBtnRow}>
-                  <TouchableOpacity
-                    style={[styles.confirmCancelBtn, { borderColor: colors.borderGlass, backgroundColor: colors.surfaceOverlay }]}
-                    onPress={() => setShowDeleteConfirm(false)}
-                  >
-                    <Text style={[styles.confirmCancelText, { color: colors.textSecondary }]}>Cancel</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.confirmDeleteBtn, { backgroundColor: colors.danger }]}
-                    onPress={async () => {
-                      setShowDeleteConfirm(false);
-                      await deleteVehicle(selectedVehicle.id);
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <Trash2 size={14} color="#ffffff" />
-                    <Text style={styles.confirmDeleteBtnText}>Yes, Delete</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-          )}
         </View>
-      </View>
-    </Modal>
+      </BaseModal>
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmModal
+        visible={showDeleteConfirm}
+        title="Delete Job Sheet?"
+        subtitle="Permanent Action"
+        confirmVariant="danger"
+        icon={<AlertTriangle size={20} color={colors.danger} />}
+        description={
+          <Text style={[styles.confirmBodyText, { color: colors.textSecondary }]}>
+            Are you sure you want to permanently delete vehicle{' '}
+            <Text style={[styles.confirmBoldPlate, { color: colors.warningLight }]}>
+              {selectedVehicle.vehicle_no}
+            </Text>
+            ?{'\n\n'}This will remove the job sheet, task checklist, and all stage timing logs.
+          </Text>
+        }
+        confirmLabel="Yes, Delete"
+        onConfirm={async () => {
+          setShowDeleteConfirm(false);
+          await deleteVehicle(selectedVehicle.id);
+        }}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
+    </>
   );
 };
 
@@ -763,9 +879,10 @@ const styles = StyleSheet.create({
   timeTag: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   timeTagText: { color: '#94a3b8', fontSize: 12, fontWeight: '500' },
   bayCodeText: { color: '#475569', fontSize: 10, fontWeight: '700' },
-  logSubText: { color: '#64748b', fontSize: 10, marginTop: 2 },
+  logSubRowContainer: { gap: 2, marginTop: 2 },
+  logSubText: { color: '#64748b', fontSize: 10.5, lineHeight: 15 },
   queueNoteSubText: { color: '#38bdf8', fontSize: 10.5, marginTop: 2 },
-  breakNoteSubText: { color: '#fbbf24', fontSize: 10.5, marginTop: 2, fontStyle: 'italic' },
+  breakNoteSubText: { color: '#fbbf24', fontSize: 10.5, marginTop: 2 },
   sectionTitle: { color: '#94a3b8', fontWeight: '700', fontSize: 11, letterSpacing: 1, marginTop: 8 },
   btnRow: { flexDirection: 'row', gap: 10 },
   relocateBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.05)', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
@@ -789,10 +906,9 @@ const styles = StyleSheet.create({
   cancelEditText: { color: '#94a3b8', fontSize: 13, fontWeight: '600' },
   saveEditBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#0ea5e9', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
   saveEditText: { color: '#ffffff', fontSize: 13, fontWeight: '700' },
-  urgencySection: { borderWidth: 1, borderRadius: 12, padding: 12, marginHorizontal: 16, marginBottom: 8, gap: 8 },
-  urgencyToggleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  urgencyToggleLabel: { fontSize: 13, fontWeight: '700', flex: 1 },
-  urgencyNoteInput: { borderWidth: 1, borderRadius: 8, padding: 8, fontSize: 13, minHeight: 48, textAlignVertical: 'top' },
+  urgencyToggleCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, borderRadius: 12, borderWidth: 1 },
+  urgencyToggleRow: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+  urgencyToggleLabel: { fontSize: 13, fontWeight: '700' },
 });
 
 

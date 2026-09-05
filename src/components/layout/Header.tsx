@@ -135,13 +135,9 @@ export const Header: React.FC = () => {
           </View>
           <View style={styles.brandSubRow}>
             <Text style={[styles.brandSub, { color: colors.textMuted }]}>{timeStr}</Text>
-            {activeBreak ? (
+            {activeBreak && (
               <View style={styles.activeBreakBadge}>
                 <Text style={styles.activeBreakBadgeText}>☕ {activeBreak.name.toUpperCase()} ACTIVE (UNTIL {activeBreak.endStr})</Text>
-              </View>
-            ) : (
-              <View style={[styles.scheduledBreakBadge, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.04)', borderColor: colors.borderGlass }]}>
-                <Text style={[styles.scheduledBreakBadgeText, { color: colors.textMuted }]}>☕ Auto Breaks: 9:45 AM · 12:30 PM (Lunch) · 2:45 PM</Text>
               </View>
             )}
           </View>
@@ -433,9 +429,9 @@ const styles = StyleSheet.create({
   avatarCircleBtn: {
     alignItems: 'center',
     justifyContent: 'center',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: 'rgba(14, 165, 233, 0.15)',
     borderWidth: 1.5,
     borderColor: 'rgba(14, 165, 233, 0.5)',
@@ -456,7 +452,7 @@ const styles = StyleSheet.create({
   },
   dropdownPopover: {
     position: 'absolute',
-    top: 48,
+    top: 44,
     right: 0,
     width: 260,
     backgroundColor: '#111827',
@@ -569,14 +565,14 @@ const styles = StyleSheet.create({
   reportsBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+    gap: 4,
+    height: 32,
+    paddingHorizontal: 8,
     borderRadius: 8,
     borderWidth: 1,
   },
   reportsBtnText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
   },
   dropdownSignOutItem: {

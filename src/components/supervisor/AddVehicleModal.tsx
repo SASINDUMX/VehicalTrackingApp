@@ -6,6 +6,7 @@ import { X, Car, Wrench, Shield, Navigation, Send, CheckSquare, Square, AlertTri
 
 import { formatVehicleNoInput, isValidVehicleNo } from '../../utils/vehicleNumberUtils';
 import { useTheme } from '../../context/ThemeContext';
+import { BaseModal } from '../shared/BaseModal';
 
 export const AddVehicleModal: React.FC = () => {
   const { isAddModalOpen, setIsAddModalOpen, addVehicle, vehicles } = useVehicles();
@@ -91,22 +92,43 @@ export const AddVehicleModal: React.FC = () => {
   };
 
   return (
-    <Modal visible={isAddModalOpen} animationType="fade" transparent>
-      <View style={[styles.backdrop, { backgroundColor: colors.backdrop }]}>
-        <View style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.borderGlass }]}>
-          <View style={[styles.header, { borderBottomColor: colors.borderGlass }]}>
-            <View style={styles.headerTitleRow}>
-              <View style={[styles.iconWrapper, { backgroundColor: colors.primaryDim }]}>
-                <Car size={20} color={colors.primaryLight} />
-              </View>
-              <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Add Vehicle & Job Order</Text>
-            </View>
-            <TouchableOpacity style={styles.closeBtn} onPress={() => setIsAddModalOpen(false)}>
-              <X size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
+    <BaseModal
+      visible={isAddModalOpen}
+      onClose={() => setIsAddModalOpen(false)}
+      title="Add Vehicle & Job Order"
+      icon={
+        <View style={[styles.iconWrapper, { backgroundColor: colors.primaryDim }]}>
+          <Car size={20} color={colors.primaryLight} />
+        </View>
+      }
+      maxWidth={620}
+      scrollable={true}
+      footer={
+        <View style={styles.footerRow}>
+          <TouchableOpacity
+            style={[styles.backBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)' }]}
+            onPress={() => setIsAddModalOpen(false)}
+          >
+            <Text style={[styles.backBtnText, { color: colors.textSecondary }]}>Cancel</Text>
+          </TouchableOpacity>
 
-          <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent}>
+          <TouchableOpacity
+            style={[
+              styles.submitBtn,
+              { backgroundColor: colors.primary },
+              (!isNoValid || isSubmitting) && styles.disabledBtn,
+              (!isNoValid || isSubmitting) && (Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {})
+            ]}
+            onPress={() => { if (isNoValid && !isSubmitting) handleSubmit(); }}
+            activeOpacity={(!isNoValid || isSubmitting) ? 1 : 0.7}
+          >
+            <Send size={16} color="#ffffff" />
+            <Text style={styles.submitBtnText}>{isSubmitting ? 'Creating...' : 'Create & Send'}</Text>
+          </TouchableOpacity>
+        </View>
+      }
+    >
+      <View style={styles.bodyContent}>
             <View style={styles.formGroup}>
               <Text style={[styles.label, { color: colors.textSecondary }]}>VEHICLE NUMBER / REGISTRATION NO:</Text>
               <TextInput
@@ -148,18 +170,18 @@ export const AddVehicleModal: React.FC = () => {
                   style={[
                     styles.taskChip,
                     {
-                      backgroundColor: selectedTasks.includes('general_service') ? colors.primaryDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
-                      borderColor: selectedTasks.includes('general_service') ? colors.primary : colors.borderGlass,
+                      backgroundColor: selectedTasks.includes('general_service') ? colors.bayWorkshopDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
+                      borderColor: selectedTasks.includes('general_service') ? colors.bayWorkshop : colors.borderGlass,
                     }
                   ]}
                   onPress={() => toggleTask('general_service')}
                 >
                   {selectedTasks.includes('general_service') ? (
-                    <CheckSquare size={16} color={colors.primaryLight} />
+                    <CheckSquare size={16} color={colors.bayWorkshopLight} />
                   ) : (
                     <Square size={16} color={colors.textMuted} />
                   )}
-                  <Text style={[styles.chipText, { color: selectedTasks.includes('general_service') ? (isDark ? '#ffffff' : colors.primary) : colors.textSecondary }]}>
+                  <Text style={[styles.chipText, { color: selectedTasks.includes('general_service') ? colors.textPrimary : colors.textSecondary }]}>
                     General Service
                   </Text>
                 </TouchableOpacity>
@@ -168,18 +190,18 @@ export const AddVehicleModal: React.FC = () => {
                   style={[
                     styles.taskChip,
                     {
-                      backgroundColor: selectedTasks.includes('wheel_alignment') ? colors.successDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
-                      borderColor: selectedTasks.includes('wheel_alignment') ? colors.success : colors.borderGlass,
+                      backgroundColor: selectedTasks.includes('wheel_alignment') ? colors.bayAlignmentDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
+                      borderColor: selectedTasks.includes('wheel_alignment') ? colors.bayAlignment : colors.borderGlass,
                     }
                   ]}
                   onPress={() => toggleTask('wheel_alignment')}
                 >
                   {selectedTasks.includes('wheel_alignment') ? (
-                    <CheckSquare size={16} color={colors.successLight} />
+                    <CheckSquare size={16} color={colors.bayAlignmentLight} />
                   ) : (
                     <Square size={16} color={colors.textMuted} />
                   )}
-                  <Text style={[styles.chipText, { color: selectedTasks.includes('wheel_alignment') ? (isDark ? '#ffffff' : colors.success) : colors.textSecondary }]}>
+                  <Text style={[styles.chipText, { color: selectedTasks.includes('wheel_alignment') ? colors.textPrimary : colors.textSecondary }]}>
                     Wheel Alignment
                   </Text>
                 </TouchableOpacity>
@@ -188,18 +210,18 @@ export const AddVehicleModal: React.FC = () => {
                   style={[
                     styles.taskChip,
                     {
-                      backgroundColor: selectedTasks.includes('hoist_service') ? colors.warningDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
-                      borderColor: selectedTasks.includes('hoist_service') ? colors.warning : colors.borderGlass,
+                      backgroundColor: selectedTasks.includes('hoist_service') ? colors.bayHoistDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
+                      borderColor: selectedTasks.includes('hoist_service') ? colors.bayHoist : colors.borderGlass,
                     }
                   ]}
                   onPress={() => toggleTask('hoist_service')}
                 >
                   {selectedTasks.includes('hoist_service') ? (
-                    <CheckSquare size={16} color={colors.warningLight} />
+                    <CheckSquare size={16} color={colors.bayHoistLight} />
                   ) : (
                     <Square size={16} color={colors.textMuted} />
                   )}
-                  <Text style={[styles.chipText, { color: selectedTasks.includes('hoist_service') ? (isDark ? '#ffffff' : colors.warning) : colors.textSecondary }]}>
+                  <Text style={[styles.chipText, { color: selectedTasks.includes('hoist_service') ? colors.textPrimary : colors.textSecondary }]}>
                     Hoist Service
                   </Text>
                 </TouchableOpacity>
@@ -215,8 +237,8 @@ export const AddVehicleModal: React.FC = () => {
                     style={[
                       styles.dispatchBtn,
                       {
-                        backgroundColor: targetZone === 'workshop' ? colors.primaryDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
-                        borderColor: targetZone === 'workshop' ? colors.primary : colors.borderGlass,
+                        backgroundColor: targetZone === 'workshop' ? colors.bayWorkshopDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
+                        borderColor: targetZone === 'workshop' ? colors.bayWorkshop : colors.borderGlass,
                       }
                     ]}
                     onPress={() => {
@@ -224,8 +246,8 @@ export const AddVehicleModal: React.FC = () => {
                       setAssignedTech('Technician 1 (General Workshop)');
                     }}
                   >
-                    <Wrench size={16} color={targetZone === 'workshop' ? colors.primaryLight : colors.textMuted} />
-                    <Text style={[styles.dispatchText, { color: targetZone === 'workshop' ? colors.primaryLight : colors.textSecondary }]}>
+                    <Wrench size={16} color={targetZone === 'workshop' ? colors.bayWorkshopLight : colors.textMuted} />
+                    <Text style={[styles.dispatchText, { color: targetZone === 'workshop' ? colors.textPrimary : colors.textSecondary }]}>
                       TO Workshop
                     </Text>
                   </TouchableOpacity>
@@ -237,8 +259,8 @@ export const AddVehicleModal: React.FC = () => {
                     style={[
                       styles.dispatchBtn,
                       {
-                        backgroundColor: targetZone === 'alignment' ? colors.successDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
-                        borderColor: targetZone === 'alignment' ? colors.success : colors.borderGlass,
+                        backgroundColor: targetZone === 'alignment' ? colors.bayAlignmentDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
+                        borderColor: targetZone === 'alignment' ? colors.bayAlignment : colors.borderGlass,
                       }
                     ]}
                     onPress={() => {
@@ -246,8 +268,8 @@ export const AddVehicleModal: React.FC = () => {
                       setAssignedTech('Technician 3 (Wheel Alignment)');
                     }}
                   >
-                    <Navigation size={16} color={targetZone === 'alignment' ? colors.successLight : colors.textMuted} />
-                    <Text style={[styles.dispatchText, { color: targetZone === 'alignment' ? colors.successLight : colors.textSecondary }]}>
+                    <Navigation size={16} color={targetZone === 'alignment' ? colors.bayAlignmentLight : colors.textMuted} />
+                    <Text style={[styles.dispatchText, { color: targetZone === 'alignment' ? colors.textPrimary : colors.textSecondary }]}>
                       TO Alignment
                     </Text>
                   </TouchableOpacity>
@@ -259,8 +281,8 @@ export const AddVehicleModal: React.FC = () => {
                     style={[
                       styles.dispatchBtn,
                       {
-                        backgroundColor: targetZone === 'hoist' ? colors.warningDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
-                        borderColor: targetZone === 'hoist' ? colors.warning : colors.borderGlass,
+                        backgroundColor: targetZone === 'hoist' ? colors.bayHoistDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
+                        borderColor: targetZone === 'hoist' ? colors.bayHoist : colors.borderGlass,
                       }
                     ]}
                     onPress={() => {
@@ -268,8 +290,8 @@ export const AddVehicleModal: React.FC = () => {
                       setAssignedTech('Technician 2 (Hoist Bay)');
                     }}
                   >
-                    <Shield size={16} color={targetZone === 'hoist' ? colors.warningLight : colors.textMuted} />
-                    <Text style={[styles.dispatchText, { color: targetZone === 'hoist' ? colors.warningLight : colors.textSecondary }]}>
+                    <Shield size={16} color={targetZone === 'hoist' ? colors.bayHoistLight : colors.textMuted} />
+                    <Text style={[styles.dispatchText, { color: targetZone === 'hoist' ? colors.textPrimary : colors.textSecondary }]}>
                       TO Hoist
                     </Text>
                   </TouchableOpacity>
@@ -344,37 +366,19 @@ export const AddVehicleModal: React.FC = () => {
                 />
               )}
             </View>
-          </ScrollView>
-
-          <View style={[styles.footer, { borderTopColor: colors.borderGlass }]}>
-            <TouchableOpacity
-              style={[styles.backBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)' }]}
-              onPress={() => setIsAddModalOpen(false)}
-            >
-              <Text style={[styles.backBtnText, { color: colors.textSecondary }]}>Cancel</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.submitBtn,
-                { backgroundColor: colors.primary },
-                (!isNoValid || isSubmitting) && styles.disabledBtn,
-                (!isNoValid || isSubmitting) && (Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {})
-              ]}
-              onPress={() => { if (isNoValid && !isSubmitting) handleSubmit(); }}
-              activeOpacity={(!isNoValid || isSubmitting) ? 1 : 0.7}
-            >
-              <Send size={16} color="#ffffff" />
-              <Text style={styles.submitBtnText}>{isSubmitting ? 'Creating...' : 'Create & Send'}</Text>
-            </TouchableOpacity>
           </View>
-        </View>
-      </View>
-    </Modal>
+        </BaseModal>
   );
 };
 
 const styles = StyleSheet.create({
+  footerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 12,
+    width: '100%',
+  },
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.75)',

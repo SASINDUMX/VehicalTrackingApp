@@ -5,11 +5,11 @@ import { LicensePlate } from '../shared/LicensePlate';
 import { EmptyStateCard } from '../shared/EmptyStateCard';
 import { TimerPill } from '../shared/TimerPill';
 import { StatusPill } from '../shared/StatusPill';
+import { VehicleNotePill } from '../shared/VehicleNotePill';
 import { calculateJobSheetProgress, getTaskTypeForBay } from '../../utils/vehicleUtils';
 import { useFloorPlan } from '../../hooks/useFloorPlan';
 import { usePinnedVehicles } from '../../hooks/usePinnedVehicles';
 import { useTheme } from '../../context/ThemeContext';
-import { useVehicles } from '../../context/VehicleContext';
 
 export const FloorPlan2D: React.FC = React.memo(() => {
   const {
@@ -17,6 +17,7 @@ export const FloorPlan2D: React.FC = React.memo(() => {
     elapsedTimes,
     isLoading,
     searchQuery,
+    showMyVehiclesOnly,
     isSearchActive,
     totalMatchingVehicles,
     setSelectedVehicle,
@@ -24,7 +25,6 @@ export const FloorPlan2D: React.FC = React.memo(() => {
   } = useFloorPlan();
   const { colors, isDark } = useTheme();
   const { togglePin, isPinned } = usePinnedVehicles();
-  const { showUrgentNote } = useVehicles();
 
   if (isSearchActive && totalMatchingVehicles === 0) {
     return (
@@ -32,6 +32,23 @@ export const FloorPlan2D: React.FC = React.memo(() => {
         icon={FileCheck}
         title={`No matching vehicles for "${searchQuery}"`}
         subtitle="Try searching another license plate number."
+      />
+    );
+  }
+
+  // Calculate total visible vehicles in bays for My Vehicles filter
+  const totalVisibleBays = bays.reduce((acc, bay) => {
+    const rawVehicles = getVehiclesInZone(bay.id);
+    const bayVehicles = showMyVehiclesOnly ? rawVehicles.filter(v => isPinned(v.id)) : rawVehicles;
+    return acc + bayVehicles.length;
+  }, 0);
+
+  if (showMyVehiclesOnly && totalVisibleBays === 0) {
+    return (
+      <EmptyStateCard
+        icon={Bookmark}
+        title="No Pinned Vehicles"
+        subtitle="You have not pinned any active vehicles. Click the bookmark icon on any vehicle to add it to 'My Vehicles'."
       />
     );
   }
@@ -47,10 +64,11 @@ export const FloorPlan2D: React.FC = React.memo(() => {
         <View style={styles.spatialGrid}>
           {bays.map((bay) => {
                 const IconComp = bay.icon;
-                const bayVehicles = getVehiclesInZone(bay.id);
+                const rawVehicles = getVehiclesInZone(bay.id);
+                const bayVehicles = showMyVehiclesOnly ? rawVehicles.filter(v => isPinned(v.id)) : rawVehicles;
 
-                // If searching, hide bays that have 0 matching vehicles!
-                if (searchQuery.trim() !== '' && bayVehicles.length === 0) {
+                // If searching or filtering My Vehicles, hide bays that have 0 matching vehicles!
+                if ((searchQuery.trim() !== '' || showMyVehiclesOnly) && bayVehicles.length === 0) {
                   return null;
                 }
 
@@ -92,7 +110,8 @@ export const FloorPlan2D: React.FC = React.memo(() => {
                             const currentTask = vehicle.tasks.find(t => t.task_type === currentBayTaskType);
                             const isCurrentTaskDone = Boolean(currentTask && currentTask.is_completed);
                             const lastStageLog = vehicle.stage_logs[vehicle.stage_logs.length - 1];
-                            const isStageIdle = Boolean(lastStageLog && !lastStageLog.exited_at && !lastStageLog.work_started_at);
+                            const isInspectionZone = vehicle.current_zone === 'inspection';
+                            const isStageIdle = !isInspectionZone && Boolean(lastStageLog && !lastStageLog.exited_at && !lastStageLog.work_started_at);
                             const isUrgent = Boolean(vehicle.is_urgent);
                             const vehiclePinned = isPinned(vehicle.id);
 
@@ -103,27 +122,27 @@ export const FloorPlan2D: React.FC = React.memo(() => {
                                   styles.spatialVehicleCard,
                                   {
                                     backgroundColor: isUrgent
-                                      ? (isDark ? 'rgba(239, 68, 68, 0.07)' : 'rgba(239, 68, 68, 0.04)')
+                                      ? colors.cardUrgentBg
                                       : isCurrentTaskDone
-                                      ? (isDark ? 'rgba(16, 185, 129, 0.08)' : 'rgba(16, 185, 129, 0.04)')
+                                      ? colors.cardDoneBg
                                       : isStageIdle
-                                      ? (isDark ? 'rgba(245, 158, 11, 0.08)' : 'rgba(245, 158, 11, 0.04)')
-                                      : colors.surface,
+                                      ? colors.cardIdleBg
+                                      : colors.cardActiveBg,
                                     borderColor: isUrgent
-                                      ? 'rgba(239, 68, 68, 0.4)'
+                                      ? colors.cardUrgentBorder
                                       : isCurrentTaskDone
-                                      ? colors.successBorder
+                                      ? colors.cardDoneBorder
                                       : isStageIdle
-                                      ? colors.warningBorder
-                                      : colors.borderGlass,
+                                      ? colors.cardIdleBorder
+                                      : colors.cardActiveBorder,
                                     borderLeftWidth: 3,
                                     borderLeftColor: isUrgent
-                                      ? '#ef4444'
+                                      ? colors.danger
                                       : isCurrentTaskDone
                                       ? colors.success
                                       : isStageIdle
                                       ? colors.warning
-                                      : bay.color,
+                                      : colors.primary,
                                   }
                                 ]}
                                 onPress={() => setSelectedVehicle(vehicle)}
@@ -132,22 +151,12 @@ export const FloorPlan2D: React.FC = React.memo(() => {
                               <View style={styles.cardHeaderTopRow}>
                                 <View style={styles.plateWithStatusGroup}>
                                   <LicensePlate number={vehicle.vehicle_no} size="sm" />
-                                  {isCurrentTaskDone && (
-                                    <StatusPill variant="success" label="TASK DONE" IconComponent={CheckCircle} size="sm" />
-                                  )}
-                                  {isUrgent && (
-                                    <TouchableOpacity
-                                      onPress={() => showUrgentNote(vehicle.vehicle_no, vehicle.urgent_note)}
-                                      hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-                                    >
-                                      <StatusPill variant="danger" label="⚡ URGENT" size="sm" />
-                                    </TouchableOpacity>
-                                  )}
+                                  <VehicleNotePill vehicle={vehicle} size="sm" compact />
                                 </View>
                                 <View style={styles.headerRightGroup}>
                                   <TimerPill
                                     elapsedText={elapsedTimes[vehicle.id] || '0m 00s'}
-                                    variant={isStageIdle ? 'amber' : 'cyan'}
+                                    variant={isCurrentTaskDone ? 'green' : isStageIdle ? 'amber' : 'cyan'}
                                     isPaused={isStageIdle}
                                     size="sm"
                                   />
@@ -169,7 +178,14 @@ export const FloorPlan2D: React.FC = React.memo(() => {
                                 <View
                                   style={[
                                     styles.spatialProgressFill,
-                                    { width: `${percent}%`, backgroundColor: isCurrentTaskDone ? colors.success : bay.color },
+                                    {
+                                      width: `${percent}%`,
+                                      backgroundColor: isCurrentTaskDone
+                                        ? colors.success
+                                        : isStageIdle
+                                        ? colors.warning
+                                        : colors.primary,
+                                    },
                                   ]}
                                 />
                               </View>
@@ -178,8 +194,12 @@ export const FloorPlan2D: React.FC = React.memo(() => {
                                 <Text style={[styles.spatialProgressText, { color: colors.textSecondary }]}>
                                   {completedCount}/{totalReq} Tasks Done ({percent}%)
                                 </Text>
-                                {isCurrentTaskDone && (
-                                  <StatusPill variant="success" label="✓" size="sm" />
+                                {isCurrentTaskDone ? (
+                                  <StatusPill variant="DONE" label="DONE" size="sm" />
+                                ) : isStageIdle ? (
+                                  <StatusPill variant="IDLE" label="IDLE" size="sm" />
+                                ) : (
+                                  <StatusPill variant="ACTIVE" label="ACTIVE" size="sm" />
                                 )}
                               </View>
                             </TouchableOpacity>
@@ -320,16 +340,19 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     width: '100%',
     gap: 6,
+    flexWrap: 'wrap',
   },
   plateWithStatusGroup: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flexShrink: 1,
   },
   headerRightGroup: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flexShrink: 0,
   },
   spatialProgressRow: {
     flexDirection: 'row',

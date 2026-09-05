@@ -5,11 +5,11 @@ import { LicensePlate } from '../shared/LicensePlate';
 import { EmptyStateCard } from '../shared/EmptyStateCard';
 import { TimerPill } from '../shared/TimerPill';
 import { StatusPill } from '../shared/StatusPill';
+import { VehicleNotePill } from '../shared/VehicleNotePill';
 import { formatTotalTATString } from '../../utils/vehicleUtils';
 import { useAdvisorInspection } from '../../hooks/useAdvisorInspection';
 import { usePinnedVehicles } from '../../hooks/usePinnedVehicles';
 import { useTheme } from '../../context/ThemeContext';
-import { useVehicles } from '../../context/VehicleContext';
 import { Vehicle, VehicleTask } from '../../types/vehicle';
 
 export const AdvisorInspectionView: React.FC = React.memo(() => {
@@ -17,6 +17,7 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
     readyVehicles,
     expandedCards,
     searchQuery,
+    showMyVehiclesOnly,
     canFinishJob,
     toggleExpand,
     finishVehicleJobSheet,
@@ -24,8 +25,6 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
   } = useAdvisorInspection();
   const { colors, isDark } = useTheme();
   const { togglePin, isPinned } = usePinnedVehicles();
-  const { showUrgentNote } = useVehicles();
-  const [showPinnedOnly, setShowPinnedOnly] = useState<boolean>(false);
   const [pendingHandover, setPendingHandover] = useState<{
     id: string;
     plate: string;
@@ -57,7 +56,7 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
       if (!isPinned(a.id) && isPinned(b.id)) return 1;
       return 0;
     });
-  const displayVehicles = showPinnedOnly ? sortedVehicles.filter(v => isPinned(v.id)) : sortedVehicles;
+  const displayVehicles = showMyVehiclesOnly ? sortedVehicles.filter(v => isPinned(v.id)) : sortedVehicles;
 
   const renderVehicleCard = ({ item: vehicle }: { item: Vehicle }) => {
     const isExpanded = Boolean(expandedCards[vehicle.id]);
@@ -69,10 +68,10 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
         style={[
           styles.mainCard,
           {
-            backgroundColor: isDark ? 'rgba(16, 185, 129, 0.04)' : 'rgba(16, 185, 129, 0.02)',
-            borderColor: isUrgent ? 'rgba(239, 68, 68, 0.4)' : colors.successBorder,
+            backgroundColor: isUrgent ? colors.cardUrgentBg : colors.cardDoneBg,
+            borderColor: isUrgent ? colors.cardUrgentBorder : colors.cardDoneBorder,
             borderLeftWidth: 4,
-            borderLeftColor: isUrgent ? '#ef4444' : colors.success,
+            borderLeftColor: isUrgent ? colors.danger : colors.success,
           }
         ]}
       >
@@ -84,20 +83,14 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
         >
           <View style={styles.plateWithStatusGroup}>
             <LicensePlate number={vehicle.vehicle_no} size="md" />
-            {isUrgent && (
-              <TouchableOpacity
-                onPress={() => showUrgentNote(vehicle.vehicle_no, vehicle.urgent_note)}
-                hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-              >
-                <StatusPill variant="danger" label="⚡ URGENT" size="md" />
-              </TouchableOpacity>
-            )}
+            <VehicleNotePill vehicle={vehicle} size="md" compact />
           </View>
 
           <View style={styles.headerRightGroup}>
-            <TimerPill
-              elapsedText={formatTotalTATString(vehicle)}
-              variant="cyan"
+            <StatusPill
+              variant="READY"
+              label="READY"
+              IconComponent={CheckCircle2}
               size="md"
             />
 
@@ -128,7 +121,7 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
               <View style={styles.urgentCalloutBox}>
                 <View style={styles.urgentCalloutHeader}>
                   <AlertOctagon size={14} color="#ef4444" />
-                  <Text style={styles.urgentCalloutTitle}>PRIORITY / URGENT VEHICLE</Text>
+                  <Text style={styles.urgentCalloutTitle}>URGENT VEHICLE</Text>
                 </View>
                 {Boolean(vehicle.urgent_note) && (
                   <Text style={styles.urgentCalloutText}>{vehicle.urgent_note}</Text>
@@ -156,9 +149,9 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
                       {t.task_name}
                     </Text>
                     {t.is_completed ? (
-                      <StatusPill variant="success" label="DONE" IconComponent={CheckCircle2} size="sm" />
+                      <StatusPill variant="DONE" label="DONE" IconComponent={CheckCircle2} size="sm" />
                     ) : (
-                      <StatusPill variant="danger" label="CANCELLED" IconComponent={XCircle} size="sm" />
+                      <StatusPill variant="SKIPPED" label="SKIPPED" IconComponent={XCircle} size="sm" />
                     )}
                   </View>
                 ))}
@@ -188,36 +181,18 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
     );
   };
 
-  if (readyVehicles.length === 0) {
+  if (displayVehicles.length === 0) {
     return (
       <EmptyStateCard
-        icon={FileCheck}
-        title={searchQuery.trim() ? `No matching vehicles for "${searchQuery}"` : 'All Job Sheets Cleared'}
-        subtitle={searchQuery.trim() ? 'Try searching another license plate number.' : 'No vehicles currently pending advisor final inspection or delivery.'}
+        icon={showMyVehiclesOnly ? Bookmark : FileCheck}
+        title={showMyVehiclesOnly ? 'No Pinned Vehicles' : searchQuery.trim() ? `No matching vehicles for "${searchQuery}"` : 'All Job Sheets Cleared'}
+        subtitle={showMyVehiclesOnly ? 'You do not have any pinned vehicles in the inspection zone.' : searchQuery.trim() ? 'Try searching another license plate number.' : 'No vehicles currently pending advisor final inspection or delivery.'}
       />
     );
   }
 
   return (
     <View style={{ flex: 1 }}>
-      {/* My Vehicles / All Vehicles toggle */}
-      <View style={styles.filterRow}>
-        <TouchableOpacity
-          style={[styles.filterBtn, !showPinnedOnly && styles.filterBtnActive]}
-          onPress={() => setShowPinnedOnly(false)}
-        >
-          <Text style={[styles.filterBtnText, !showPinnedOnly && styles.filterBtnTextActive]}>All Vehicles</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.filterBtn,
-            showPinnedOnly && { borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.1)' }
-          ]}
-          onPress={() => setShowPinnedOnly(true)}
-        >
-          <Text style={[styles.filterBtnText, showPinnedOnly && { color: '#f59e0b' }]}>📌 My Vehicles</Text>
-        </TouchableOpacity>
-      </View>
       <FlatList
         data={displayVehicles}
         keyExtractor={(item) => item.id}
@@ -288,14 +263,14 @@ const styles = StyleSheet.create({
   emptySub: { color: '#64748b', fontSize: 13 },
   cardsGrid: { gap: 16 },
   mainCard: { backgroundColor: '#0f172a', borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)', padding: 20, gap: 20, ...(Platform.OS === 'web' ? ({ boxShadow: '0px 4px 10px rgba(0, 0, 0, 0.3)' } as any) : { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 5, elevation: 5 }) },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  plateWithStatusGroup: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', rowGap: 8 },
+  plateWithStatusGroup: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
   licensePlateContainer: { flexDirection: 'row', backgroundColor: '#facc15', borderRadius: 4, borderWidth: 1, borderColor: '#eab308', overflow: 'hidden' },
   plateLeftBar: { backgroundColor: '#1d4ed8', paddingHorizontal: 4, paddingVertical: 2, alignItems: 'center', justifyContent: 'center' },
   plateFlag: { fontSize: 10, lineHeight: 10 },
   plateCountryCode: { color: '#ffffff', fontSize: 8, fontWeight: '700', marginTop: 1 },
   plateRightArea: { paddingHorizontal: 8, paddingVertical: 4, justifyContent: 'center' },
-  headerRightGroup: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  headerRightGroup: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0 },
   pinBtn: { width: 28, height: 28, borderRadius: 6, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.08)', alignItems: 'center', justifyContent: 'center' },
   chevronWrapper: { width: 28, height: 28, borderRadius: 6, backgroundColor: 'rgba(255, 255, 255, 0.05)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.08)' },
   tatBox: { alignItems: 'flex-end' },

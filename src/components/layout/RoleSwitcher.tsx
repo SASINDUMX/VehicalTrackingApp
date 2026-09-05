@@ -4,14 +4,17 @@ import { useVehicles } from '../../context/VehicleContext';
 import { useAuth } from '../../context/AuthContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { UserRole } from '../../types/vehicle';
-import { Compass, Wrench, Shield, UserCheck, CheckCircle2, Search, X, ChevronLeft, ChevronRight, Plus, Car } from 'lucide-react-native';
+import { Compass, Wrench, Shield, UserCheck, CheckCircle2, Search, X, ChevronLeft, ChevronRight, Plus, Car, Bookmark } from 'lucide-react-native';
 
 import { useTheme } from '../../context/ThemeContext';
 
+import { usePinnedVehicles } from '../../hooks/usePinnedVehicles';
+
 export const SearchBarRow: React.FC = () => {
-  const { searchQuery, setSearchQuery, setIsAddModalOpen, currentRole, vehicles } = useVehicles();
+  const { searchQuery, setSearchQuery, showMyVehiclesOnly, setShowMyVehiclesOnly, setIsAddModalOpen, currentRole, vehicles } = useVehicles();
   const { canAddVehicle } = usePermissions();
   const { colors, isDark } = useTheme();
+  const { isPinned } = usePinnedVehicles();
   const [localSearch, setLocalSearch] = React.useState<string>(searchQuery);
 
   // 300ms Debounce search input
@@ -28,23 +31,28 @@ export const SearchBarRow: React.FC = () => {
     setLocalSearch(searchQuery);
   }, [searchQuery]);
 
-  // Active vehicle count calculation for current page view
+  // Active vehicle count calculation for current page view (respects showMyVehiclesOnly)
   const activeCount = React.useMemo(() => {
-    switch (currentRole) {
-      case 'supervisor':
-        return vehicles.filter(v => !v.is_finished).length;
-      case 'tech_workshop':
-        return vehicles.filter(v => v.current_zone === 'workshop' && !v.is_finished).length;
-      case 'tech_alignment':
-        return vehicles.filter(v => v.current_zone === 'alignment' && !v.is_finished).length;
-      case 'tech_hoist':
-        return vehicles.filter(v => v.current_zone === 'hoist' && !v.is_finished).length;
-      case 'advisor':
-        return vehicles.filter(v => v.current_zone === 'inspection' && !v.is_finished).length;
-      default:
-        return vehicles.length;
-    }
-  }, [vehicles, currentRole]);
+    const roleFiltered = vehicles.filter(v => {
+      if (v.is_finished) return false;
+      if (showMyVehiclesOnly && !isPinned(v.id)) return false;
+      switch (currentRole) {
+        case 'supervisor':
+          return true;
+        case 'tech_workshop':
+          return v.current_zone === 'workshop';
+        case 'tech_alignment':
+          return v.current_zone === 'alignment';
+        case 'tech_hoist':
+          return v.current_zone === 'hoist';
+        case 'advisor':
+          return v.current_zone === 'inspection';
+        default:
+          return true;
+      }
+    });
+    return roleFiltered.length;
+  }, [vehicles, currentRole, showMyVehiclesOnly, isPinned]);
 
   return (
     <View style={[styles.topSearchContainer, { backgroundColor: colors.background, borderBottomColor: colors.borderGlass }]}>
@@ -83,6 +91,33 @@ export const SearchBarRow: React.FC = () => {
           )}
         </View>
 
+        {/* Single Click Toggle Button: All ↔ My */}
+        <TouchableOpacity
+          style={[
+            styles.singleFilterToggleBtn,
+            {
+              backgroundColor: showMyVehiclesOnly ? 'rgba(245, 158, 11, 0.15)' : (isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)'),
+              borderColor: showMyVehiclesOnly ? colors.warning : colors.primaryBorder,
+            }
+          ]}
+          onPress={() => setShowMyVehiclesOnly(!showMyVehiclesOnly)}
+          activeOpacity={0.7}
+        >
+          <Bookmark
+            size={13}
+            color={showMyVehiclesOnly ? colors.warning : colors.textSecondary}
+            fill={showMyVehiclesOnly ? colors.warning : 'transparent'}
+          />
+          <Text
+            style={[
+              styles.singleFilterToggleText,
+              { color: showMyVehiclesOnly ? colors.warning : colors.textSecondary }
+            ]}
+          >
+            {showMyVehiclesOnly ? 'My' : 'All'}
+          </Text>
+        </TouchableOpacity>
+
         {/* Dynamic Vehicle Count Badge */}
         <View style={[styles.vehicleCountPill, { backgroundColor: colors.primaryDim, borderColor: colors.primaryBorder }]}>
           <Car size={14} color={colors.primaryLight} />
@@ -91,8 +126,8 @@ export const SearchBarRow: React.FC = () => {
 
         {canAddVehicle && currentRole === 'supervisor' && (
           <TouchableOpacity style={[styles.addVehicleBtn, { backgroundColor: colors.primary }]} onPress={() => setIsAddModalOpen(true)}>
-            <Plus size={16} color="#ffffff" />
-            <Text style={styles.addVehicleBtnText}>Add vehicle</Text>
+            <Plus size={15} color="#ffffff" />
+            <Text style={styles.addVehicleBtnText}>Vehicle</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -126,15 +161,18 @@ export const SegmentedTabs: React.FC = () => {
           onPress={() => setCurrentRole('supervisor')}
           activeOpacity={0.7}
         >
-          <Text style={[
-            styles.segmentBtnText,
-            {
-              color: isOverviewActive 
-                ? (isDark ? '#38bdf8' : colors.primary) 
-                : colors.textSecondary,
-              fontWeight: isOverviewActive ? '800' : '600',
-            }
-          ]}>
+          <Text 
+            numberOfLines={1}
+            style={[
+              styles.segmentBtnText,
+              {
+                color: isOverviewActive 
+                  ? (isDark ? '#38bdf8' : colors.primary) 
+                  : colors.textSecondary,
+                fontWeight: isOverviewActive ? '800' : '600',
+              }
+            ]}
+          >
             Overview
           </Text>
         </TouchableOpacity>
@@ -151,22 +189,25 @@ export const SegmentedTabs: React.FC = () => {
             style={[
               styles.groupedStageItem,
               isWorkshopActive && {
-                backgroundColor: colors.primaryDim,
-                borderColor: colors.primary,
+                backgroundColor: colors.bayWorkshopDim,
+                borderColor: colors.bayWorkshop,
               }
             ]}
             onPress={() => setCurrentRole('tech_workshop')}
             activeOpacity={0.7}
           >
-            <Text style={[
-              styles.segmentBtnText,
-              {
-                color: isWorkshopActive 
-                  ? (isDark ? '#38bdf8' : colors.primary) 
-                  : colors.textSecondary,
-                fontWeight: isWorkshopActive ? '800' : '600',
-              }
-            ]}>
+            <Text 
+              numberOfLines={1}
+              style={[
+                styles.segmentBtnText,
+                {
+                  color: isWorkshopActive 
+                    ? (isDark ? colors.bayWorkshopLight : colors.bayWorkshop) 
+                    : colors.textSecondary,
+                  fontWeight: isWorkshopActive ? '800' : '600',
+                }
+              ]}
+            >
               General
             </Text>
           </TouchableOpacity>
@@ -177,22 +218,25 @@ export const SegmentedTabs: React.FC = () => {
             style={[
               styles.groupedStageItem,
               isAlignmentActive && {
-                backgroundColor: colors.successDim,
-                borderColor: colors.success,
+                backgroundColor: colors.bayAlignmentDim,
+                borderColor: colors.bayAlignment,
               }
             ]}
             onPress={() => setCurrentRole('tech_alignment')}
             activeOpacity={0.7}
           >
-            <Text style={[
-              styles.segmentBtnText,
-              {
-                color: isAlignmentActive 
-                  ? (isDark ? '#34d399' : colors.success) 
-                  : colors.textSecondary,
-                fontWeight: isAlignmentActive ? '800' : '600',
-              }
-            ]}>
+            <Text 
+              numberOfLines={1}
+              style={[
+                styles.segmentBtnText,
+                {
+                  color: isAlignmentActive 
+                    ? (isDark ? colors.bayAlignmentLight : colors.bayAlignment) 
+                    : colors.textSecondary,
+                  fontWeight: isAlignmentActive ? '800' : '600',
+                }
+              ]}
+            >
               Alignment
             </Text>
           </TouchableOpacity>
@@ -203,22 +247,25 @@ export const SegmentedTabs: React.FC = () => {
             style={[
               styles.groupedStageItem,
               isHoistActive && {
-                backgroundColor: colors.warningDim,
-                borderColor: colors.warning,
+                backgroundColor: colors.bayHoistDim,
+                borderColor: colors.bayHoist,
               }
             ]}
             onPress={() => setCurrentRole('tech_hoist')}
             activeOpacity={0.7}
           >
-            <Text style={[
-              styles.segmentBtnText,
-              {
-                color: isHoistActive 
-                  ? (isDark ? '#fbbf24' : colors.warning) 
-                  : colors.textSecondary,
-                fontWeight: isHoistActive ? '800' : '600',
-              }
-            ]}>
+            <Text 
+              numberOfLines={1}
+              style={[
+                styles.segmentBtnText,
+                {
+                  color: isHoistActive 
+                    ? (isDark ? colors.bayHoistLight : colors.bayHoist) 
+                    : colors.textSecondary,
+                  fontWeight: isHoistActive ? '800' : '600',
+                }
+              ]}
+            >
               Hoist
             </Text>
           </TouchableOpacity>
@@ -230,23 +277,26 @@ export const SegmentedTabs: React.FC = () => {
             styles.segmentSingleBtn,
             {
               backgroundColor: isAdvisorActive 
-                ? colors.purpleDim 
+                ? colors.bayInspectionDim 
                 : (isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.04)'),
-              borderColor: isAdvisorActive ? colors.purple : colors.borderGlass,
+              borderColor: isAdvisorActive ? colors.bayInspection : colors.borderGlass,
             }
           ]}
           onPress={() => setCurrentRole('advisor')}
           activeOpacity={0.7}
         >
-          <Text style={[
-            styles.segmentBtnText,
-            {
-              color: isAdvisorActive 
-                ? (isDark ? '#c084fc' : colors.purple) 
-                : colors.textSecondary,
-              fontWeight: isAdvisorActive ? '800' : '600',
-            }
-          ]}>
+          <Text 
+            numberOfLines={1}
+            style={[
+              styles.segmentBtnText,
+              {
+                color: isAdvisorActive 
+                  ? (isDark ? colors.bayInspectionLight : colors.bayInspection) 
+                  : colors.textSecondary,
+                fontWeight: isAdvisorActive ? '800' : '600',
+              }
+            ]}
+          >
             Ready
           </Text>
         </TouchableOpacity>
@@ -265,25 +315,25 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.08)',
     paddingVertical: 8,
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
   },
   segmentedRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 8,
+    gap: 6,
     width: '100%',
   },
   segmentSingleBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    height: 38,
+    height: 36,
+    width: 72,
     backgroundColor: 'rgba(255, 255, 255, 0.03)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.08)',
-    paddingHorizontal: 14,
+    paddingHorizontal: 4,
     borderRadius: 10,
   },
   activeSingleBtn: {
@@ -298,23 +348,23 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    height: 38,
+    height: 36,
     backgroundColor: 'rgba(255, 255, 255, 0.03)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.08)',
     borderRadius: 10,
-    padding: 3,
+    padding: 2,
   },
   groupedStageItem: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 5,
     height: '100%',
-    borderRadius: 7,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: 'transparent',
+    paddingHorizontal: 2,
   },
   activeWorkshopStage: {
     backgroundColor: 'rgba(6, 182, 212, 0.15)',
@@ -335,7 +385,7 @@ const styles = StyleSheet.create({
   },
   segmentBtnText: {
     color: '#94a3b8',
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: '600',
   },
   activeBtnText: {
@@ -345,7 +395,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#070b14',
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.08)',
-    paddingVertical: 10,
+    paddingVertical: 8,
     paddingHorizontal: 16,
   },
   footerContainer: {
@@ -423,14 +473,30 @@ const styles = StyleSheet.create({
   vehicleCountPill: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 5,
+    height: 36,
     backgroundColor: 'rgba(14, 165, 233, 0.12)',
     borderWidth: 1,
     borderColor: 'rgba(14, 165, 233, 0.3)',
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+    paddingHorizontal: 12,
     borderRadius: 20,
     flexShrink: 0,
+  },
+  singleFilterToggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    height: 36,
+    paddingHorizontal: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    flexShrink: 0,
+  },
+  singleFilterToggleText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   vehicleCountPillText: {
     color: '#38bdf8',
@@ -441,13 +507,13 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    height: 36,
     gap: 6,
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderWidth: 1,
     borderColor: 'rgba(14, 165, 233, 0.3)',
     borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 12,
     minWidth: 0,
   },
   searchIconWrapper: {
@@ -466,9 +532,9 @@ const styles = StyleSheet.create({
     ...(Platform.OS === 'web' ? { outlineStyle: 'none' } as any : {}),
   },
   clearSearchBtn: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -478,10 +544,11 @@ const styles = StyleSheet.create({
   addVehicleBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    justifyContent: 'center',
+    gap: 4,
+    height: 36,
     backgroundColor: '#0ea5e9',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingHorizontal: 10,
     borderRadius: 20,
     flexShrink: 0,
   },

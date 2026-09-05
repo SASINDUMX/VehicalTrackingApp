@@ -5,12 +5,12 @@ import { LicensePlate } from '../shared/LicensePlate';
 import { EmptyStateCard } from '../shared/EmptyStateCard';
 import { TimerPill } from '../shared/TimerPill';
 import { StatusPill } from '../shared/StatusPill';
+import { VehicleNotePill } from '../shared/VehicleNotePill';
 import { calculateJobSheetProgress } from '../../utils/vehicleUtils';
 import { useTechnicianStation } from '../../hooks/useTechnicianStation';
 import { usePinnedVehicles } from '../../hooks/usePinnedVehicles';
 import { Vehicle, VehicleTask } from '../../types/vehicle';
 import { useTheme } from '../../context/ThemeContext';
-import { useVehicles } from '../../context/VehicleContext';
 
 export const TechnicianStationView: React.FC = React.memo(() => {
   const {
@@ -23,6 +23,7 @@ export const TechnicianStationView: React.FC = React.memo(() => {
     pendingTransfer,
     isLoading,
     searchQuery,
+    showMyVehiclesOnly,
     currentRole,
     canMarkTaskDone,
     canTransferVehicle,
@@ -37,10 +38,10 @@ export const TechnicianStationView: React.FC = React.memo(() => {
   } = useTechnicianStation();
   const { colors, isDark } = useTheme();
   const { togglePin, isPinned } = usePinnedVehicles();
-  const { showUrgentNote } = useVehicles();
 
-  // Sort: urgent first, then pinned, then by intake time
-  const sortedBayVehicles = [...bayVehicles].sort((a, b) => {
+  // Filter and Sort: filter to pinned if showMyVehiclesOnly is active, then sort urgent first, pinned, then intake time
+  const filteredBayVehicles = showMyVehiclesOnly ? bayVehicles.filter(v => isPinned(v.id)) : bayVehicles;
+  const sortedBayVehicles = [...filteredBayVehicles].sort((a, b) => {
     if (a.is_urgent && !b.is_urgent) return -1;
     if (!a.is_urgent && b.is_urgent) return 1;
     if (isPinned(a.id) && !isPinned(b.id)) return -1;
@@ -87,22 +88,22 @@ export const TechnicianStationView: React.FC = React.memo(() => {
           styles.vehicleCardWrapper,
           {
             backgroundColor: isUrgent
-              ? (isDark ? 'rgba(239, 68, 68, 0.07)' : 'rgba(239, 68, 68, 0.04)')
+              ? colors.cardUrgentBg
               : isCurrentTaskDone
-              ? (isDark ? 'rgba(16, 185, 129, 0.05)' : 'rgba(16, 185, 129, 0.03)')
+              ? colors.cardDoneBg
               : isStageIdle
-              ? (isDark ? 'rgba(245, 158, 11, 0.05)' : 'rgba(245, 158, 11, 0.03)')
-              : colors.surface,
+              ? colors.cardIdleBg
+              : colors.cardActiveBg,
             borderColor: isUrgent
-              ? 'rgba(239, 68, 68, 0.4)'
+              ? colors.cardUrgentBorder
               : isCurrentTaskDone
-              ? colors.successBorder
+              ? colors.cardDoneBorder
               : isStageIdle
-              ? colors.warningBorder
-              : colors.borderGlass,
+              ? colors.cardIdleBorder
+              : colors.cardActiveBorder,
             borderLeftWidth: 4,
             borderLeftColor: isUrgent
-              ? '#ef4444'
+              ? colors.danger
               : isCurrentTaskDone
               ? colors.success
               : isStageIdle
@@ -121,24 +122,14 @@ export const TechnicianStationView: React.FC = React.memo(() => {
             {/* Sri Lankan License Plate Badge */}
             <View style={styles.plateWithStatusGroup}>
               <LicensePlate number={vehicle.vehicle_no} size="md" />
-              {isCurrentTaskDone && (
-                <StatusPill variant="success" label="TASK DONE" IconComponent={CheckCircle2} size="md" />
-              )}
-              {isUrgent && (
-                <TouchableOpacity
-                  onPress={() => showUrgentNote(vehicle.vehicle_no, vehicle.urgent_note)}
-                  hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-                >
-                  <StatusPill variant="danger" label="⚡ URGENT" size="md" />
-                </TouchableOpacity>
-              )}
+              <VehicleNotePill vehicle={vehicle} size="md" compact />
             </View>
 
             <View style={styles.headerRightGroup}>
-              {/* Live Station Timer Pill (Amber if Idle, Cyan if Active) */}
+              {/* Live Station Timer Pill (Amber if Idle, Green if Done, Cyan if Active) */}
               <TimerPill
                 elapsedText={elapsedTimes[vehicle.id] || '0m 00s'}
-                variant={isStageIdle ? 'amber' : 'cyan'}
+                variant={isCurrentTaskDone ? 'green' : isStageIdle ? 'amber' : 'cyan'}
                 isPaused={isStageIdle}
                 size="md"
               />
@@ -185,20 +176,36 @@ export const TechnicianStationView: React.FC = React.memo(() => {
           </View>
 
           {/* Task Progress Bar */}
-          <View style={styles.progressContainer}>
+            <View style={styles.progressContainer}>
             <View style={styles.progressLabelRow}>
               <Text style={[styles.progressLabelText, { color: colors.textMuted }]}>JOB SHEET PROGRESS</Text>
               <View style={styles.progressPercentGroup}>
-                <Text style={[styles.progressPercentText, { color: isCurrentTaskDone ? colors.success : colors.primaryLight }]}>
+                <Text style={[styles.progressPercentText, { color: isCurrentTaskDone ? colors.success : isStageIdle ? colors.warningLight : colors.primaryLight }]}>
                   {completedCount}/{totalReq} Tasks ({percent}%)
                 </Text>
-                {isCurrentTaskDone && (
-                  <StatusPill variant="success" label="✓" size="sm" />
+                {isCurrentTaskDone ? (
+                  <StatusPill variant="DONE" label="DONE" size="sm" />
+                ) : isStageIdle ? (
+                  <StatusPill variant="IDLE" label="IDLE" size="sm" />
+                ) : (
+                  <StatusPill variant="ACTIVE" label="ACTIVE" size="sm" />
                 )}
               </View>
             </View>
             <View style={[styles.progressBarBg, { backgroundColor: colors.progressBg }]}>
-              <View style={[styles.progressBarFill, { width: `${percent}%`, backgroundColor: isCurrentTaskDone ? colors.success : colors.primary }]} />
+              <View
+                style={[
+                  styles.progressBarFill,
+                  {
+                    width: `${percent}%`,
+                    backgroundColor: isCurrentTaskDone
+                      ? colors.success
+                      : isStageIdle
+                      ? colors.warning
+                      : colors.primary,
+                  },
+                ]}
+              />
             </View>
           </View>
         </TouchableOpacity>
@@ -361,43 +368,12 @@ export const TechnicianStationView: React.FC = React.memo(() => {
 
                         {hasAnyDispatchBtn && (
                           <View style={styles.dispatchBtnGroup}>
-                            {canShowAlignmentBtn && (
-                              <TouchableOpacity
-                                style={[
-                                  styles.dispatchBtn,
-                                  { backgroundColor: colors.successDim, borderColor: colors.successBorder },
-                                  !isCanDispatch && { opacity: 0.35, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }
-                                ]}
-                                onPress={() => {
-                                  if (isCanDispatch) handleRequestTransfer(vehicle.id, vehicle.vehicle_no, 'alignment', 'Wheel Alignment Bay');
-                                }}
-                                activeOpacity={isCanDispatch ? 0.7 : 1}
-                              >
-                                <Text style={[styles.dispatchBtnText, { color: colors.successLight }]}>Alignment</Text>
-                              </TouchableOpacity>
-                            )}
-
-                            {canShowHoistBtn && (
-                              <TouchableOpacity
-                                style={[
-                                  styles.dispatchBtn,
-                                  { backgroundColor: colors.warningDim, borderColor: colors.warningBorder },
-                                  !isCanDispatch && { opacity: 0.35, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }
-                                ]}
-                                onPress={() => {
-                                  if (isCanDispatch) handleRequestTransfer(vehicle.id, vehicle.vehicle_no, 'hoist', 'Hoist Service Bay');
-                                }}
-                                activeOpacity={isCanDispatch ? 0.7 : 1}
-                              >
-                                <Text style={[styles.dispatchBtnText, { color: colors.warningLight }]}>Hoist</Text>
-                              </TouchableOpacity>
-                            )}
-
+                            {/* 1. Workshop */}
                             {canShowWorkshopBtn && (
                               <TouchableOpacity
                                 style={[
                                   styles.dispatchBtn,
-                                  { backgroundColor: colors.primaryDim, borderColor: colors.primaryBorder },
+                                  { backgroundColor: colors.bayWorkshopDim, borderColor: colors.bayWorkshopBorder },
                                   !isCanDispatch && { opacity: 0.35, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }
                                 ]}
                                 onPress={() => {
@@ -405,15 +381,50 @@ export const TechnicianStationView: React.FC = React.memo(() => {
                                 }}
                                 activeOpacity={isCanDispatch ? 0.7 : 1}
                               >
-                                <Text style={[styles.dispatchBtnText, { color: colors.primaryLight }]}>Workshop</Text>
+                                <Text style={[styles.dispatchBtnText, { color: colors.bayWorkshopLight }]}>Workshop</Text>
                               </TouchableOpacity>
                             )}
 
+                            {/* 2. Alignment */}
+                            {canShowAlignmentBtn && (
+                              <TouchableOpacity
+                                style={[
+                                  styles.dispatchBtn,
+                                  { backgroundColor: colors.bayAlignmentDim, borderColor: colors.bayAlignmentBorder },
+                                  !isCanDispatch && { opacity: 0.35, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }
+                                ]}
+                                onPress={() => {
+                                  if (isCanDispatch) handleRequestTransfer(vehicle.id, vehicle.vehicle_no, 'alignment', 'Wheel Alignment Bay');
+                                }}
+                                activeOpacity={isCanDispatch ? 0.7 : 1}
+                              >
+                                <Text style={[styles.dispatchBtnText, { color: colors.bayAlignmentLight }]}>Alignment</Text>
+                              </TouchableOpacity>
+                            )}
+
+                            {/* 3. Hoist */}
+                            {canShowHoistBtn && (
+                              <TouchableOpacity
+                                style={[
+                                  styles.dispatchBtn,
+                                  { backgroundColor: colors.bayHoistDim, borderColor: colors.bayHoistBorder },
+                                  !isCanDispatch && { opacity: 0.35, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }
+                                ]}
+                                onPress={() => {
+                                  if (isCanDispatch) handleRequestTransfer(vehicle.id, vehicle.vehicle_no, 'hoist', 'Hoist Service Bay');
+                                }}
+                                activeOpacity={isCanDispatch ? 0.7 : 1}
+                              >
+                                <Text style={[styles.dispatchBtnText, { color: colors.bayHoistLight }]}>Hoist</Text>
+                              </TouchableOpacity>
+                            )}
+
+                            {/* 4. Final Inspection */}
                             {canShowAdvisorBtn && (
                               <TouchableOpacity
                                 style={[
                                   styles.dispatchBtn,
-                                  { backgroundColor: colors.purpleDim, borderColor: colors.purpleBorder, marginLeft: 'auto' },
+                                  { backgroundColor: colors.bayInspectionDim, borderColor: colors.bayInspectionBorder, marginLeft: 'auto' },
                                   !isCanDispatch && { opacity: 0.35, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }
                                 ]}
                                 onPress={() => {
@@ -421,7 +432,7 @@ export const TechnicianStationView: React.FC = React.memo(() => {
                                 }}
                                 activeOpacity={isCanDispatch ? 0.7 : 1}
                               >
-                                <Text style={[styles.dispatchBtnText, { color: colors.purpleLight }]}>Final Inspection →</Text>
+                                <Text style={[styles.dispatchBtnText, { color: colors.bayInspectionLight }]}>Final Inspection →</Text>
                               </TouchableOpacity>
                             )}
                           </View>
@@ -440,11 +451,11 @@ export const TechnicianStationView: React.FC = React.memo(() => {
           <ActivityIndicator size="small" color={colors.primary} />
           <Text style={[styles.emptyTitle, { color: colors.textPrimary, marginTop: 8 }]}>Syncing Workshop Telemetry...</Text>
         </View>
-      ) : bayVehicles.length === 0 ? (
+      ) : sortedBayVehicles.length === 0 ? (
         <EmptyStateCard
           icon={Car}
-          title={searchQuery.trim() ? `No matching vehicles for "${searchQuery}"` : 'Bay Currently Clear'}
-          subtitle={searchQuery.trim() ? 'Try searching another license plate number.' : 'No vehicles currently assigned to this station.'}
+          title={showMyVehiclesOnly ? 'No Pinned Vehicles' : searchQuery.trim() ? `No matching vehicles for "${searchQuery}"` : 'Bay Currently Clear'}
+          subtitle={showMyVehiclesOnly ? 'You do not have any pinned vehicles in this bay.' : searchQuery.trim() ? 'Try searching another license plate number.' : 'No vehicles currently assigned to this station.'}
         />
       ) : (
         <FlatList
@@ -512,15 +523,15 @@ const styles = StyleSheet.create({
   cardsGrid: { gap: 16 },
   vehicleCardWrapper: { backgroundColor: '#111827', borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)', padding: 16, gap: 14, ...(Platform.OS === 'web' ? ({ boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)' } as any) : { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 }) },
   cardHeaderArea: { gap: 12 },
-  cardTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  plateWithStatusGroup: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  cardTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', rowGap: 8 },
+  plateWithStatusGroup: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
   plateWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#facc15', borderRadius: 6, borderWidth: 1, borderColor: '#eab308', overflow: 'hidden' },
   plateLeftBar: { backgroundColor: '#000000', paddingHorizontal: 6, paddingVertical: 4, alignItems: 'center', justifyContent: 'center' },
   plateFlag: { fontSize: 10 },
   plateCountryCode: { color: '#ffffff', fontSize: 8, fontWeight: '800' },
   plateRightArea: { paddingHorizontal: 10, paddingVertical: 4 },
   plateText: { color: '#000000', fontWeight: '800', fontSize: 14, letterSpacing: 0.5 },
-  headerRightGroup: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  headerRightGroup: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0 },
   chevronWrapper: { width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(255, 255, 255, 0.05)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.08)' },
   sectionHeaderLabel: { color: '#64748b', fontSize: 10, fontWeight: '800', letterSpacing: 0.5, marginBottom: 2 },
   taskRestoreBtn: { backgroundColor: 'rgba(16, 185, 129, 0.15)', borderWidth: 1, borderColor: 'rgba(16, 185, 129, 0.4)' },
@@ -533,8 +544,8 @@ const styles = StyleSheet.create({
     height: 28,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: '#059669',
-    backgroundColor: '#10b981',
+    borderColor: '#0284c7',
+    backgroundColor: '#0ea5e9',
     alignItems: 'center',
     justifyContent: 'center',
   },

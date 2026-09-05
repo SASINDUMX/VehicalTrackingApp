@@ -12,7 +12,7 @@ import { AdvisorInspectionView } from './src/components/advisor/AdvisorInspectio
 import { AddVehicleModal } from './src/components/supervisor/AddVehicleModal';
 import { VehicleDetailsModal } from './src/components/shared/VehicleDetailsModal';
 import { ServiceReportsModal } from './src/components/reports/ServiceReportsModal';
-import { UrgentNoteModal } from './src/components/shared/UrgentNoteModal';
+import { VehicleNoteModal } from './src/components/shared/VehicleNoteModal';
 import { UserRole } from './src/types/vehicle';
 
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
@@ -52,7 +52,7 @@ const TabTransitionWrapper: React.FC<{ activeKey: string; children: React.ReactN
 
 const AppContent: React.FC = () => {
   const { userProfile } = useAuth();
-  const { currentRole, setCurrentRole, isAddModalOpen, setIsAddModalOpen, urgentModalData, hideUrgentNote } = useVehicles();
+  const { currentRole, setCurrentRole, isAddModalOpen, setIsAddModalOpen, vehicleNoteModalData, hideVehicleNotes } = useVehicles();
   const { colors, isDark } = useTheme();
   const [touchStart, setTouchStart] = React.useState<{ x: number; y: number } | null>(null);
 
@@ -145,11 +145,13 @@ const AppContent: React.FC = () => {
         <AddVehicleModal />
         <VehicleDetailsModal />
         <ServiceReportsModal />
-        <UrgentNoteModal
-          visible={Boolean(urgentModalData)}
-          vehicleNo={urgentModalData?.vehicleNo || ''}
-          note={urgentModalData?.note || ''}
-          onClose={hideUrgentNote}
+        <VehicleNoteModal
+          visible={Boolean(vehicleNoteModalData)}
+          vehicleNo={vehicleNoteModalData?.vehicleNo || ''}
+          isUrgent={vehicleNoteModalData?.isUrgent}
+          urgentNote={vehicleNoteModalData?.urgentNote}
+          remarks={vehicleNoteModalData?.remarks}
+          onClose={hideVehicleNotes}
         />
       </View>
     </SafeAreaView>
