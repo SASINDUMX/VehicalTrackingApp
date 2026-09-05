@@ -27,7 +27,7 @@ export const AddVehicleModal: React.FC = () => {
 
   if (!isAddModalOpen) return null;
 
-  const isDuplicate = vehicles.some(
+  const isDuplicate = !isSubmitting && vehicles.some(
     v => !v.is_finished && v.vehicle_no.trim().toUpperCase() === vehicleNo.trim().toUpperCase()
   );
   const isNoValid = isValidVehicleNo(vehicleNo) && !isDuplicate;
