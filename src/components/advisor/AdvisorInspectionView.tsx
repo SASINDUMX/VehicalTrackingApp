@@ -31,8 +31,10 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
     plate: string;
     incompleteCount: number;
   } | null>(null);
+  const [isHandingOver, setIsHandingOver] = useState(false);
 
   const handleRequestHandover = (vehicle: Vehicle) => {
+    if (isHandingOver) return;
     const incomplete = vehicle.tasks.filter(t => t.is_required && !t.is_completed).length;
     setPendingHandover({
       id: vehicle.id,
@@ -41,10 +43,17 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
     });
   };
 
-  const handleConfirmHandover = () => {
-    if (pendingHandover && canFinishJob) {
-      finishVehicleJobSheet(pendingHandover.id, 'Service Advisor');
-      setPendingHandover(null);
+  const handleConfirmHandover = async () => {
+    if (pendingHandover && canFinishJob && !isHandingOver) {
+      setIsHandingOver(true);
+      try {
+        const success = await finishVehicleJobSheet(pendingHandover.id, 'Service Advisor');
+        if (success) {
+          setPendingHandover(null);
+        }
+      } finally {
+        setIsHandingOver(false);
+      }
     }
   };
 
@@ -164,12 +173,13 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
               style={[
                 styles.deliverBtn,
                 { backgroundColor: colors.success },
-                !canFinishJob && { opacity: 0.4, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }
+                (!canFinishJob || isHandingOver) && { opacity: 0.4, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }
               ]}
+              disabled={!canFinishJob || isHandingOver}
               onPress={() => {
-                if (canFinishJob) handleRequestHandover(vehicle);
+                if (canFinishJob && !isHandingOver) handleRequestHandover(vehicle);
               }}
-              activeOpacity={canFinishJob ? 0.7 : 1}
+              activeOpacity={canFinishJob && !isHandingOver ? 0.7 : 1}
             >
               <Sparkles size={16} color="#ffffff" />
               <Text style={styles.deliverText} numberOfLines={1}>
@@ -221,7 +231,9 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
           <TouchableOpacity
             style={styles.confirmBackdrop}
             activeOpacity={1}
-            onPress={() => setPendingHandover(null)}
+            onPress={() => {
+              if (!isHandingOver) setPendingHandover(null);
+            }}
           />
           <View style={[styles.confirmCard, { backgroundColor: colors.surface, borderColor: colors.borderGlassBright }]}>
             <View style={styles.confirmHeader}>
@@ -241,17 +253,36 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
 
             <View style={styles.confirmBtnRow}>
               <TouchableOpacity
-                style={[styles.cancelBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)', borderColor: colors.borderGlass }]}
-                onPress={() => setPendingHandover(null)}
+                style={[
+                  styles.cancelBtn,
+                  { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)', borderColor: colors.borderGlass },
+                  isHandingOver && { opacity: 0.5, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }
+                ]}
+                disabled={isHandingOver}
+                onPress={() => {
+                  if (!isHandingOver) setPendingHandover(null);
+                }}
               >
                 <Text style={[styles.cancelBtnText, { color: colors.textSecondary }]}>Cancel</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.confirmHandoverBtn, { backgroundColor: colors.success }]}
+                style={[
+                  styles.confirmHandoverBtn,
+                  { backgroundColor: colors.success },
+                  isHandingOver && { opacity: 0.85, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }
+                ]}
+                disabled={isHandingOver}
                 onPress={handleConfirmHandover}
               >
-                <Text style={styles.confirmHandoverBtnText}>Confirm Handover ✓</Text>
+                {isHandingOver ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <ActivityIndicator size="small" color="#ffffff" />
+                    <Text style={styles.confirmHandoverBtnText}>Handing Over...</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.confirmHandoverBtnText}>Confirm Handover ✓</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>

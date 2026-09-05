@@ -22,6 +22,7 @@ export const TechnicianStationView: React.FC = React.memo(() => {
     elapsedTimes,
     expandedCards,
     pendingTransfer,
+    isDispatching,
     isLoading,
     searchQuery,
     showMyVehiclesOnly,
@@ -47,7 +48,7 @@ export const TechnicianStationView: React.FC = React.memo(() => {
     if (!a.is_urgent && b.is_urgent) return 1;
     if (isPinned(a.id) && !isPinned(b.id)) return -1;
     if (!isPinned(a.id) && isPinned(b.id)) return 1;
-    return 0;
+    return new Date(a.intake_at).getTime() - new Date(b.intake_at).getTime();
   });
 
   const renderVehicleItem = ({ item: vehicle }: { item: Vehicle }) => {
@@ -74,7 +75,7 @@ export const TechnicianStationView: React.FC = React.memo(() => {
     const isHoistDone = Boolean(vehicle.tasks.find(t => t.task_type === 'hoist_service')?.is_completed);
     const isAlignmentDone = Boolean(vehicle.tasks.find(t => t.task_type === 'wheel_alignment')?.is_completed);
 
-    const isCanDispatch = canTransferVehicle && isCurrentTaskDone;
+    const isCanDispatch = canTransferVehicle && isCurrentTaskDone && !isDispatching;
 
     const canShowAlignmentBtn = activeBay !== 'alignment' && isAlignmentRequired && !isAlignmentDone;
     const canShowHoistBtn = activeBay !== 'hoist' && isHoistRequired && !isHoistDone;
@@ -477,7 +478,9 @@ export const TechnicianStationView: React.FC = React.memo(() => {
           <TouchableOpacity
             style={[styles.confirmBackdrop, { backgroundColor: colors.backdrop }]}
             activeOpacity={1}
-            onPress={() => setPendingTransfer(null)}
+            onPress={() => {
+              if (!isDispatching) setPendingTransfer(null);
+            }}
           />
           <View style={[styles.confirmCard, { backgroundColor: colors.surface, borderColor: colors.borderGlassBright }]}>
             <View style={styles.confirmHeader}>
@@ -490,17 +493,36 @@ export const TechnicianStationView: React.FC = React.memo(() => {
 
             <View style={styles.confirmBtnRow}>
               <TouchableOpacity
-                style={[styles.cancelBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)', borderColor: colors.borderGlass }]}
-                onPress={() => setPendingTransfer(null)}
+                style={[
+                  styles.cancelBtn,
+                  { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)', borderColor: colors.borderGlass },
+                  isDispatching && { opacity: 0.5, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }
+                ]}
+                disabled={isDispatching}
+                onPress={() => {
+                  if (!isDispatching) setPendingTransfer(null);
+                }}
               >
                 <Text style={[styles.cancelBtnText, { color: colors.textSecondary }]}>Cancel</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.confirmDispatchBtn, { backgroundColor: colors.primary }]}
+                style={[
+                  styles.confirmDispatchBtn,
+                  { backgroundColor: colors.primary },
+                  isDispatching && { opacity: 0.85, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }
+                ]}
+                disabled={isDispatching}
                 onPress={handleConfirmTransfer}
               >
-                <Text style={styles.confirmDispatchBtnText}>Confirm Dispatch ✓</Text>
+                {isDispatching ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <ActivityIndicator size="small" color="#ffffff" />
+                    <Text style={styles.confirmDispatchBtnText}>Dispatching...</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.confirmDispatchBtnText}>Confirm Dispatch ✓</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>

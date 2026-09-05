@@ -23,19 +23,28 @@ export const useTechnicianStation = () => {
 
   const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
   const [pendingTransfer, setPendingTransfer] = useState<PendingTransfer | null>(null);
+  const [isDispatching, setIsDispatching] = useState<boolean>(false);
 
   const toggleExpand = (id: string) => {
     setExpandedCards(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
   const handleRequestTransfer = (vehicleId: string, vehicleNo: string, targetZone: BayZone, targetZoneName: string) => {
+    if (isDispatching) return;
     setPendingTransfer({ vehicleId, vehicleNo, targetZone, targetZoneName });
   };
 
-  const handleConfirmTransfer = () => {
-    if (pendingTransfer) {
-      transferVehicleZone(pendingTransfer.vehicleId, pendingTransfer.targetZone, techName);
-      setPendingTransfer(null);
+  const handleConfirmTransfer = async () => {
+    if (pendingTransfer && !isDispatching) {
+      setIsDispatching(true);
+      try {
+        const success = await transferVehicleZone(pendingTransfer.vehicleId, pendingTransfer.targetZone, techName);
+        if (success) {
+          setPendingTransfer(null);
+        }
+      } finally {
+        setIsDispatching(false);
+      }
     }
   };
 
@@ -75,6 +84,7 @@ export const useTechnicianStation = () => {
     elapsedTimes,
     expandedCards,
     pendingTransfer,
+    isDispatching,
     isLoading,
     searchQuery,
     showMyVehiclesOnly,
