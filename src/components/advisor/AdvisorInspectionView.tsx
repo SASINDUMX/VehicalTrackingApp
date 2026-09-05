@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet, Platform, Alert } from 'react-native';
+import { View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet, Platform, ActivityIndicator, Alert } from 'react-native';
 import { ShieldCheck, Clock, FileCheck, Sparkles, CheckCircle2, Clock3, ChevronDown, ChevronUp, History, XCircle, Bookmark, AlertOctagon } from 'lucide-react-native';
 import { LicensePlate } from '../shared/LicensePlate';
 import { EmptyStateCard } from '../shared/EmptyStateCard';
@@ -22,6 +22,7 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
     toggleExpand,
     finishVehicleJobSheet,
     setSelectedVehicle,
+    isLoading,
   } = useAdvisorInspection();
   const { colors, isDark } = useTheme();
   const { togglePin, isPinned } = usePinnedVehicles();
@@ -181,6 +182,15 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
     );
   };
 
+  if (isLoading) {
+    return (
+      <View style={[styles.loadingSpot, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)' }]}>
+        <ActivityIndicator size="small" color={colors.bayInspection} />
+        <Text style={[styles.loadingText, { color: colors.textMuted }]}>SYNCING TELEMETRY...</Text>
+      </View>
+    );
+  }
+
   if (displayVehicles.length === 0) {
     return (
       <EmptyStateCard
@@ -259,6 +269,18 @@ const styles = StyleSheet.create({
   title: { color: '#ffffff', fontWeight: '800', fontSize: 18 },
   subtitle: { color: '#94a3b8', fontSize: 12, marginTop: 2 },
   emptyCard: { backgroundColor: '#121a2b', borderRadius: 14, padding: 40, alignItems: 'center', gap: 12 },
+  loadingSpot: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 40,
+    borderRadius: 16,
+  },
+  loadingText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
   emptyTitle: { color: '#ffffff', fontWeight: '700', fontSize: 16 },
   emptySub: { color: '#64748b', fontSize: 13 },
   cardsGrid: { gap: 16 },

@@ -10,7 +10,7 @@ export interface BayDefinition {
 }
 
 export const getBayDefinitions = (themeColors: ThemeColors = Colors): BayDefinition[] => [
-  { id: 'workshop', name: 'General Workshop Bay', code: 'BAY 01', color: themeColors.bayWorkshop, assignedRole: 'tech_workshop' },
+  { id: 'workshop', name: 'General Service Bay', code: 'BAY 01', color: themeColors.bayWorkshop, assignedRole: 'tech_workshop' },
   { id: 'alignment', name: 'Wheel Alignment Bay', code: 'BAY 02', color: themeColors.bayAlignment, assignedRole: 'tech_alignment' },
   { id: 'hoist', name: 'Hoist Service Bay', code: 'BAY 03', color: themeColors.bayHoist, assignedRole: 'tech_hoist' },
   { id: 'inspection', name: 'Advisor Inspection Zone', code: 'FINAL', color: themeColors.bayInspection, assignedRole: 'advisor' },
@@ -31,7 +31,7 @@ export const getBayColor = (zone: BayZone, themeColors?: ThemeColors): string =>
 
 export const getTechName = (role: UserRole): string => {
   switch (role) {
-    case 'tech_workshop': return 'Technician 1 (Workshop)';
+    case 'tech_workshop': return 'Technician 1 (General Service)';
     case 'tech_alignment': return 'Technician 2 (Alignment)';
     case 'tech_hoist': return 'Technician 3 (Hoist)';
     default: return 'Technician';

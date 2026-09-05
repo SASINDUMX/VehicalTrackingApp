@@ -5,7 +5,7 @@ import { usePermissions } from '../../hooks/usePermissions';
 import { BayZone, TaskType, Vehicle } from '../../types/vehicle';
 import { 
   X, Wrench, Shield, Navigation, Pencil, Save, CheckSquare, Square, Lock, 
-  Clock, CheckCircle2, Circle, ArrowRight, UserCheck, Calendar, Trash2, AlertTriangle
+  Clock, CheckCircle2, Circle, ArrowRight, UserCheck, Calendar, Trash2, AlertTriangle, Droplets
 } from 'lucide-react-native';
 
 import { LicensePlate } from './LicensePlate';
@@ -13,7 +13,7 @@ import { StatusPill } from './StatusPill';
 import { BaseModal } from './BaseModal';
 import { ConfirmModal } from './ConfirmModal';
 import { VehicleNotePill } from './VehicleNotePill';
-import { getStageDurationBreakdown, formatDurationString, getActiveStageNetSeconds, getTaskTypeForBay } from '../../utils/vehicleUtils';
+import { getStageDurationBreakdown, formatDurationString, getActiveStageNetSeconds, getTaskTypeForBay, getVehicleEffectiveEndDate } from '../../utils/vehicleUtils';
 import { getNetWorkingSeconds, getCurrentActiveBreak } from '../../utils/workshopHoursUtils';
 import { useTheme } from '../../context/ThemeContext';
 import { getBayDefinitions } from '../../constants/bays';
@@ -21,29 +21,29 @@ import { getBayDefinitions } from '../../constants/bays';
 const STAGE_ICONS: Record<BayZone, any> = {
   workshop: Wrench,
   alignment: Navigation,
-  hoist: Shield,
+  hoist: Droplets,
   inspection: CheckCircle2,
   completed: CheckCircle2,
 };
 
-const getStageOrder = (themeColors: any) =>
-  getBayDefinitions(themeColors).map(bay => ({
+const getStageOrder = (colors?: any) =>
+  getBayDefinitions(colors).map(bay => ({
     zone: bay.id,
     name: bay.name,
-    code: bay.code,
-    icon: STAGE_ICONS[bay.id] || Wrench,
+    icon: STAGE_ICONS[bay.id] || CheckCircle2,
     color: bay.color,
   }));
 
 const calculateTimers = (vehicle: Vehicle) => {
   const now = new Date();
+  const effectiveEnd = getVehicleEffectiveEndDate(vehicle);
 
-  // Net & Gross Elapsed Time since Intake
-  const rawNetSec = getNetWorkingSeconds(vehicle.intake_at, now);
+  // Net & Gross Elapsed Time since Intake (stops when entering inspection zone or finished)
+  const rawNetSec = getNetWorkingSeconds(vehicle.intake_at, effectiveEnd);
   const totalPausedSec = vehicle.stage_logs.reduce((sum, l) => sum + (l.paused_seconds || 0), 0) +
-    (vehicle.is_paused && vehicle.paused_at ? Math.max(0, Math.floor((now.getTime() - new Date(vehicle.paused_at).getTime()) / 1000)) : (vehicle.paused_seconds || 0));
+    (vehicle.is_paused && vehicle.paused_at ? Math.max(0, Math.floor((effectiveEnd.getTime() - new Date(vehicle.paused_at).getTime()) / 1000)) : (vehicle.paused_seconds || 0));
   const netSec = Math.max(0, rawNetSec - totalPausedSec);
-  const grossSec = Math.max(0, Math.floor((now.getTime() - new Date(vehicle.intake_at).getTime()) / 1000));
+  const grossSec = Math.max(0, Math.floor((effectiveEnd.getTime() - new Date(vehicle.intake_at).getTime()) / 1000));
 
   let stageDuration = '0m 00s';
   const lastLog = vehicle.stage_logs[vehicle.stage_logs.length - 1];
@@ -620,7 +620,7 @@ export const VehicleDetailsModal: React.FC = () => {
 
                 {/* Vertical Stepper Timeline list */}
                 <View style={styles.timelineList}>
-                  {timelineStagesData.map((node) => {
+                  {timelineStagesData.map((node, nodeIdx) => {
                     const {
                       stageDef,
                       isCurrent,
@@ -639,17 +639,23 @@ export const VehicleDetailsModal: React.FC = () => {
                     // A stage is only fully finished/done if it has been exited (isCompleted), OR if the task is done and it is NOT idle (i.e. not in 2nd idle queue-out awaiting dispatch)
                     const isFullyFinishedOrDone = isCompleted;
                     const isSecondIdleDone = isCurrent && isTaskDone && isStageIdle;
-                    const isWorkingActive = isCurrent && !isStageIdle && !isTaskDone;
+                    // Inspection is the final ready/handover staging area - never color a working blue line from it
+                    const isWorkingActive = isCurrent && !isStageIdle && !isTaskDone && !isInspection;
+
+                    const nextNode = timelineStagesData[nodeIdx + 1];
+                    const isNextCancelled = nextNode?.isCancelled;
 
                     // Icon color harmonizes with node state
-                    const nodeIconColor = isStageIdle && isCurrent
+                    const nodeIconColor = isCurrent && isInspection
+                      ? colors.success
+                      : isStageIdle && isCurrent
                       ? colors.warningLight
                       : isFullyFinishedOrDone
                       ? colors.success
                       : isWorkingActive
                       ? colors.primaryLight
                       : isCancelled
-                      ? colors.cancelled
+                      ? colors.danger
                       : colors.textMuted;
 
                     const StageIconComponent = stageDef.icon;
@@ -660,10 +666,11 @@ export const VehicleDetailsModal: React.FC = () => {
                           <View style={[
                             styles.nodeCircle,
                             { backgroundColor: colors.surfaceElevated, borderColor: colors.borderGlassBright },
+                            isCurrent && isInspection && { borderColor: colors.success, backgroundColor: colors.successDim },
                             isCurrent && isStageIdle && { borderColor: colors.warning, backgroundColor: colors.warningDim },
                             !isStageIdle && isFullyFinishedOrDone && { borderColor: colors.success, backgroundColor: colors.successDim },
                             !isStageIdle && isWorkingActive && { borderColor: colors.primary, backgroundColor: colors.primaryDim },
-                            isCancelled && { borderColor: colors.cancelled, backgroundColor: colors.cancelledDim },
+                            isCancelled && { borderColor: colors.danger, backgroundColor: colors.dangerDim },
                             !isCurrent && !isCompleted && !isCancelled && { borderColor: colors.borderGlassBright, backgroundColor: colors.surfaceOverlay }
                           ]}>
                             <StageIconComponent size={16} color={nodeIconColor} />
@@ -672,12 +679,17 @@ export const VehicleDetailsModal: React.FC = () => {
                             <>
                               {/* Background empty line */}
                               <View style={[styles.timelineLine, { backgroundColor: colors.borderGlassBright }]} />
-                              {/* 100% full green line when stage has completed and exited */}
-                              {isFullyFinishedOrDone && <View style={[styles.timelineLine, styles.timelineLineDone, { backgroundColor: colors.success }]} />}
-                              {/* 100% amber line when task finished but vehicle is in 2nd idle waiting for dispatch to next bay */}
-                              {isSecondIdleDone && <View style={[styles.timelineLine, styles.timelineLineDone, { backgroundColor: colors.warning }]} />}
-                              {/* 50% blue line when stage is actively in progress */}
-                              {isWorkingActive && <View style={[styles.timelineLine, styles.timelineLineHalf, { backgroundColor: colors.primary }]} />}
+                              {/* Do not color the stepper line if this is the final inspection zone or leading to a skipped/cancelled stage */}
+                              {!isInspection && !isNextCancelled && (
+                                <>
+                                  {/* 100% full green line when stage has completed and exited */}
+                                  {isFullyFinishedOrDone && <View style={[styles.timelineLine, styles.timelineLineDone, { backgroundColor: colors.success }]} />}
+                                  {/* 100% amber line when task finished but vehicle is in 2nd idle waiting for dispatch to next bay */}
+                                  {isSecondIdleDone && <View style={[styles.timelineLine, styles.timelineLineDone, { backgroundColor: colors.warning }]} />}
+                                  {/* 50% blue line when stage is actively in progress */}
+                                  {isWorkingActive && <View style={[styles.timelineLine, styles.timelineLineHalf, { backgroundColor: colors.primary }]} />}
+                                </>
+                              )}
                               {/* When first arrived & idle (queue in): 0% line (only the amber circle is lit) */}
                             </>
                           )}
@@ -719,8 +731,8 @@ export const VehicleDetailsModal: React.FC = () => {
                             <>
                               <View style={styles.stageTimeRow}>
                                 <View style={styles.timeTag}>
-                                  <Clock size={12} color={isCurrent ? (isStageIdle ? colors.warning : colors.primary) : isCancelled ? colors.cancelled : colors.textMuted} />
-                                  <Text style={[styles.timeTagText, { color: isCurrent ? (isStageIdle ? colors.warningLight : colors.primaryLight) : colors.textSecondary }, isCurrent && { fontWeight: '700' }, isCancelled && { color: colors.cancelled }]}>
+                                  <Clock size={12} color={isCurrent ? (isStageIdle ? colors.warning : colors.primary) : isCancelled ? colors.danger : colors.textMuted} />
+                                  <Text style={[styles.timeTagText, { color: isCurrent ? (isStageIdle ? colors.warningLight : colors.primaryLight) : colors.textSecondary }, isCurrent && { fontWeight: '700' }, isCancelled && { color: colors.danger }]}>
                                     {isCurrent ? (
                                       `${isStageIdle ? 'Idle' : 'Active'}: ${spentStr}`
                                     ) : isCompleted ? `Spent: ${spentStr}` : isCancelled ? 'Skipped' : 'Pending'}

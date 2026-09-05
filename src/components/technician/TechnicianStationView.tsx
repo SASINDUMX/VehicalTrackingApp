@@ -11,6 +11,7 @@ import { useTechnicianStation } from '../../hooks/useTechnicianStation';
 import { usePinnedVehicles } from '../../hooks/usePinnedVehicles';
 import { Vehicle, VehicleTask } from '../../types/vehicle';
 import { useTheme } from '../../context/ThemeContext';
+import { getBayColor } from '../../constants/bays';
 
 export const TechnicianStationView: React.FC = React.memo(() => {
   const {
@@ -377,11 +378,11 @@ export const TechnicianStationView: React.FC = React.memo(() => {
                                   !isCanDispatch && { opacity: 0.35, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }
                                 ]}
                                 onPress={() => {
-                                  if (isCanDispatch) handleRequestTransfer(vehicle.id, vehicle.vehicle_no, 'workshop', 'General Workshop Bay');
+                                  if (isCanDispatch) handleRequestTransfer(vehicle.id, vehicle.vehicle_no, 'workshop', 'General Service Bay');
                                 }}
                                 activeOpacity={isCanDispatch ? 0.7 : 1}
                               >
-                                <Text style={[styles.dispatchBtnText, { color: colors.bayWorkshopLight }]}>Workshop</Text>
+                                <Text style={[styles.dispatchBtnText, { color: colors.bayWorkshopLight }]}>General</Text>
                               </TouchableOpacity>
                             )}
 
@@ -447,9 +448,9 @@ export const TechnicianStationView: React.FC = React.memo(() => {
   return (
     <View style={styles.rootView}>
       {isLoading ? (
-        <View style={[styles.emptyCard, { backgroundColor: colors.surface, borderColor: colors.borderGlass }]}>
-          <ActivityIndicator size="small" color={colors.primary} />
-          <Text style={[styles.emptyTitle, { color: colors.textPrimary, marginTop: 8 }]}>Syncing Workshop Telemetry...</Text>
+        <View style={[styles.loadingSpot, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)' }]}>
+          <ActivityIndicator size="small" color={getBayColor(activeBay, colors)} />
+          <Text style={[styles.loadingText, { color: colors.textMuted }]}>SYNCING TELEMETRY...</Text>
         </View>
       ) : sortedBayVehicles.length === 0 ? (
         <EmptyStateCard
@@ -518,6 +519,18 @@ const styles = StyleSheet.create({
   stationBadge: { backgroundColor: 'rgba(14, 165, 233, 0.15)', borderWidth: 1, borderColor: 'rgba(14, 165, 233, 0.3)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
   stationBadgeText: { color: '#38bdf8', fontSize: 12, fontWeight: '800' },
   emptyCard: { backgroundColor: '#111827', borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.08)', padding: 40, alignItems: 'center', justifyContent: 'center', gap: 10 },
+  loadingSpot: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 40,
+    borderRadius: 16,
+  },
+  loadingText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
   emptyTitle: { color: '#ffffff', fontWeight: '700', fontSize: 16 },
   emptySub: { color: '#64748b', fontSize: 13, textAlign: 'center' },
   cardsGrid: { gap: 16 },

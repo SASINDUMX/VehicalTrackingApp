@@ -24,18 +24,36 @@ export const getTaskTypeForBay = (zone: BayZone): TaskType => {
   }
 };
 
+export const getVehicleEffectiveEndDate = (vehicle: Vehicle): Date => {
+  if (vehicle.completed_at) {
+    const d = new Date(vehicle.completed_at);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  // Once dispatched to Advisor Inspection Zone, all workshop labor and shop time stop
+  if (vehicle.current_zone === 'inspection') {
+    const inspLog = vehicle.stage_logs.find(l => l.to_zone === 'inspection');
+    if (inspLog?.entered_at) {
+      const d = new Date(inspLog.entered_at);
+      if (!isNaN(d.getTime())) return d;
+    }
+  }
+
+  return new Date();
+};
+
 export const calculateTotalGrossIntakeSec = (vehicle: Vehicle): number => {
   if (!vehicle || !vehicle.intake_at) return 0;
   const start = new Date(vehicle.intake_at).getTime();
   if (isNaN(start)) return 0;
 
-  const end = vehicle.completed_at ? new Date(vehicle.completed_at).getTime() : Date.now();
+  const end = getVehicleEffectiveEndDate(vehicle).getTime();
   return Math.max(0, Math.floor((end - start) / 1000));
 };
 
 export const calculateTotalNetWorkingSec = (vehicle: Vehicle): number => {
   if (!vehicle || !vehicle.intake_at) return 0;
-  const end = vehicle.completed_at || new Date().toISOString();
+  const end = getVehicleEffectiveEndDate(vehicle);
   return getNetWorkingSeconds(vehicle.intake_at, end);
 };
 

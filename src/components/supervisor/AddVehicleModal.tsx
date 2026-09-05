@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Modal, View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Platform } from 'react-native';
 import { useVehicles } from '../../context/VehicleContext';
 import { BayZone, TaskType } from '../../types/vehicle';
-import { X, Car, Wrench, Shield, Navigation, Send, CheckSquare, Square, AlertTriangle } from 'lucide-react-native';
+import { X, Car, Wrench, Shield, Navigation, Send, CheckSquare, Square, AlertTriangle, Droplets } from 'lucide-react-native';
 
 import { formatVehicleNoInput, isValidVehicleNo } from '../../utils/vehicleNumberUtils';
 import { useTheme } from '../../context/ThemeContext';
@@ -19,7 +19,7 @@ export const AddVehicleModal: React.FC = () => {
     'hoist_service'
   ]);
   const [targetZone, setTargetZone] = useState<BayZone>('workshop');
-  const [assignedTech, setAssignedTech] = useState<string>('Technician 1 (General Workshop)');
+  const [assignedTech, setAssignedTech] = useState<string>('Technician 1 (General Service)');
   const [remarks, setRemarks] = useState<string>('');
   const [isUrgent, setIsUrgent] = useState<boolean>(false);
   const [urgentNote, setUrgentNote] = useState<string>('');
@@ -33,10 +33,10 @@ export const AddVehicleModal: React.FC = () => {
   const isNoValid = isValidVehicleNo(vehicleNo) && !isDuplicate;
   const isNoTouched = vehicleNo.length > 0;
 
-  // Auto-determine recommended starting station based on shop flow (Workshop -> Alignment -> Hoist)
+  // Auto-determine recommended starting station based on shop flow (General Service -> Alignment -> Hoist)
   const computeRecommendedStation = (tasks: TaskType[]): { zone: BayZone; tech: string } => {
     if (tasks.includes('general_service')) {
-      return { zone: 'workshop', tech: 'Technician 1 (General Workshop)' };
+      return { zone: 'workshop', tech: 'Technician 1 (General Service)' };
     }
     if (tasks.includes('wheel_alignment')) {
       return { zone: 'alignment', tech: 'Technician 3 (Wheel Alignment)' };
@@ -44,7 +44,7 @@ export const AddVehicleModal: React.FC = () => {
     if (tasks.includes('hoist_service')) {
       return { zone: 'hoist', tech: 'Technician 2 (Hoist Bay)' };
     }
-    return { zone: 'workshop', tech: 'Technician 1 (General Workshop)' };
+    return { zone: 'workshop', tech: 'Technician 1 (General Service)' };
   };
 
   const toggleTask = (type: TaskType) => {
@@ -243,12 +243,12 @@ export const AddVehicleModal: React.FC = () => {
                     ]}
                     onPress={() => {
                       setTargetZone('workshop');
-                      setAssignedTech('Technician 1 (General Workshop)');
+                      setAssignedTech('Technician 1 (General Service)');
                     }}
                   >
                     <Wrench size={16} color={targetZone === 'workshop' ? colors.bayWorkshopLight : colors.textMuted} />
                     <Text style={[styles.dispatchText, { color: targetZone === 'workshop' ? colors.textPrimary : colors.textSecondary }]}>
-                      TO Workshop
+                      TO General
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -290,7 +290,7 @@ export const AddVehicleModal: React.FC = () => {
                       setAssignedTech('Technician 2 (Hoist Bay)');
                     }}
                   >
-                    <Shield size={16} color={targetZone === 'hoist' ? colors.bayHoistLight : colors.textMuted} />
+                    <Droplets size={16} color={targetZone === 'hoist' ? colors.bayHoistLight : colors.textMuted} />
                     <Text style={[styles.dispatchText, { color: targetZone === 'hoist' ? colors.textPrimary : colors.textSecondary }]}>
                       TO Hoist
                     </Text>

@@ -3,7 +3,7 @@ import { useVehicles } from "../context/VehicleContext";
 import { usePermissions } from "./usePermissions";
 import { useTheme } from "../context/ThemeContext";
 import { BayZone } from "../types/vehicle";
-import { Wrench, ShieldAlert, Navigation, CheckCircle } from "lucide-react-native";
+import { Wrench, Droplets, Navigation, CheckCircle } from "lucide-react-native";
 import { matchesVehicleSearch } from "../utils/searchUtils";
 import { getActiveStageNetSeconds, computeVehicleTimersMap } from "../utils/vehicleUtils";
 
@@ -32,9 +32,9 @@ export const useFloorPlan = () => {
   }, [vehicles]);
 
   const bays: BayItem[] = [
-    { id: "workshop", name: "General Workshop Bay", code: "BAY 01", icon: Wrench, color: colors.bayWorkshop },
+    { id: "workshop", name: "General Service Bay", code: "BAY 01", icon: Wrench, color: colors.bayWorkshop },
     { id: "alignment", name: "Wheel Alignment Bay", code: "BAY 02", icon: Navigation, color: colors.bayAlignment },
-    { id: "hoist", name: "Hoist Service Bay", code: "BAY 03", icon: ShieldAlert, color: colors.bayHoist },
+    { id: "hoist", name: "Hoist Service Bay", code: "BAY 03", icon: Droplets, color: colors.bayHoist },
     { id: "inspection", name: "Advisor Inspection Zone", code: "FINAL", icon: CheckCircle, color: colors.bayInspection },
   ];
 

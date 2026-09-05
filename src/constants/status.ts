@@ -48,9 +48,9 @@ export const APP_STATUSES: Record<AppStatusKey, StatusConfig> = {
     key: 'SKIPPED',
     label: 'SKIPPED',
     getColor: (colors: ThemeColors) => ({
-      color: colors.cancelled,
-      bg: colors.cancelledDim,
-      border: colors.cancelledBorder,
+      color: colors.danger,
+      bg: colors.dangerDim,
+      border: colors.dangerBorder,
     }),
   },
   IDLE: {

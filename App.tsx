@@ -52,7 +52,7 @@ const TabTransitionWrapper: React.FC<{ activeKey: string; children: React.ReactN
 
 const AppContent: React.FC = () => {
   const { userProfile } = useAuth();
-  const { currentRole, setCurrentRole, isAddModalOpen, setIsAddModalOpen, vehicleNoteModalData, hideVehicleNotes } = useVehicles();
+  const { currentRole, setCurrentRole, isReportsModalOpen, vehicleNoteModalData, hideVehicleNotes } = useVehicles();
   const { colors, isDark } = useTheme();
   const [touchStart, setTouchStart] = React.useState<{ x: number; y: number } | null>(null);
 
@@ -127,24 +127,31 @@ const AppContent: React.FC = () => {
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.surface} />
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <Header />
-        <SegmentedTabs />
-        <SearchBarRow />
-        <View
-          style={styles.mainContent}
-          onTouchStart={handleTouchStart}
-          onTouchEnd={handleTouchEnd}
-        >
-          <TabTransitionWrapper activeKey={currentRole}>
-            {currentRole === 'supervisor' && <FloorPlan2D />}
-            {(currentRole === 'tech_workshop' || currentRole === 'tech_hoist' || currentRole === 'tech_alignment') && (
-              <TechnicianStationView />
-            )}
-            {currentRole === 'advisor' && <AdvisorInspectionView />}
-          </TabTransitionWrapper>
-        </View>
+        {isReportsModalOpen ? (
+          <View style={styles.reportsContainer}>
+            <ServiceReportsModal />
+          </View>
+        ) : (
+          <>
+            <SegmentedTabs />
+            <SearchBarRow />
+            <View
+              style={styles.mainContent}
+              onTouchStart={handleTouchStart}
+              onTouchEnd={handleTouchEnd}
+            >
+              <TabTransitionWrapper activeKey={currentRole}>
+                {currentRole === 'supervisor' && <FloorPlan2D />}
+                {(currentRole === 'tech_workshop' || currentRole === 'tech_hoist' || currentRole === 'tech_alignment') && (
+                  <TechnicianStationView />
+                )}
+                {currentRole === 'advisor' && <AdvisorInspectionView />}
+              </TabTransitionWrapper>
+            </View>
+          </>
+        )}
         <AddVehicleModal />
         <VehicleDetailsModal />
-        <ServiceReportsModal />
         <VehicleNoteModal
           visible={Boolean(vehicleNoteModalData)}
           vehicleNo={vehicleNoteModalData?.vehicleNo || ''}
@@ -205,6 +212,9 @@ const styles = StyleSheet.create({
   mainContent: {
     flex: 1,
     padding: 16,
+  },
+  reportsContainer: {
+    flex: 1,
   },
   loadingContainer: {
     flex: 1,

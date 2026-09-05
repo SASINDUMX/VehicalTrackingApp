@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { chimeService } from '../../lib/chime';
 import { hapticService } from '../../lib/haptics';
-import { Car, Plus, LogOut, User, Volume2, VolumeX, ChevronDown, Shield, Smartphone, Sun, Moon, Monitor, FileText } from 'lucide-react-native';
+import { Car, Plus, LogOut, User, Volume2, VolumeX, ChevronDown, Shield, Smartphone, Sun, Moon, Monitor, FileText, ChevronLeft } from 'lucide-react-native';
 import { useTheme } from '../../context/ThemeContext';
 
 import { getCurrentActiveBreak } from '../../utils/workshopHoursUtils';
@@ -19,7 +19,7 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 export const Header: React.FC = () => {
-  const { setIsAddModalOpen, setIsReportsModalOpen, isRealtimeConnected } = useVehicles();
+  const { setIsAddModalOpen, isReportsModalOpen, setIsReportsModalOpen, isRealtimeConnected } = useVehicles();
   const { signOut, user } = useAuth();
   const { canAddVehicle, displayName, currentRole } = usePermissions();
   const { themeMode, isDark, colors, setThemeMode, toggleTheme } = useTheme();
@@ -148,17 +148,26 @@ export const Header: React.FC = () => {
         style={styles.rightGroup}
         {...(Platform.OS === 'web' ? ({ id: 'profile-menu-container' } as any) : {})}
       >
-        {/* Reports & Telemetry Button */}
+        {/* Reports / Back Toggle Button */}
         <TouchableOpacity
           style={[
             styles.reportsBtn,
             { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)', borderColor: colors.borderGlass }
           ]}
-          onPress={() => setIsReportsModalOpen(true)}
+          onPress={() => setIsReportsModalOpen(!isReportsModalOpen)}
           activeOpacity={0.8}
         >
-          <FileText size={15} color={colors.primaryLight} />
-          <Text style={[styles.reportsBtnText, { color: colors.textPrimary }]}>Reports</Text>
+          {isReportsModalOpen ? (
+            <>
+              <ChevronLeft size={15} color={colors.primaryLight} />
+              <Text style={[styles.reportsBtnText, { color: colors.textPrimary }]}>Back</Text>
+            </>
+          ) : (
+            <>
+              <FileText size={15} color={colors.primaryLight} />
+              <Text style={[styles.reportsBtnText, { color: colors.textPrimary }]}>Reports</Text>
+            </>
+          )}
         </TouchableOpacity>
 
         {/* User Profile Avatar Trigger */}
@@ -275,16 +284,25 @@ export const Header: React.FC = () => {
               )}
             </TouchableOpacity>
 
-            {/* Service Reports Modal Option */}
+            {/* Service Reports Toggle Option */}
             <TouchableOpacity
               style={styles.dropdownItem}
               onPress={() => {
                 setIsMenuOpen(false);
-                setIsReportsModalOpen(true);
+                setIsReportsModalOpen(!isReportsModalOpen);
               }}
             >
-              <FileText size={16} color={colors.primaryLight} />
-              <Text style={[styles.dropdownItemText, { color: colors.textPrimary }]}>Service Reports & Exports</Text>
+              {isReportsModalOpen ? (
+                <>
+                  <ChevronLeft size={16} color={colors.primaryLight} />
+                  <Text style={[styles.dropdownItemText, { color: colors.textPrimary }]}>Back to Bays</Text>
+                </>
+              ) : (
+                <>
+                  <FileText size={16} color={colors.primaryLight} />
+                  <Text style={[styles.dropdownItemText, { color: colors.textPrimary }]}>Service Reports & Exports</Text>
+                </>
+              )}
             </TouchableOpacity>
 
             <View style={[styles.dropdownDivider, { backgroundColor: colors.borderGlass }]} />
