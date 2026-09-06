@@ -599,7 +599,8 @@ export const vehicleService = {
   },
 
   /**
-   * Transfers a vehicle to a new bay, closing active stage log and inserting new log.
+   * Transfers a vehicle to a new bay, closing the active stage log and inserting a new one.
+   * Task completion and work-start are handled by VehicleContext BEFORE this call.
    */
   async transferZone(
     vehicleId: string,
@@ -610,7 +611,8 @@ export const vehicleService = {
     activeLogId: string | null,
     enteredAt: string | null,
     workStartedAt: string | null,
-    existingIdleSec?: number
+    existingIdleSec?: number,
+    movedBy?: string
   ): Promise<void> {
     const client = supabase;
     if (!client || !isSupabaseConnected) return;
@@ -618,7 +620,7 @@ export const vehicleService = {
     const { error } = await client.rpc('transfer_vehicle_zone', {
       p_vehicle_id: vehicleId,
       p_to_zone: targetZone,
-      p_moved_by: 'Staff',
+      p_moved_by: movedBy || 'Staff',
     });
 
     if (error) {

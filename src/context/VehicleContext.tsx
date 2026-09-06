@@ -65,7 +65,8 @@ export interface VehicleContextType {
   transferVehicleZone: (
     vehicleId: string,
     targetZone: BayZone,
-    targetZoneName: string
+    targetZoneName: string,
+    techName?: string
   ) => Promise<boolean>;
   startStageWork: (
     vehicleId: string,
@@ -628,102 +629,7 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
     }
   }, [vehicles]);
 
-  // 6. TRANSFER VEHICLE ZONE (Waits for Backend Response)
-  const transferVehicleZone = useCallback(async (vehicleId: string, targetZone: BayZone, targetZoneName: string): Promise<boolean> => {
-    const now = new Date().toISOString();
-    const targetVehicle = vehicles.find(v => v.id === vehicleId);
-    if (!targetVehicle) return false;
-    const lastLog = targetVehicle.stage_logs[targetVehicle.stage_logs.length - 1] || null;
-
-    // Detect if departing bay has an incomplete required task that should be auto-completed on dispatch
-    const currentBayTask = targetVehicle.tasks.find(
-      t => t.is_required && !t.is_completed && APP_TERMINOLOGY.tasks[t.task_type]?.stationId === targetVehicle.current_zone
-    );
-
-    try {
-      // 1. Await backend persistence first (transfers vehicle and auto-completes task if needed)
-      await vehicleService.transferZone(
-        vehicleId,
-        targetZone,
-        targetZoneName,
-        targetVehicle.current_zone,
-        now,
-        lastLog?.id || null,
-        lastLog?.entered_at || null,
-        lastLog?.work_started_at || null,
-        lastLog?.idle_seconds,
-        currentBayTask?.id || null,
-        targetZoneName || 'Staff'
-      );
-
-      // 2. Only mutate client state after backend confirmation
-      try { hapticService.triggerSuccessHaptic(); } catch { /* ignore */ }
-
-      setVehicles(prev =>
-        prev.map(v => {
-          if (v.id !== vehicleId) return v;
-          const updatedLogs = [...v.stage_logs];
-          const lastIdx = updatedLogs.length - 1;
-
-          if (lastIdx >= 0 && !updatedLogs[lastIdx].exited_at) {
-            const prevL = updatedLogs[lastIdx];
-            const entered = new Date(prevL.entered_at).getTime();
-            const dur = Math.floor((new Date(now).getTime() - entered) / 1000);
-            const effectiveWorkStarted = prevL.work_started_at || (currentBayTask ? prevL.entered_at : null);
-            const idle = effectiveWorkStarted
-              ? (prevL.idle_seconds || Math.floor((new Date(effectiveWorkStarted).getTime() - entered) / 1000))
-              : dur;
-            updatedLogs[lastIdx] = {
-              ...prevL,
-              exited_at: now,
-              duration_seconds: dur,
-              idle_seconds: idle,
-              work_started_at: prevL.work_started_at || effectiveWorkStarted,
-            };
-          }
-
-          updatedLogs.push({
-            id: `log-${Date.now()}`,
-            vehicle_id: vehicleId,
-            from_zone: v.current_zone,
-            to_zone: targetZone,
-            entered_at: now,
-            exited_at: null,
-            duration_seconds: 0,
-            work_started_at: null,
-            idle_seconds: 0,
-          });
-
-          // Also mark the departing bay task as completed in local state
-          const updatedTasks = currentBayTask
-            ? v.tasks.map(t =>
-                t.id === currentBayTask.id
-                  ? { ...t, is_completed: true, completed_at: now, completed_by: targetZoneName || 'Staff' }
-                  : t
-              )
-            : v.tasks;
-
-          return {
-            ...v,
-            current_zone: targetZone,
-            tasks: updatedTasks,
-            stage_logs: updatedLogs,
-            is_paused: false,
-            paused_at: null,
-          };
-        })
-      );
-      return true;
-    } catch (err: any) {
-      console.error('[VehicleContext] transferVehicleZone error:', err);
-      if (isMountedRef.current) {
-        showError('Transfer Failed', err?.message || 'Could not move the vehicle. The change has been reverted.');
-      }
-      return false;
-    }
-  }, [vehicles, showError]);
-
-  // 7. START STAGE WORK (Transitions from IDLE to ACTIVE - Waits for Backend Response)
+  // 6. START STAGE WORK (Transitions from IDLE to ACTIVE - Waits for Backend Response)
   const startStageWork = useCallback(async (vehicleId: string, startedBy: string): Promise<boolean> => {
     const now = new Date().toISOString();
     const targetVehicle = vehicles.find(v => v.id === vehicleId);
@@ -780,6 +686,104 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
       return false;
     }
   }, [vehicles, showError]);
+
+  // 7. TRANSFER VEHICLE ZONE (Waits for Backend Response)
+  // Orchestration order (Rule 3.1):
+  //   A. toggleTaskCompletion — auto-completes required bay task if not yet ticked (RPC + optimistic)
+  //   B. vehicleService.transferZone — transfers zone; task is already done at this point
+  //
+  // Note: startStageWork is NOT called here. isCanDispatch requires !isStageIdle, meaning
+  // START WORK must always be clicked first — work_started_at is guaranteed set before dispatch.
+  const transferVehicleZone = useCallback(async (vehicleId: string, targetZone: BayZone, targetZoneName: string, techName?: string): Promise<boolean> => {
+    const now = new Date().toISOString();
+    const targetVehicle = vehicles.find(v => v.id === vehicleId);
+    if (!targetVehicle) return false;
+    const lastLog = targetVehicle.stage_logs[targetVehicle.stage_logs.length - 1] || null;
+
+    // Detect incomplete required task for the departing bay
+    const currentBayTask = targetVehicle.tasks.find(
+      t => t.is_required && !t.is_completed && APP_TERMINOLOGY.tasks[t.task_type]?.stationId === targetVehicle.current_zone
+    );
+
+    const mover = techName || targetZoneName || 'Staff';
+
+    try {
+      // A. Auto-complete the required bay task if it isn't ticked yet (one-click dispatch path).
+      //    Uses the existing context function → toggle_task_completion RPC + optimistic update + rollback.
+      if (currentBayTask) {
+        await toggleTaskCompletion(vehicleId, currentBayTask.id, mover);
+      }
+
+      // C. Transfer zone — task is already done, service stays clean.
+      await vehicleService.transferZone(
+        vehicleId,
+        targetZone,
+        targetZoneName,
+        targetVehicle.current_zone,
+        now,
+        lastLog?.id || null,
+        lastLog?.entered_at || null,
+        lastLog?.work_started_at || null,
+        lastLog?.idle_seconds,
+        mover
+      );
+
+      // D. Mutate client state after backend confirmation
+      try { hapticService.triggerSuccessHaptic(); } catch { /* ignore */ }
+
+      setVehicles(prev =>
+        prev.map(v => {
+          if (v.id !== vehicleId) return v;
+          const updatedLogs = [...v.stage_logs];
+          const lastIdx = updatedLogs.length - 1;
+
+          if (lastIdx >= 0 && !updatedLogs[lastIdx].exited_at) {
+            const prevL = updatedLogs[lastIdx];
+            const entered = new Date(prevL.entered_at).getTime();
+            const dur = Math.floor((new Date(now).getTime() - entered) / 1000);
+            // work_started_at is guaranteed to be set at this point (step A ran if needed)
+            const idle = prevL.work_started_at
+              ? (prevL.idle_seconds || Math.floor((new Date(prevL.work_started_at).getTime() - entered) / 1000))
+              : dur;
+            updatedLogs[lastIdx] = {
+              ...prevL,
+              exited_at: now,
+              duration_seconds: dur,
+              idle_seconds: idle,
+            };
+          }
+
+          updatedLogs.push({
+            id: `log-${Date.now()}`,
+            vehicle_id: vehicleId,
+            from_zone: v.current_zone,
+            to_zone: targetZone,
+            entered_at: now,
+            exited_at: null,
+            duration_seconds: 0,
+            work_started_at: null,
+            idle_seconds: 0,
+          });
+
+          return {
+            ...v,
+            current_zone: targetZone,
+            // tasks are already updated by toggleTaskCompletion's optimistic setVehicles above
+            stage_logs: updatedLogs,
+            is_paused: false,
+            paused_at: null,
+          };
+        })
+      );
+      return true;
+    } catch (err: any) {
+      console.error('[VehicleContext] transferVehicleZone error:', err);
+      if (isMountedRef.current) {
+        showError('Transfer Failed', err?.message || 'Could not move the vehicle. The change has been reverted.');
+      }
+      return false;
+    }
+  }, [vehicles, showError, toggleTaskCompletion]);
 
   // 8. FINISH VEHICLE JOB SHEET (Advisor Handover - Waits for Backend Response)
   const finishVehicleJobSheet = useCallback(async (vehicleId: string, advisorName: string): Promise<boolean> => {

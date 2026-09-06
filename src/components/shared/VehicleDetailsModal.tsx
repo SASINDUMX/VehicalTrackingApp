@@ -15,7 +15,7 @@ import { ConfirmModal } from './ConfirmModal';
 import { VehicleNotePill } from './VehicleNotePill';
 import { TaskSelectorChips } from './TaskSelectorChips';
 import { UrgentToggleInput } from './UrgentToggleInput';
-import { computeVehicleModalTimers } from '../../utils/vehicleUtils';
+import { computeVehicleModalTimers, getBayForTaskType } from '../../utils/vehicleUtils';
 import { computeVehicleTimelineStages } from '../../utils/timelineUtils';
 import { useTheme } from '../../context/ThemeContext';
 import { getBayDefinitions } from '../../constants/bays';
@@ -127,6 +127,17 @@ export const VehicleDetailsModal: React.FC = () => {
     .filter(t => t.is_completed)
     .map(t => t.task_type);
 
+  // A task is locked if completed OR already started (stage log has work_started_at)
+  const startedTaskTypes = selectedVehicle.tasks
+    .filter(t => {
+      if (t.is_completed) return false;
+      const bay = getBayForTaskType(t.task_type);
+      return selectedVehicle.stage_logs.some(l => l.to_zone === bay && Boolean(l.work_started_at));
+    })
+    .map(t => t.task_type);
+
+  const lockedTaskTypes = [...completedTaskTypes, ...startedTaskTypes];
+
   const formatSpentTime = (sec?: number) => {
     if (!sec || sec <= 0) return '0m 00s';
     const h = Math.floor(sec / 3600);
@@ -140,7 +151,7 @@ export const VehicleDetailsModal: React.FC = () => {
   };
 
   const toggleTask = (type: TaskType) => {
-    if (completedTaskTypes.includes(type)) return;
+    if (lockedTaskTypes.includes(type)) return;
     if (selectedTasks.includes(type)) {
       if (selectedTasks.length > 1) {
         setSelectedTasks(selectedTasks.filter(t => t !== type));
@@ -272,8 +283,9 @@ export const VehicleDetailsModal: React.FC = () => {
                     selectedTasks={selectedTasks}
                     onToggleTask={toggleTask}
                     completedTasks={completedTaskTypes}
+                    startedTasks={startedTaskTypes}
                     title="EDIT WORKSHOP TASKS:"
-                    subTitle="Tasks completed by technicians are locked and preserved."
+                    subTitle="Tasks started or completed by technicians are locked and preserved."
                   />
                 )}
 
@@ -327,6 +339,7 @@ export const VehicleDetailsModal: React.FC = () => {
                       isCurrent,
                       logsForZone,
                       isCompleted,
+                      isBypassed,
                       isCancelled,
                       isLastInOrder,
                       isInspection,
@@ -337,14 +350,14 @@ export const VehicleDetailsModal: React.FC = () => {
                       workCompletedAt,
                     } = node;
                     const isTaskDone = Boolean(workCompletedAt);
-                    // A stage is only fully finished/done if it has been exited (isCompleted), OR if the task is done and it is NOT idle (i.e. not in 2nd idle queue-out awaiting dispatch)
+                    // A stage is only fully finished/done if it has been exited and completed (isCompleted)
                     const isFullyFinishedOrDone = isCompleted;
                     const isSecondIdleDone = isCurrent && isTaskDone && isStageIdle;
                     // Inspection is the final ready/handover staging area - never color a working blue line from it
                     const isWorkingActive = isCurrent && !isStageIdle && !isTaskDone && !isInspection;
 
                     const nextNode = timelineStagesData[nodeIdx + 1];
-                    const isNextCancelled = nextNode?.isCancelled;
+                    const isNextCancelled = nextNode?.isCancelled || nextNode?.isBypassed;
 
                     // Icon color harmonizes with node state
                     const nodeIconColor = isCurrent && isInspection
@@ -355,7 +368,7 @@ export const VehicleDetailsModal: React.FC = () => {
                       ? colors.success
                       : isWorkingActive
                       ? colors.primaryLight
-                      : isCancelled
+                      : isCancelled || isBypassed
                       ? colors.danger
                       : colors.textMuted;
 
@@ -371,8 +384,8 @@ export const VehicleDetailsModal: React.FC = () => {
                             isCurrent && isStageIdle && { borderColor: colors.warning, backgroundColor: colors.warningDim },
                             !isStageIdle && isFullyFinishedOrDone && { borderColor: colors.success, backgroundColor: colors.successDim },
                             !isStageIdle && isWorkingActive && { borderColor: colors.primary, backgroundColor: colors.primaryDim },
-                            isCancelled && { borderColor: colors.danger, backgroundColor: colors.dangerDim },
-                            !isCurrent && !isCompleted && !isCancelled && { borderColor: colors.borderGlassBright, backgroundColor: colors.surfaceOverlay }
+                            (isCancelled || isBypassed) && { borderColor: colors.danger, backgroundColor: colors.dangerDim },
+                            !isCurrent && !isCompleted && !isBypassed && !isCancelled && { borderColor: colors.borderGlassBright, backgroundColor: colors.surfaceOverlay }
                           ]}>
                             <StageIconComponent size={16} color={nodeIconColor} />
                           </View>
@@ -398,7 +411,7 @@ export const VehicleDetailsModal: React.FC = () => {
 
                         <View style={styles.timelineContent}>
                           <View style={styles.timelineHeaderRow}>
-                            <Text style={[styles.stageNameText, { color: colors.textPrimary }, isCurrent && { fontWeight: '800' }, isCancelled && { color: colors.textMuted, textDecorationLine: 'line-through' }]}>
+                            <Text style={[styles.stageNameText, { color: colors.textPrimary }, isCurrent && { fontWeight: '800' }, (isCancelled || isBypassed) && { color: colors.textMuted, textDecorationLine: 'line-through' }]}>
                               {stageDef.name}
                             </Text>
                             {isCurrent ? (
@@ -413,6 +426,8 @@ export const VehicleDetailsModal: React.FC = () => {
                               )
                             ) : isCompleted ? (
                               <StatusPill variant="DONE" label="DONE" size="sm" />
+                            ) : isBypassed ? (
+                              <StatusPill variant="SKIPPED" label="BYPASSED" size="sm" />
                             ) : isCancelled ? (
                               <StatusPill variant="SKIPPED" label="SKIPPED" size="sm" />
                             ) : (
@@ -432,12 +447,14 @@ export const VehicleDetailsModal: React.FC = () => {
                             <>
                               <View style={styles.stageTimeRow}>
                                 <View style={styles.timeTag}>
-                                  <Clock size={12} color={isCurrent ? (isStageIdle ? colors.warning : colors.primary) : isCancelled ? colors.danger : colors.textMuted} />
-                                  <Text style={[styles.timeTagText, { color: isCurrent ? (isStageIdle ? colors.warningLight : colors.primaryLight) : colors.textSecondary }, isCurrent && { fontWeight: '700' }, isCancelled && { color: colors.danger }]}>
+                                  <Clock size={12} color={isCurrent ? (isStageIdle ? colors.warning : colors.primary) : (isCancelled || isBypassed) ? colors.danger : colors.textMuted} />
+                                  <Text style={[styles.timeTagText, { color: isCurrent ? (isStageIdle ? colors.warningLight : colors.primaryLight) : colors.textSecondary }, isCurrent && { fontWeight: '700' }, (isCancelled || isBypassed) && { color: colors.danger }]}>
                                     {isCurrent
                                       ? `${isStageIdle ? 'Idle: ' : 'Active: '}${spentStr}`
                                       : isCompleted
                                       ? `Spent: ${spentStr}`
+                                      : isBypassed
+                                      ? 'Bypassed'
                                       : isCancelled
                                       ? 'Skipped'
                                       : 'Pending'}

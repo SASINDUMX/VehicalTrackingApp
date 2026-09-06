@@ -14,6 +14,7 @@ export interface TimelineStageNode {
   isCurrent: boolean;
   logsForZone: Vehicle['stage_logs'];
   isCompleted: boolean;
+  isBypassed: boolean;
   isCancelled: boolean;
   isLastInOrder: boolean;
   isInspection: boolean;
@@ -109,6 +110,7 @@ export const computeVehicleTimelineStages = (
         isCurrent,
         logsForZone,
         isCompleted,
+        isBypassed: false,
         isCancelled: false,
         isLastInOrder,
         isInspection: true,
@@ -124,7 +126,13 @@ export const computeVehicleTimelineStages = (
     const currentTask =
       vehicle.tasks.find(t => t.task_type === bayTaskType && t.is_required) ||
       vehicle.tasks.find(t => t.task_type === bayTaskType);
-    const workCompletedAt = currentTask?.is_completed ? currentTask.completed_at : null;
+    const isTaskActuallyDone = Boolean(currentTask?.is_completed);
+    const workCompletedAt = isTaskActuallyDone ? currentTask?.completed_at : null;
+
+    // A service stage is genuinely completed only if exited AND the task was actually completed
+    const isStageCompleted = hasExitedAll && !isCurrent && isTaskActuallyDone;
+    // Bypassed: visited and exited, but task was never completed
+    const isBypassed = hasExitedAll && !isCurrent && !isTaskActuallyDone;
 
     const latestLog = logsForZone[logsForZone.length - 1];
     const isStageIdle = Boolean(
@@ -152,14 +160,16 @@ export const computeVehicleTimelineStages = (
     const isCancelled =
       stageDef.zone !== 'inspection' &&
       !isCurrent &&
-      !isCompleted &&
+      !isStageCompleted &&
+      !isBypassed &&
       (currentZoneInner === 'inspection' || vehicle.is_finished);
 
     return {
       stageDef,
       isCurrent,
       logsForZone,
-      isCompleted,
+      isCompleted: isStageCompleted,
+      isBypassed,
       isCancelled,
       isLastInOrder,
       isInspection: false,

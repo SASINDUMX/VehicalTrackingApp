@@ -7,7 +7,7 @@ import { VehicleCardHeader } from '../shared/VehicleCardHeader';
 import { TransferConfirmModal } from '../shared/TransferConfirmModal';
 import { CalloutBanner } from '../shared/CalloutBanner';
 import { LoadingSpot } from '../shared/LoadingSpot';
-import { sortWorkshopVehicles } from '../../utils/vehicleUtils';
+import { sortWorkshopVehicles, getBayForTaskType } from '../../utils/vehicleUtils';
 import { useAdvisorInspection } from '../../hooks/useAdvisorInspection';
 import { usePinnedVehicles } from '../../hooks/usePinnedVehicles';
 import { useTheme } from '../../context/ThemeContext';
@@ -145,18 +145,32 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
               </View>
 
               <View style={styles.auditList}>
-                {vehicle.tasks.filter((t: VehicleTask) => t.is_required).map((t: VehicleTask) => (
-                  <View key={t.id} style={[styles.taskAuditRow, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)', borderColor: colors.borderGlass }]}>
-                    <Text style={[styles.taskName, { color: colors.textPrimary }, !t.is_completed && { color: colors.textMuted, textDecorationLine: 'line-through' }]}>
-                      {t.task_name}
-                    </Text>
-                    {t.is_completed ? (
-                      <StatusPill variant="DONE" label="DONE" IconComponent={CheckCircle2} size="sm" />
-                    ) : (
-                      <StatusPill variant="SKIPPED" label="SKIPPED" IconComponent={XCircle} size="sm" />
-                    )}
-                  </View>
-                ))}
+                {vehicle.tasks
+                  .filter((t: VehicleTask) => {
+                    const taskBay = getBayForTaskType(t.task_type);
+                    const hasVisitedBay = vehicle.stage_logs.some(l => l.to_zone === taskBay);
+                    return t.is_required || hasVisitedBay;
+                  })
+                  .map((t: VehicleTask) => {
+                    const taskBay = getBayForTaskType(t.task_type);
+                    const hasVisitedBay = vehicle.stage_logs.some(l => l.to_zone === taskBay);
+                    const isBypassed = !t.is_completed && hasVisitedBay;
+
+                    return (
+                      <View key={t.id} style={[styles.taskAuditRow, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)', borderColor: colors.borderGlass }]}>
+                        <Text style={[styles.taskName, { color: colors.textPrimary }, !t.is_completed && { color: colors.textMuted, textDecorationLine: 'line-through' }]}>
+                          {t.task_name}
+                        </Text>
+                        {t.is_completed ? (
+                          <StatusPill variant="DONE" label="DONE" IconComponent={CheckCircle2} size="sm" />
+                        ) : isBypassed ? (
+                          <StatusPill variant="SKIPPED" label="BYPASSED" IconComponent={XCircle} size="sm" />
+                        ) : (
+                          <StatusPill variant="SKIPPED" label="SKIPPED" IconComponent={XCircle} size="sm" />
+                        )}
+                      </View>
+                    );
+                  })}
               </View>
             </View>
 

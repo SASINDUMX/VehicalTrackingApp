@@ -4,6 +4,7 @@ import { APP_TERMINOLOGY } from "../constants/terminology";
 export interface VehicleBayStatus {
   isCurrentTaskDone: boolean;
   isStageIdle: boolean;
+  isTaskRequiredForBay: boolean;
   requiredTaskTypes: TaskType[];
   canShowAlignmentBtn: boolean;
   canShowHoistBtn: boolean;
@@ -28,7 +29,8 @@ export const computeVehicleBayStatus = (
   const isStageIdle = Boolean(lastStageLog && !lastStageLog.exited_at && !lastStageLog.work_started_at);
 
   const bayTask = vehicle.tasks.find(t => t.task_type === activeTaskType && t.is_required) || vehicle.tasks.find(t => t.task_type === activeTaskType);
-  const isCurrentTaskDone = Boolean(bayTask && bayTask.is_completed);
+  const isTaskRequiredForBay = Boolean(bayTask && bayTask.is_required);
+  const isCurrentTaskDone = !isTaskRequiredForBay || Boolean(bayTask?.is_completed);
 
   const requiredTaskTypes = vehicle.tasks.filter(t => t.is_required).map(t => t.task_type);
   const isHoistRequired = requiredTaskTypes.includes('hoist_service');
@@ -39,7 +41,8 @@ export const computeVehicleBayStatus = (
   const isHoistDone = Boolean(vehicle.tasks.find(t => t.task_type === 'hoist_service')?.is_completed);
   const isAlignmentDone = Boolean(vehicle.tasks.find(t => t.task_type === 'wheel_alignment')?.is_completed);
 
-  const isCanDispatch = canTransferVehicle && isCurrentTaskDone && !isDispatching;
+  // Dispatch is unlocked after START WORK, or immediately if this bay has no required task (orphan/bypassed bay)
+  const isCanDispatch = canTransferVehicle && (!isTaskRequiredForBay || !isStageIdle) && !isDispatching;
 
   const canShowAlignmentBtn = activeBay !== 'alignment' && isAlignmentRequired && !isAlignmentDone;
   const canShowHoistBtn = activeBay !== 'hoist' && isHoistRequired && !isHoistDone;
@@ -50,6 +53,7 @@ export const computeVehicleBayStatus = (
   return {
     isCurrentTaskDone,
     isStageIdle,
+    isTaskRequiredForBay,
     requiredTaskTypes,
     canShowAlignmentBtn,
     canShowHoistBtn,
@@ -79,8 +83,8 @@ export const computeSpatialVehicleStatus = (vehicle: Vehicle): SpatialVehicleSta
       ? 'wheel_alignment'
       : 'general_service';
 
-  const currentTask = vehicle.tasks.find(t => t.task_type === currentBayTaskType);
-  const isCurrentTaskDone = Boolean(currentTask && currentTask.is_completed);
+  const currentTask = vehicle.tasks.find(t => t.task_type === currentBayTaskType && t.is_required) || vehicle.tasks.find(t => t.task_type === currentBayTaskType);
+  const isCurrentTaskDone = !currentTask || !currentTask.is_required || Boolean(currentTask.is_completed);
 
   const lastStageLog = vehicle.stage_logs[vehicle.stage_logs.length - 1];
   const isInspectionZone = vehicle.current_zone === 'inspection';

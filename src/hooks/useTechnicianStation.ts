@@ -11,6 +11,7 @@ export interface PendingTransfer {
   vehicleNo: string;
   targetZone: BayZone;
   targetZoneName: string;
+  autoCompleteTaskName?: string | null;
 }
 
 export const useTechnicianStation = () => {
@@ -44,16 +45,22 @@ export const useTechnicianStation = () => {
     }
   };
 
-  const handleRequestTransfer = (vehicleId: string, vehicleNo: string, targetZone: BayZone, targetZoneName: string) => {
+  const handleRequestTransfer = (
+    vehicleId: string,
+    vehicleNo: string,
+    targetZone: BayZone,
+    targetZoneName: string,
+    autoCompleteTaskName?: string | null
+  ) => {
     if (isDispatching) return;
-    setPendingTransfer({ vehicleId, vehicleNo, targetZone, targetZoneName });
+    setPendingTransfer({ vehicleId, vehicleNo, targetZone, targetZoneName, autoCompleteTaskName });
   };
 
   const handleConfirmTransfer = async () => {
     if (pendingTransfer && !isDispatching) {
       setIsDispatching(true);
       try {
-        const success = await transferVehicleZone(pendingTransfer.vehicleId, pendingTransfer.targetZone, techName);
+        const success = await transferVehicleZone(pendingTransfer.vehicleId, pendingTransfer.targetZone, pendingTransfer.targetZoneName, techName);
         if (success) {
           setPendingTransfer(null);
         }

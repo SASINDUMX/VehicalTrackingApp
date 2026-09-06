@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { View, Text, FlatList, StyleSheet } from 'react-native';
-import { Car, AlertTriangle } from 'lucide-react-native';
+import { Car, AlertTriangle, CheckCircle2 } from 'lucide-react-native';
 import { EmptyStateCard } from '../shared/EmptyStateCard';
 import { TransferConfirmModal } from '../shared/TransferConfirmModal';
 import { LoadingSpot } from '../shared/LoadingSpot';
@@ -72,7 +72,7 @@ export const TechnicianStationView: React.FC = React.memo(() => {
         onTogglePin={() => togglePin(vehicle.id)}
         onStartWork={() => handleStartWork(vehicle.id)}
         onToggleTask={(taskId: string) => toggleTaskCompletion(vehicle.id, taskId, techName)}
-        onRequestTransfer={(targetZone, targetZoneName) => handleRequestTransfer(vehicle.id, vehicle.vehicle_no, targetZone, targetZoneName)}
+        onRequestTransfer={(targetZone, targetZoneName, autoCompleteTaskName) => handleRequestTransfer(vehicle.id, vehicle.vehicle_no, targetZone, targetZoneName, autoCompleteTaskName)}
         onSelectAuditLog={() => setSelectedVehicle(vehicle)}
       />
     );
@@ -120,9 +120,19 @@ export const TechnicianStationView: React.FC = React.memo(() => {
         icon={<AlertTriangle size={24} color={colors.warning} />}
         bodyContent={
           pendingTransfer ? (
-            <Text style={[styles.confirmBodyText, { color: colors.textSecondary }]}>
-              Are you sure you want to dispatch vehicle <Text style={[styles.confirmBoldPlate, { color: colors.warning }]}>{pendingTransfer.vehicleNo}</Text> to <Text style={[styles.confirmBoldZone, { color: colors.primaryLight }]}>{pendingTransfer.targetZoneName}</Text>?
-            </Text>
+            <View style={{ gap: 8 }}>
+              <Text style={[styles.confirmBodyText, { color: colors.textSecondary }]}>
+                Are you sure you want to dispatch vehicle <Text style={[styles.confirmBoldPlate, { color: colors.warning }]}>{pendingTransfer.vehicleNo}</Text> to <Text style={[styles.confirmBoldZone, { color: colors.primaryLight }]}>{pendingTransfer.targetZoneName}</Text>?
+              </Text>
+              {Boolean(pendingTransfer.autoCompleteTaskName) && (
+                <View style={[styles.autoCompleteBadge, { backgroundColor: colors.successDim, borderColor: colors.successBorder }]}>
+                  <CheckCircle2 size={13} color={colors.success} />
+                  <Text style={[styles.autoCompleteText, { color: colors.successLight }]}>
+                    Will automatically mark <Text style={{ fontWeight: '800', color: colors.success }}>{pendingTransfer.autoCompleteTaskName}</Text> as DONE
+                  </Text>
+                </View>
+              )}
+            </View>
           ) : null
         }
         confirmLabel={`${APP_TERMINOLOGY.actions.confirmDispatch} ✓`}
@@ -145,4 +155,17 @@ const styles = StyleSheet.create({
   confirmBodyText: { fontSize: 13, lineHeight: 20 },
   confirmBoldPlate: { fontWeight: '800' },
   confirmBoldZone: { fontWeight: '800' },
+  autoCompleteBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  autoCompleteText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
 });

@@ -24,6 +24,15 @@ export const getTaskTypeForBay = (zone: BayZone): TaskType => {
   }
 };
 
+export const getBayForTaskType = (taskType: TaskType): BayZone => {
+  switch (taskType) {
+    case "general_service": return "workshop";
+    case "hoist_service": return "hoist";
+    case "wheel_alignment": return "alignment";
+    default: return "workshop";
+  }
+};
+
 export const getVehicleEffectiveEndDate = (vehicle: Vehicle): Date => {
   // Dispatched to Advisor Inspection Zone marks the definitive end of all vehicle time calculations
   const inspLog = vehicle.stage_logs.find(l => l.to_zone === 'inspection');

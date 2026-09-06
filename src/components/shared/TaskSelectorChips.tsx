@@ -10,6 +10,7 @@ export interface TaskSelectorChipsProps {
   selectedTasks: TaskType[];
   onToggleTask: (task: TaskType) => void;
   completedTasks?: TaskType[];
+  startedTasks?: TaskType[];
   title?: string;
   subTitle?: string;
 }
@@ -52,6 +53,7 @@ export const TaskSelectorChips: React.FC<TaskSelectorChipsProps> = ({
   selectedTasks,
   onToggleTask,
   completedTasks = [],
+  startedTasks = [],
   title = 'REQUIRED TASKS:',
   subTitle,
 }) => {
@@ -69,6 +71,8 @@ export const TaskSelectorChips: React.FC<TaskSelectorChipsProps> = ({
       <View style={styles.chipRow}>
         {TASK_DEFINITIONS.map((def) => {
           const isCompleted = completedTasks.includes(def.type);
+          const isStarted = startedTasks.includes(def.type);
+          const isLocked = isCompleted || isStarted;
           const isSelected = selectedTasks.includes(def.type);
           const palette = def.getColors(colors);
 
@@ -78,24 +82,28 @@ export const TaskSelectorChips: React.FC<TaskSelectorChipsProps> = ({
               style={[
                 styles.taskChip,
                 {
-                  backgroundColor: isSelected
-                    ? palette.dim
-                    : isCompleted
+                  backgroundColor: isCompleted
                     ? colors.successDim
+                    : isStarted
+                    ? colors.primaryDim
+                    : isSelected
+                    ? palette.dim
                     : isDark
                     ? 'rgba(255, 255, 255, 0.02)'
                     : 'rgba(0, 0, 0, 0.02)',
-                  borderColor: isSelected
-                    ? palette.border
-                    : isCompleted
+                  borderColor: isCompleted
                     ? colors.successBorder
+                    : isStarted
+                    ? colors.primaryBorder
+                    : isSelected
+                    ? palette.border
                     : colors.borderGlass,
                 },
               ]}
               onPress={() => {
-                if (!isCompleted) onToggleTask(def.type);
+                if (!isLocked) onToggleTask(def.type);
               }}
-              activeOpacity={isCompleted ? 1 : 0.7}
+              activeOpacity={isLocked ? 1 : 0.7}
             >
               {isCompleted ? (
                 <>
@@ -104,6 +112,14 @@ export const TaskSelectorChips: React.FC<TaskSelectorChipsProps> = ({
                     {def.label} (Done ✓)
                   </Text>
                   <Lock size={12} color={colors.success} />
+                </>
+              ) : isStarted ? (
+                <>
+                  <CheckSquare size={16} color={colors.primaryLight} />
+                  <Text style={[styles.chipText, { color: colors.primaryLight }]}>
+                    {def.label} (Started ⚙)
+                  </Text>
+                  <Lock size={12} color={colors.primaryLight} />
                 </>
               ) : (
                 <>

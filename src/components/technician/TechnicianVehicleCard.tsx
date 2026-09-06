@@ -30,7 +30,7 @@ export interface TechnicianVehicleCardProps {
   onTogglePin: () => void;
   onStartWork: () => void;
   onToggleTask: (taskId: string) => void;
-  onRequestTransfer: (targetZone: BayZone, targetZoneName: string) => void;
+  onRequestTransfer: (targetZone: BayZone, targetZoneName: string, autoCompleteTaskName?: string | null) => void;
   onSelectAuditLog: () => void;
 }
 
@@ -65,6 +65,7 @@ export const TechnicianVehicleCard: React.FC<TechnicianVehicleCardProps> = React
   const {
     isCurrentTaskDone,
     isStageIdle,
+    isTaskRequiredForBay,
     canShowAlignmentBtn,
     canShowHoistBtn,
     canShowWorkshopBtn,
@@ -72,6 +73,16 @@ export const TechnicianVehicleCard: React.FC<TechnicianVehicleCardProps> = React
     hasAnyDispatchBtn,
     isCanDispatch,
   } = computeVehicleBayStatus(vehicle, activeBay, activeTaskType, canTransferVehicle, isDispatching);
+
+  // If departing bay has an incomplete task, auto-complete it upon direct dispatch
+  const currentBayTask = vehicle.tasks.find(
+    t => t.task_type === activeTaskType && t.is_required && !t.is_completed
+  );
+  const autoCompleteTaskName = currentBayTask ? currentBayTask.task_name : null;
+
+  // Work can only be started if this bay actually has a required task to perform
+  const canStartBayWork = canStart && isTaskRequiredForBay;
+  const isCardIdle = isStageIdle && isTaskRequiredForBay;
 
   return (
     <View
@@ -82,14 +93,14 @@ export const TechnicianVehicleCard: React.FC<TechnicianVehicleCardProps> = React
             ? colors.cardUrgentBg
             : isCurrentTaskDone
             ? colors.cardDoneBg
-            : isStageIdle
+            : isCardIdle
             ? colors.cardIdleBg
             : colors.cardActiveBg,
           borderColor: isUrgent
             ? colors.cardUrgentBorder
             : isCurrentTaskDone
             ? colors.cardDoneBorder
-            : isStageIdle
+            : isCardIdle
             ? colors.cardIdleBorder
             : colors.cardActiveBorder,
           borderLeftWidth: 4,
@@ -97,7 +108,7 @@ export const TechnicianVehicleCard: React.FC<TechnicianVehicleCardProps> = React
             ? colors.danger
             : isCurrentTaskDone
             ? colors.success
-            : isStageIdle
+            : isCardIdle
             ? colors.warning
             : colors.primary,
         },
@@ -113,14 +124,14 @@ export const TechnicianVehicleCard: React.FC<TechnicianVehicleCardProps> = React
           vehicle={vehicle}
           size="md"
           elapsedText={elapsedText}
-          isStageIdle={isStageIdle}
+          isStageIdle={isCardIdle}
           isTaskDone={isCurrentTaskDone}
           isPinned={isPinned}
           onTogglePin={onTogglePin}
-          canStartWork={canStart}
+          canStartWork={canStartBayWork}
           isStartingWork={isStartingWork}
           onStartWork={() => {
-            if (canStart && !isStartingWork) onStartWork();
+            if (canStartBayWork && !isStartingWork) onStartWork();
           }}
           isExpanded={isExpanded}
           onToggleExpand={onToggleExpand}
@@ -133,7 +144,7 @@ export const TechnicianVehicleCard: React.FC<TechnicianVehicleCardProps> = React
           totalRequired={totalReq}
           percent={percent}
           isCurrentTaskDone={isCurrentTaskDone}
-          isStageIdle={isStageIdle}
+          isStageIdle={isCardIdle}
         />
       </TouchableOpacity>
 
@@ -164,7 +175,7 @@ export const TechnicianVehicleCard: React.FC<TechnicianVehicleCardProps> = React
               <Text style={[styles.sectionHeaderLabel, { color: colors.textMuted }]}>
                 JOB SHEET TASKS ({vehicle.tasks.filter(t => t.is_required).length}):
               </Text>
-              {isStageIdle && (
+              {isCardIdle && (
                 <View style={[styles.idleNoticeBadge, { backgroundColor: colors.warningDim, borderColor: colors.warningBorder }]}>
                   <Lock size={10} color={colors.warning} />
                   <Text style={[styles.idleNoticeText, { color: colors.warningLight }]}>START WORK FIRST</Text>
@@ -294,7 +305,7 @@ export const TechnicianVehicleCard: React.FC<TechnicianVehicleCardProps> = React
                       !isCanDispatch && { opacity: 0.35, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) },
                     ]}
                     onPress={() => {
-                      if (isCanDispatch) onRequestTransfer('workshop', APP_TERMINOLOGY.stations.workshop.name);
+                      if (isCanDispatch) onRequestTransfer('workshop', APP_TERMINOLOGY.stations.workshop.name, autoCompleteTaskName);
                     }}
                     activeOpacity={isCanDispatch ? 0.7 : 1}
                   >
@@ -311,7 +322,7 @@ export const TechnicianVehicleCard: React.FC<TechnicianVehicleCardProps> = React
                       !isCanDispatch && { opacity: 0.35, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) },
                     ]}
                     onPress={() => {
-                      if (isCanDispatch) onRequestTransfer('alignment', APP_TERMINOLOGY.stations.alignment.name);
+                      if (isCanDispatch) onRequestTransfer('alignment', APP_TERMINOLOGY.stations.alignment.name, autoCompleteTaskName);
                     }}
                     activeOpacity={isCanDispatch ? 0.7 : 1}
                   >
@@ -328,7 +339,7 @@ export const TechnicianVehicleCard: React.FC<TechnicianVehicleCardProps> = React
                       !isCanDispatch && { opacity: 0.35, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) },
                     ]}
                     onPress={() => {
-                      if (isCanDispatch) onRequestTransfer('hoist', APP_TERMINOLOGY.stations.hoist.name);
+                      if (isCanDispatch) onRequestTransfer('hoist', APP_TERMINOLOGY.stations.hoist.name, autoCompleteTaskName);
                     }}
                     activeOpacity={isCanDispatch ? 0.7 : 1}
                   >
@@ -345,7 +356,7 @@ export const TechnicianVehicleCard: React.FC<TechnicianVehicleCardProps> = React
                       !isCanDispatch && { opacity: 0.35, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) },
                     ]}
                     onPress={() => {
-                      if (isCanDispatch) onRequestTransfer('inspection', APP_TERMINOLOGY.stations.inspection.name);
+                      if (isCanDispatch) onRequestTransfer('inspection', APP_TERMINOLOGY.stations.inspection.name, autoCompleteTaskName);
                     }}
                     activeOpacity={isCanDispatch ? 0.7 : 1}
                   >
