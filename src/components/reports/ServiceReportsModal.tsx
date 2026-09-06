@@ -28,7 +28,6 @@ import {
   Info,
   AlertCircle,
   Coffee,
-  ShieldCheck,
   Database,
   Zap,
 } from 'lucide-react-native';
@@ -631,25 +630,7 @@ export const ServiceReportsModal: React.FC = () => {
         }
       >
         <View style={styles.auditModalBody}>
-          {/* 1. Effective Completion Standard */}
-          <View style={[styles.auditRuleCard, { backgroundColor: colors.successDim, borderColor: colors.success }]}>
-            <View style={styles.auditRuleHeader}>
-              <ShieldCheck size={15} color={colors.successLight} />
-              <Text style={[styles.auditRuleTitle, { color: colors.successLight }]}>
-                Turnaround Freeze Standard (Effective Completion)
-              </Text>
-            </View>
-            <Text style={[styles.auditRuleDesc, { color: colors.textSecondary }]}>
-              A vehicle's official Turnaround Time (TAT) definitively freezes the exact second it transitions into the <Text style={{ fontWeight: '700', color: colors.textPrimary }}>Inspection Zone</Text> or is explicitly marked completed.
-            </Text>
-            <View style={[styles.auditPillNote, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.03)' }]}>
-              <Text style={[styles.auditPillNoteText, { color: colors.textMuted }]}>
-                🎯 Customer handoff delays or parking lot dwell times after mechanical handover do NOT inflate workshop turnaround metrics.
-              </Text>
-            </View>
-          </View>
-
-          {/* 2. Automated Break Deductions */}
+          {/* 1. Automated Break Deductions */}
           <View style={[styles.auditRuleCard, { backgroundColor: colors.warningDim, borderColor: colors.warning }]}>
             <View style={styles.auditRuleHeader}>
               <Coffee size={15} color={colors.warningLight} />
@@ -673,7 +654,7 @@ export const ServiceReportsModal: React.FC = () => {
             </View>
           </View>
 
-          {/* 3. Bay Gross Avg Stay Time (Dispatched Bay Velocity) */}
+          {/* 2. Bay Gross Avg Stay Time (Dispatched Bay Velocity) */}
           <View style={[styles.auditRuleCard, { backgroundColor: colors.bayWorkshopDim, borderColor: colors.bayWorkshop }]}>
             <View style={styles.auditRuleHeader}>
               <Wrench size={15} color={colors.bayWorkshopLight} />
@@ -691,26 +672,26 @@ export const ServiceReportsModal: React.FC = () => {
             </View>
           </View>
 
-          {/* 4. Pure Active Labor vs Idle Time Breakdown */}
+          {/* 3. Pure Active Labor vs Idle Time Breakdown */}
           <View style={[styles.auditRuleCard, { backgroundColor: colors.bayAlignmentDim, borderColor: colors.bayAlignment }]}>
             <View style={styles.auditRuleHeader}>
               <Clock size={15} color={colors.bayAlignmentLight} />
               <Text style={[styles.auditRuleTitle, { color: colors.bayAlignmentLight }]}>
-                Net Wrench Time vs. Queue Idle
+                Net Active Time vs. Idle time
               </Text>
             </View>
             <Text style={[styles.auditRuleDesc, { color: colors.textSecondary }]}>
               <Text style={{ fontWeight: '700', color: colors.textPrimary }}>Net Working Time</Text> = Gross Turnaround − Shift Breaks.
             </Text>
             <Text style={[styles.auditRuleDesc, { color: colors.textSecondary, marginTop: 4 }]}>
-              • <Text style={{ fontWeight: '700', color: colors.textPrimary }}>Active Labor (Wrench Time)</Text>: Pure hands-on labor duration logged during active checklist execution.
+              • <Text style={{ fontWeight: '700', color: colors.textPrimary }}>Net Active Time</Text>: Pure hands-on labor duration logged during active checklist execution.
             </Text>
             <Text style={[styles.auditRuleDesc, { color: colors.textSecondary, marginTop: 2 }]}>
-              • <Text style={{ fontWeight: '700', color: colors.textPrimary }}>Idle Waiting Time</Text>: Duration vehicle spent queued in bay waiting for technician allocation or parts movement.
+              • <Text style={{ fontWeight: '700', color: colors.textPrimary }}>Idle time</Text>: Duration vehicle spent queued in bay waiting for technician allocation or parts movement.
             </Text>
           </View>
 
-          {/* 5. Autonomous Retention & Daily Rollover */}
+          {/* 4. Autonomous Retention & Daily Rollover */}
           <View style={[styles.auditRuleCard, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)', borderColor: colors.borderGlass }]}>
             <View style={styles.auditRuleHeader}>
               <Database size={15} color={colors.primaryLight} />
