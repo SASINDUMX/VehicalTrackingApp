@@ -1,11 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useVehicles } from "../context/VehicleContext";
 import { usePermissions } from "./usePermissions";
 import { useTheme } from "../context/ThemeContext";
 import { BayZone } from "../types/vehicle";
 import { Wrench, Droplets, Navigation, CheckCircle } from "lucide-react-native";
 import { matchesVehicleSearch } from "../utils/searchUtils";
-import { getActiveStageNetSeconds, computeVehicleTimersMap } from "../utils/vehicleUtils";
+import { getActiveStageNetSeconds, computeVehicleTimersMap, sortWorkshopVehicles } from "../utils/vehicleUtils";
+import { APP_TERMINOLOGY } from "../constants/terminology";
 
 export interface BayItem {
   id: BayZone;
@@ -32,35 +33,35 @@ export const useFloorPlan = () => {
   }, [vehicles]);
 
   const bays: BayItem[] = [
-    { id: "workshop", name: "General Service Bay", code: "BAY 01", icon: Wrench, color: colors.bayWorkshop },
-    { id: "alignment", name: "Wheel Alignment Bay", code: "BAY 02", icon: Navigation, color: colors.bayAlignment },
-    { id: "hoist", name: "Hoist Service Bay", code: "BAY 03", icon: Droplets, color: colors.bayHoist },
-    { id: "inspection", name: "Advisor Inspection Zone", code: "FINAL", icon: CheckCircle, color: colors.bayInspection },
+    { id: "workshop", name: APP_TERMINOLOGY.stations.workshop.name, code: APP_TERMINOLOGY.stations.workshop.code, icon: Wrench, color: colors.bayWorkshop },
+    { id: "alignment", name: APP_TERMINOLOGY.stations.alignment.name, code: APP_TERMINOLOGY.stations.alignment.code, icon: Navigation, color: colors.bayAlignment },
+    { id: "hoist", name: APP_TERMINOLOGY.stations.hoist.name, code: APP_TERMINOLOGY.stations.hoist.code, icon: Droplets, color: colors.bayHoist },
+    { id: "inspection", name: APP_TERMINOLOGY.stations.inspection.name, code: APP_TERMINOLOGY.stations.inspection.code, icon: CheckCircle, color: colors.bayInspection },
   ];
 
-  const getVehiclesInZone = (zoneId: BayZone) => {
+  const getVehiclesInZone = useCallback((zoneId: BayZone, isPinnedFn?: (id: string) => boolean) => {
     const list = vehicles.filter(v => {
       const matchesZone = v.current_zone === zoneId && !v.is_finished;
       if (!searchQuery.trim()) return matchesZone;
-      const matchesSearch = matchesVehicleSearch(v.vehicle_no, searchQuery) || v.assigned_tech.toLowerCase().includes(searchQuery.toLowerCase().trim());
+      const tech = (v.assigned_tech || '').toLowerCase();
+      const q = searchQuery.toLowerCase().trim();
+      const matchesSearch = matchesVehicleSearch(v.vehicle_no, searchQuery) || tech.includes(q);
       return matchesZone && matchesSearch;
     });
 
-    return list.sort((a, b) => {
-      const lastLogA = a.stage_logs[a.stage_logs.length - 1];
-      const lastLogB = b.stage_logs[b.stage_logs.length - 1];
-      const timeA = lastLogA?.entered_at ? new Date(lastLogA.entered_at).getTime() : new Date(a.intake_at).getTime();
-      const timeB = lastLogB?.entered_at ? new Date(lastLogB.entered_at).getTime() : new Date(b.intake_at).getTime();
-      return timeA - timeB;
-    });
-  };
+    return sortWorkshopVehicles(list, isPinnedFn);
+  }, [vehicles, searchQuery]);
 
   const isSearchActive = searchQuery.trim() !== "";
 
-  const totalMatchingVehicles = vehicles.filter(v => {
-    if (v.is_finished) return false;
-    return matchesVehicleSearch(v.vehicle_no, searchQuery) || v.assigned_tech.toLowerCase().includes(searchQuery.toLowerCase().trim());
-  }).length;
+  const totalMatchingVehicles = useMemo(() => {
+    return vehicles.filter(v => {
+      if (v.is_finished) return false;
+      const tech = (v.assigned_tech || '').toLowerCase();
+      const q = searchQuery.toLowerCase().trim();
+      return matchesVehicleSearch(v.vehicle_no, searchQuery) || tech.includes(q);
+    }).length;
+  }, [vehicles, searchQuery]);
 
   return {
     bays,

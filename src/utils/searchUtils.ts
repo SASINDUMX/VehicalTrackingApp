@@ -1,6 +1,6 @@
 export const normalizeSearchQuery = (str: string): string => {
   if (!str) return "";
-  return str.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return String(str).toLowerCase().replace(/[^a-z0-9]/g, "");
 };
 
 export const matchesVehicleSearch = (
@@ -8,11 +8,12 @@ export const matchesVehicleSearch = (
   searchQuery: string
 ): boolean => {
   if (!searchQuery || !searchQuery.trim()) return true;
+  if (!vehicleNo) return false;
   const q = normalizeSearchQuery(searchQuery);
   const normNo = normalizeSearchQuery(vehicleNo);
 
   return (
     normNo.includes(q) ||
-    vehicleNo.toLowerCase().includes(searchQuery.toLowerCase().trim())
+    String(vehicleNo).toLowerCase().includes(searchQuery.toLowerCase().trim())
   );
 };

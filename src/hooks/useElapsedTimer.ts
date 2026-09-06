@@ -18,7 +18,7 @@ export const useElapsedTimer = (startDateStr?: string | null): string => {
     const timeStr = formatDurationSec(netSec);
     const activeBreak = getCurrentActiveBreak(now);
     if (activeBreak) {
-      return `⏸ ${timeStr} (${activeBreak.name})`;
+      return `⏸ ${timeStr}`;
     }
     return timeStr;
   };

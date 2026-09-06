@@ -32,6 +32,7 @@ export interface ThemeColors {
   purpleDim: string;
   purpleBorder: string;
   danger: string;
+  dangerLight: string;
   dangerDim: string;
   dangerBorder: string;
   plateYellow: string;
@@ -128,6 +129,7 @@ export const DarkColors: ThemeColors = {
   purpleBorder: 'rgba(192, 132, 252, 0.3)',
 
   danger: '#ef4444',
+  dangerLight: '#f87171',
   dangerDim: 'rgba(239, 68, 68, 0.12)',
   dangerBorder: 'rgba(248, 113, 113, 0.3)',
 
@@ -228,6 +230,7 @@ export const LightColors: ThemeColors = {
   purpleBorder: 'rgba(124, 58, 237, 0.25)',
 
   danger: '#dc2626',
+  dangerLight: '#ef4444',
   dangerDim: 'rgba(220, 38, 38, 0.08)',
   dangerBorder: 'rgba(220, 38, 38, 0.25)',
 

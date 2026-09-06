@@ -1,5 +1,6 @@
 import { BayZone, UserRole } from '../types/vehicle';
-import { ThemeColors, DarkColors, Colors } from './theme';
+import { ThemeColors, Colors } from './theme';
+import { APP_TERMINOLOGY } from './terminology';
 
 export interface BayDefinition {
   id: BayZone;
@@ -10,10 +11,34 @@ export interface BayDefinition {
 }
 
 export const getBayDefinitions = (themeColors: ThemeColors = Colors): BayDefinition[] => [
-  { id: 'workshop', name: 'General Service Bay', code: 'BAY 01', color: themeColors.bayWorkshop, assignedRole: 'tech_workshop' },
-  { id: 'alignment', name: 'Wheel Alignment Bay', code: 'BAY 02', color: themeColors.bayAlignment, assignedRole: 'tech_alignment' },
-  { id: 'hoist', name: 'Hoist Service Bay', code: 'BAY 03', color: themeColors.bayHoist, assignedRole: 'tech_hoist' },
-  { id: 'inspection', name: 'Advisor Inspection Zone', code: 'FINAL', color: themeColors.bayInspection, assignedRole: 'advisor' },
+  {
+    id: 'workshop',
+    name: APP_TERMINOLOGY.stations.workshop.name,
+    code: APP_TERMINOLOGY.stations.workshop.code,
+    color: themeColors.bayWorkshop,
+    assignedRole: 'foreman',
+  },
+  {
+    id: 'alignment',
+    name: APP_TERMINOLOGY.stations.alignment.name,
+    code: APP_TERMINOLOGY.stations.alignment.code,
+    color: themeColors.bayAlignment,
+    assignedRole: 'foreman',
+  },
+  {
+    id: 'hoist',
+    name: APP_TERMINOLOGY.stations.hoist.name,
+    code: APP_TERMINOLOGY.stations.hoist.code,
+    color: themeColors.bayHoist,
+    assignedRole: 'foreman',
+  },
+  {
+    id: 'inspection',
+    name: APP_TERMINOLOGY.stations.inspection.name,
+    code: APP_TERMINOLOGY.stations.inspection.code,
+    color: themeColors.bayInspection,
+    assignedRole: 'advisor',
+  },
 ];
 
 export const BAY_DEFINITIONS: BayDefinition[] = getBayDefinitions(Colors);
@@ -29,21 +54,19 @@ export const getBayColor = (zone: BayZone, themeColors?: ThemeColors): string =>
   }
 };
 
-export const getTechName = (role: UserRole): string => {
-  switch (role) {
-    case 'tech_workshop': return 'Technician 1 (General Service)';
-    case 'tech_alignment': return 'Technician 2 (Alignment)';
-    case 'tech_hoist': return 'Technician 3 (Hoist)';
-    default: return 'Technician';
+export const getTechName = (role: UserRole, section?: string): string => {
+  if (role === 'foreman' && section) {
+    return `Foreman (${section.toUpperCase()})`;
   }
+  return APP_TERMINOLOGY.roles[role]?.title || 'Technician';
 };
 
-export const getRoleBay = (role: UserRole): BayZone => {
-  switch (role) {
-    case 'tech_workshop': return 'workshop';
-    case 'tech_hoist': return 'hoist';
-    case 'tech_alignment': return 'alignment';
-    case 'advisor': return 'inspection';
-    default: return 'workshop';
+export const getRoleBay = (role: UserRole, section?: string): BayZone => {
+  if (role === 'advisor') return 'inspection';
+  if (role === 'foreman') {
+    if (section === 'hoist') return 'hoist';
+    if (section === 'alignment') return 'alignment';
+    return 'workshop';
   }
+  return 'workshop';
 };

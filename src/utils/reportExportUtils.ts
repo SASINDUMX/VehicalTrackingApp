@@ -22,11 +22,11 @@ export interface ReportKPIs {
   workshopBay: BayKPI;
   alignmentBay: BayKPI;
   hoistBay: BayKPI;
-  // Legacy aliases if needed
-  totalBreakSeconds: number;
+  // Optional telemetry
+  totalBreakSeconds?: number;
 }
 
-export type DateFilterPreset = 'today' | 'yesterday' | '7days' | 'month' | 'all';
+export type DateFilterPreset = 'today' | 'yesterday' | '7days' | 'month' | '3months';
 export type StatusFilterPreset = 'all' | 'completed' | 'in_progress';
 
 export const formatDuration = (totalSeconds: number): string => {
@@ -49,6 +49,19 @@ export const formatDuration = (totalSeconds: number): string => {
  * Returns the effective completion date (either v.completed_at or the moment it entered the inspection zone).
  */
 export const getVehicleEffectiveCompletion = (v: Vehicle): { isEffectiveDone: boolean; effectiveCompletionDate: Date | null } => {
+  // Dispatched to inspection zone marks the definitive end of all vehicle time calculations
+  const inspLog = v.stage_logs.find(l => l.to_zone === 'inspection');
+  if (inspLog?.entered_at) {
+    const d = new Date(inspLog.entered_at);
+    if (!isNaN(d.getTime())) {
+      return { isEffectiveDone: true, effectiveCompletionDate: d };
+    }
+  }
+
+  if (v.current_zone === 'inspection') {
+    return { isEffectiveDone: true, effectiveCompletionDate: new Date() };
+  }
+
   if (v.is_finished && v.completed_at) {
     const d = new Date(v.completed_at);
     if (!isNaN(d.getTime())) {
@@ -56,25 +69,12 @@ export const getVehicleEffectiveCompletion = (v: Vehicle): { isEffectiveDone: bo
     }
   }
 
-  // If vehicle is in inspection or has an inspection log
-  if (v.current_zone === 'inspection') {
-    const inspLog = v.stage_logs.find(l => l.to_zone === 'inspection');
-    if (inspLog?.entered_at) {
-      const d = new Date(inspLog.entered_at);
-      if (!isNaN(d.getTime())) {
-        return { isEffectiveDone: true, effectiveCompletionDate: d };
-      }
-    }
-    // Fallback if no log found but current_zone is inspection
-    return { isEffectiveDone: true, effectiveCompletionDate: new Date() };
-  }
-
   return { isEffectiveDone: false, effectiveCompletionDate: null };
 };
 
 export const filterVehiclesForReport = (
   vehicles: Vehicle[],
-  datePreset: DateFilterPreset = 'all',
+  datePreset: DateFilterPreset = '3months',
   statusPreset: StatusFilterPreset = 'all'
 ): Vehicle[] => {
   const now = new Date();
@@ -82,6 +82,7 @@ export const filterVehiclesForReport = (
   const startOfYesterday = new Date(startOfToday.getTime() - 24 * 60 * 60 * 1000);
   const startOf7Days = new Date(startOfToday.getTime() - 7 * 24 * 60 * 60 * 1000);
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const startOf3Months = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate());
 
   return vehicles.filter(v => {
     // 1. Date Filter
@@ -92,6 +93,7 @@ export const filterVehiclesForReport = (
     if (datePreset === 'yesterday' && (intakeDate < startOfYesterday || intakeDate >= startOfToday)) return false;
     if (datePreset === '7days' && intakeDate < startOf7Days) return false;
     if (datePreset === 'month' && intakeDate < startOfMonth) return false;
+    if (datePreset === '3months' && intakeDate < startOf3Months) return false;
 
     // 2. Status Filter (Vehicles in inspection zone are treated as completed/ready)
     const { isEffectiveDone } = getVehicleEffectiveCompletion(v);
@@ -106,8 +108,7 @@ export const filterVehiclesForReport = (
  * Returns user-friendly date boundary description for a given preset, e.g. "05 Sep 2026" or "29 Aug – 05 Sep 2026".
  */
 export const getDatePresetRangeDescription = (
-  preset: DateFilterPreset,
-  vehicles?: Vehicle[]
+  preset: DateFilterPreset
 ): { label: string; rangeStr: string; isMultiDate: boolean } => {
   const now = new Date();
   const formatFullDate = (d: Date) =>
@@ -136,45 +137,16 @@ export const getDatePresetRangeDescription = (
       return { label: 'This Month', rangeStr: `${formatShortDate(firstOfMonth)} – ${todayStr}`, isMultiDate: true };
     }
 
-    case 'all': {
-      if (vehicles && vehicles.length > 0) {
-        const timestamps = vehicles
-          .map(v => new Date(v.intake_at || v.created_at).getTime())
-          .filter(t => !isNaN(t));
-        if (timestamps.length > 0) {
-          const earliest = new Date(Math.min(...timestamps));
-          return {
-            label: 'All Time',
-            rangeStr: `${formatShortDate(earliest)} – ${todayStr}`,
-            isMultiDate: true,
-          };
-        }
-      }
-      return { label: 'All Time', rangeStr: `Up to ${todayStr}`, isMultiDate: true };
+    case '3months': {
+      const past3Mo = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate());
+      return { label: 'Last 3 Months', rangeStr: `${formatShortDate(past3Mo)} – ${todayStr}`, isMultiDate: true };
     }
 
     default:
-      return { label: 'All Time', rangeStr: todayStr, isMultiDate: false };
+      return { label: 'Last 3 Months', rangeStr: todayStr, isMultiDate: false };
   }
 };
 
-export const getVehicleTotalPausedSeconds = (v: Vehicle): number => {
-  let total = 0;
-  v.stage_logs.forEach(l => {
-    if (l.paused_seconds && l.paused_seconds > 0) {
-      total += l.paused_seconds;
-    }
-  });
-
-  if (v.is_paused && v.paused_at) {
-    const pausedAtMs = new Date(v.paused_at).getTime();
-    if (!isNaN(pausedAtMs)) {
-      total += Math.max(0, Math.floor((Date.now() - pausedAtMs) / 1000));
-    }
-  }
-
-  return total;
-};
 
 export const calculateReportKPIs = (filteredVehicles: Vehicle[]): ReportKPIs => {
   const emptyBayKPI = (zone: BayZone, name: string): BayKPI => ({
@@ -229,27 +201,27 @@ export const calculateReportKPIs = (filteredVehicles: Vehicle[]): ReportKPIs => 
     const { breakSeconds } = getBreakOverlap(start, end);
     totalBreaks += breakSeconds;
 
-    // Workshop Bay (Only count officially dispatched stages)
+    // Workshop Bay (Only count officially completed AND dispatched vehicles)
     const workshopTiming = getStageTimingForZone(v, 'workshop');
-    if (workshopTiming.isDispatched) {
+    if (workshopTiming.isCompletedAndDispatched) {
       workshopVehicles++;
       workshopActive += workshopTiming.activeSec;
       workshopIdle += workshopTiming.idleSec;
       workshopStage += workshopTiming.totalSec;
     }
 
-    // Alignment Bay (Only count officially dispatched stages)
+    // Alignment Bay (Only count officially completed AND dispatched vehicles)
     const alignmentTiming = getStageTimingForZone(v, 'alignment');
-    if (alignmentTiming.isDispatched) {
+    if (alignmentTiming.isCompletedAndDispatched) {
       alignmentVehicles++;
       alignmentActive += alignmentTiming.activeSec;
       alignmentIdle += alignmentTiming.idleSec;
       alignmentStage += alignmentTiming.totalSec;
     }
 
-    // Hoist Bay (Only count officially dispatched stages)
+    // Hoist Bay (Only count officially completed AND dispatched vehicles)
     const hoistTiming = getStageTimingForZone(v, 'hoist');
-    if (hoistTiming.isDispatched) {
+    if (hoistTiming.isCompletedAndDispatched) {
       hoistVehicles++;
       hoistActive += hoistTiming.activeSec;
       hoistIdle += hoistTiming.idleSec;
@@ -325,6 +297,8 @@ export interface BayTelemetry {
   breakSec: number;
   totalSec: number;
   isDispatched: boolean;
+  isCompleted: boolean;
+  isCompletedAndDispatched: boolean;
 }
 
 export const getStageTimingForZone = (v: Vehicle, zone: BayZone): BayTelemetry => {
@@ -335,17 +309,17 @@ export const getStageTimingForZone = (v: Vehicle, zone: BayZone): BayTelemetry =
   let idleSec = 0;
   let breakSec = 0;
   let totalSec = 0;
-  let isDispatched = false;
+  let hasClosedLog = false;
 
-  // Find task corresponding to this zone to get work_completed_at
+  // Find task corresponding to this zone to get completion status and work_completed_at
   const bayTaskType = getTaskTypeForBay(zone);
   const currentTask = v.tasks.find(t => t.task_type === bayTaskType && t.is_required) || v.tasks.find(t => t.task_type === bayTaskType);
+  const isCompleted = Boolean(currentTask?.is_completed);
   const workCompletedAt = currentTask?.is_completed ? currentTask.completed_at : null;
 
   logs.forEach(l => {
-    // Stage is considered officially dispatched if exited_at is recorded or vehicle moved to a subsequent zone
-    if (l.exited_at || v.current_zone !== zone || v.is_finished) {
-      isDispatched = true;
+    if (l.exited_at) {
+      hasClosedLog = true;
     }
 
     const timing = getStageTiming(
@@ -373,14 +347,22 @@ export const getStageTimingForZone = (v: Vehicle, zone: BayZone): BayTelemetry =
     }
   });
 
-  return { queueInSec, activeSec, queueOutSec, idleSec, breakSec, totalSec, isDispatched };
+  // Dispatched requires a stamped exit log, or vehicle having moved on to a different zone
+  const isDispatched = hasClosedLog || (logs.length > 0 && v.current_zone !== zone);
+  const isCompletedAndDispatched = isCompleted && isDispatched;
+
+  return { queueInSec, activeSec, queueOutSec, idleSec, breakSec, totalSec, isDispatched, isCompleted, isCompletedAndDispatched };
 };
 
 export const getVehicleIdleAndActiveTotals = (v: Vehicle): { totalIdleSec: number; totalActiveSec: number } => {
   let totalIdleSec = 0;
   let totalActiveSec = 0;
 
-  v.stage_logs.forEach(l => {
+  // Filter strictly to working bays ('workshop' | 'alignment' | 'hoist').
+  // The 'inspection' zone represents the post-service completion stage and is never counted as bay idle/active time.
+  const workingBayLogs = v.stage_logs.filter(l => l.to_zone === 'workshop' || l.to_zone === 'alignment' || l.to_zone === 'hoist');
+
+  workingBayLogs.forEach(l => {
     const bayTaskType = getTaskTypeForBay(l.to_zone);
     const currentTask = v.tasks.find(t => t.task_type === bayTaskType && t.is_required) || v.tasks.find(t => t.task_type === bayTaskType);
     const workCompletedAt = currentTask?.is_completed ? currentTask.completed_at : null;
@@ -421,8 +403,8 @@ export const exportServiceLogsToCSV = (
   rows.push(`"Applied Filters: ${datePresetLabel}"`);
   rows.push(`"Total Records: ${vehicles.length}"`);
   if (kpis) {
-    rows.push(`"Summary: ${kpis.completedCount} Completed, ${kpis.inProgressCount} In Progress"`);
-    rows.push(`"Bay Velocity - Workshop: Gross Avg Time ${formatDuration(kpis.workshopBay.avgStageSec)}, Bay Avg Active Time ${formatDuration(kpis.workshopBay.avgActiveSec)} (${kpis.workshopBay.vehicleCount} vehicles) | Alignment: Gross Avg Time ${formatDuration(kpis.alignmentBay.avgStageSec)}, Bay Avg Active Time ${formatDuration(kpis.alignmentBay.avgActiveSec)} (${kpis.alignmentBay.vehicleCount} vehicles) | Hoist: Gross Avg Time ${formatDuration(kpis.hoistBay.avgStageSec)}, Bay Avg Active Time ${formatDuration(kpis.hoistBay.avgActiveSec)} (${kpis.hoistBay.vehicleCount} vehicles)"`);
+    rows.push(`"Summary: ${kpis.completedCount ?? 0} Completed, ${kpis.inProgressCount ?? 0} In Progress"`);
+    rows.push(`"Bay Velocity - Workshop: Gross Avg Time ${formatDuration(kpis.workshopBay?.avgStageSec ?? 0)}, Bay Avg Active Time ${formatDuration(kpis.workshopBay?.avgActiveSec ?? 0)} (${kpis.workshopBay?.vehicleCount ?? 0} vehicles) | Alignment: Gross Avg Time ${formatDuration(kpis.alignmentBay?.avgStageSec ?? 0)}, Bay Avg Active Time ${formatDuration(kpis.alignmentBay?.avgActiveSec ?? 0)} (${kpis.alignmentBay?.vehicleCount ?? 0} vehicles) | Hoist: Gross Avg Time ${formatDuration(kpis.hoistBay?.avgStageSec ?? 0)}, Bay Avg Active Time ${formatDuration(kpis.hoistBay?.avgActiveSec ?? 0)} (${kpis.hoistBay?.vehicleCount ?? 0} vehicles)"`);
   }
   rows.push(''); // Empty line
 
@@ -490,9 +472,7 @@ export const exportServiceLogsToCSV = (
     const start = new Date(v.intake_at || v.created_at);
     const end = effectiveCompletionDate ? effectiveCompletionDate : new Date();
     const grossSec = Math.max(0, Math.floor((end.getTime() - start.getTime()) / 1000));
-    const totalPausedSec = getVehicleTotalPausedSeconds(v);
-    const rawNetSec = getNetWorkingSeconds(start, end);
-    const netSec = Math.max(0, rawNetSec - totalPausedSec);
+    const netSec = getNetWorkingSeconds(start, end);
     const { breakSeconds } = getBreakOverlap(start, end);
 
     const workshopTiming = getStageTimingForZone(v, 'workshop');
@@ -581,9 +561,7 @@ export const exportServiceLogsToPDF = (
     const start = new Date(v.intake_at || v.created_at);
     const end = effectiveCompletionDate ? effectiveCompletionDate : new Date();
     const grossSec = Math.max(0, Math.floor((end.getTime() - start.getTime()) / 1000));
-    const totalPausedSec = getVehicleTotalPausedSeconds(v);
-    const rawNetSec = getNetWorkingSeconds(start, end);
-    const netSec = Math.max(0, rawNetSec - totalPausedSec);
+    const netSec = getNetWorkingSeconds(start, end);
     const { breakSeconds } = getBreakOverlap(start, end);
 
     const workshopTiming = getStageTimingForZone(v, 'workshop');
@@ -723,49 +701,49 @@ export const exportServiceLogsToPDF = (
               <div style="font-size: 8px; font-weight: 700; color: #64748b; letter-spacing: 0.3px;">COMPLETED JOBS</div>
             </div>
             <div style="margin-top: 4px; padding-top: 4px; border-top: 1px solid #e2e8f0; font-size: 8.5px; font-weight: 700; color: #64748b; text-align: center;">
-              ${kpis.totalVehicles} total vehicles
+              ${kpis.totalVehicles ?? 0} total vehicles
             </div>
           </div>
           <div class="kpi-card">
             <div class="kpi-label" style="color: #0284c7;">Workshop</div>
             <div style="margin-top: 4px;">
-              <div style="font-size: 14px; font-weight: 900; color: #0284c7;">${formatDuration(kpis.workshopBay.avgStageSec)}</div>
+              <div style="font-size: 14px; font-weight: 900; color: #0284c7;">${formatDuration(kpis.workshopBay?.avgStageSec ?? 0)}</div>
               <div style="font-size: 8px; font-weight: 700; color: #64748b; letter-spacing: 0.3px;">GROSS AVG TIME</div>
             </div>
             <div style="margin-top: 4px; padding-top: 4px; border-top: 1px solid #e2e8f0;">
-              <div style="font-size: 12px; font-weight: 800; color: #16a34a;">${formatDuration(kpis.workshopBay.avgActiveSec)}</div>
+              <div style="font-size: 12px; font-weight: 800; color: #16a34a;">${formatDuration(kpis.workshopBay?.avgActiveSec ?? 0)}</div>
               <div style="font-size: 8px; font-weight: 700; color: #64748b; letter-spacing: 0.3px;">BAY AVG ACTIVE TIME</div>
             </div>
             <div style="margin-top: 4px; padding-top: 4px; border-top: 1px solid #e2e8f0; font-size: 8.5px; font-weight: 700; color: #64748b; text-align: center;">
-              ${kpis.workshopBay.vehicleCount} vehicles
+              ${kpis.workshopBay?.vehicleCount ?? 0} vehicles
             </div>
           </div>
           <div class="kpi-card">
             <div class="kpi-label" style="color: #16a34a;">Alignment</div>
             <div style="margin-top: 4px;">
-              <div style="font-size: 14px; font-weight: 900; color: #16a34a;">${formatDuration(kpis.alignmentBay.avgStageSec)}</div>
+              <div style="font-size: 14px; font-weight: 900; color: #16a34a;">${formatDuration(kpis.alignmentBay?.avgStageSec ?? 0)}</div>
               <div style="font-size: 8px; font-weight: 700; color: #64748b; letter-spacing: 0.3px;">GROSS AVG TIME</div>
             </div>
             <div style="margin-top: 4px; padding-top: 4px; border-top: 1px solid #e2e8f0;">
-              <div style="font-size: 12px; font-weight: 800; color: #16a34a;">${formatDuration(kpis.alignmentBay.avgActiveSec)}</div>
+              <div style="font-size: 12px; font-weight: 800; color: #16a34a;">${formatDuration(kpis.alignmentBay?.avgActiveSec ?? 0)}</div>
               <div style="font-size: 8px; font-weight: 700; color: #64748b; letter-spacing: 0.3px;">BAY AVG ACTIVE TIME</div>
             </div>
             <div style="margin-top: 4px; padding-top: 4px; border-top: 1px solid #e2e8f0; font-size: 8.5px; font-weight: 700; color: #64748b; text-align: center;">
-              ${kpis.alignmentBay.vehicleCount} vehicles
+              ${kpis.alignmentBay?.vehicleCount ?? 0} vehicles
             </div>
           </div>
           <div class="kpi-card">
             <div class="kpi-label" style="color: #d97706;">Hoist</div>
             <div style="margin-top: 4px;">
-              <div style="font-size: 14px; font-weight: 900; color: #d97706;">${formatDuration(kpis.hoistBay.avgStageSec)}</div>
+              <div style="font-size: 14px; font-weight: 900; color: #d97706;">${formatDuration(kpis.hoistBay?.avgStageSec ?? 0)}</div>
               <div style="font-size: 8px; font-weight: 700; color: #64748b; letter-spacing: 0.3px;">GROSS AVG TIME</div>
             </div>
             <div style="margin-top: 4px; padding-top: 4px; border-top: 1px solid #e2e8f0;">
-              <div style="font-size: 12px; font-weight: 800; color: #16a34a;">${formatDuration(kpis.hoistBay.avgActiveSec)}</div>
+              <div style="font-size: 12px; font-weight: 800; color: #16a34a;">${formatDuration(kpis.hoistBay?.avgActiveSec ?? 0)}</div>
               <div style="font-size: 8px; font-weight: 700; color: #64748b; letter-spacing: 0.3px;">BAY AVG ACTIVE TIME</div>
             </div>
             <div style="margin-top: 4px; padding-top: 4px; border-top: 1px solid #e2e8f0; font-size: 8.5px; font-weight: 700; color: #64748b; text-align: center;">
-              ${kpis.hoistBay.vehicleCount} vehicles
+              ${kpis.hoistBay?.vehicleCount ?? 0} vehicles
             </div>
           </div>
         </div>

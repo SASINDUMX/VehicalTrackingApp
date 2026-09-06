@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet, TextInput, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, TextInput, Platform } from 'react-native';
 import { useVehicles } from '../../context/VehicleContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { BayZone, TaskType, Vehicle } from '../../types/vehicle';
 import { 
-  X, Wrench, Shield, Navigation, Pencil, Save, CheckSquare, Square, Lock, 
-  Clock, CheckCircle2, Circle, ArrowRight, UserCheck, Calendar, Trash2, AlertTriangle, Droplets
+  Wrench, Navigation, Pencil, Save, 
+  Clock, CheckCircle2, Trash2, AlertTriangle, Droplets
 } from 'lucide-react-native';
 
 import { LicensePlate } from './LicensePlate';
@@ -13,10 +13,13 @@ import { StatusPill } from './StatusPill';
 import { BaseModal } from './BaseModal';
 import { ConfirmModal } from './ConfirmModal';
 import { VehicleNotePill } from './VehicleNotePill';
-import { getStageDurationBreakdown, formatDurationString, getActiveStageNetSeconds, getTaskTypeForBay, getVehicleEffectiveEndDate } from '../../utils/vehicleUtils';
-import { getNetWorkingSeconds, getCurrentActiveBreak } from '../../utils/workshopHoursUtils';
+import { TaskSelectorChips } from './TaskSelectorChips';
+import { UrgentToggleInput } from './UrgentToggleInput';
+import { computeVehicleModalTimers } from '../../utils/vehicleUtils';
+import { computeVehicleTimelineStages } from '../../utils/timelineUtils';
 import { useTheme } from '../../context/ThemeContext';
 import { getBayDefinitions } from '../../constants/bays';
+import { APP_TERMINOLOGY } from '../../constants/terminology';
 
 const STAGE_ICONS: Record<BayZone, any> = {
   workshop: Wrench,
@@ -34,57 +37,11 @@ const getStageOrder = (colors?: any) =>
     color: bay.color,
   }));
 
-const calculateTimers = (vehicle: Vehicle) => {
-  const now = new Date();
-  const effectiveEnd = getVehicleEffectiveEndDate(vehicle);
-
-  // Net & Gross Elapsed Time since Intake (stops when entering inspection zone or finished)
-  const rawNetSec = getNetWorkingSeconds(vehicle.intake_at, effectiveEnd);
-  const totalPausedSec = vehicle.stage_logs.reduce((sum, l) => sum + (l.paused_seconds || 0), 0) +
-    (vehicle.is_paused && vehicle.paused_at ? Math.max(0, Math.floor((effectiveEnd.getTime() - new Date(vehicle.paused_at).getTime()) / 1000)) : (vehicle.paused_seconds || 0));
-  const netSec = Math.max(0, rawNetSec - totalPausedSec);
-  const grossSec = Math.max(0, Math.floor((effectiveEnd.getTime() - new Date(vehicle.intake_at).getTime()) / 1000));
-
-  let stageDuration = '0m 00s';
-  const lastLog = vehicle.stage_logs[vehicle.stage_logs.length - 1];
-
-  if (vehicle.current_zone === 'inspection') {
-    stageDuration = 'READY';
-  } else if (lastLog && !lastLog.exited_at) {
-    const bayTaskType = getTaskTypeForBay(vehicle.current_zone);
-    const currentTask = vehicle.tasks.find(t => t.task_type === bayTaskType && t.is_required) || vehicle.tasks.find(t => t.task_type === bayTaskType);
-
-    if (!lastLog.work_started_at) {
-      const enterMs = new Date(lastLog.entered_at).getTime();
-      const idleSec = Math.max(0, Math.floor((now.getTime() - enterMs) / 1000));
-      stageDuration = `IDLE · ${formatDurationString(idleSec, true)}`;
-    } else if (currentTask && currentTask.is_completed && currentTask.completed_at) {
-      const completedMs = new Date(currentTask.completed_at).getTime();
-      const postIdleSec = Math.max(0, Math.floor((now.getTime() - completedMs) / 1000));
-      stageDuration = `IDLE · ${formatDurationString(postIdleSec, true)}`;
-    } else {
-      const workStartMs = new Date(lastLog.work_started_at).getTime();
-      const activeSec = Math.max(0, Math.floor((now.getTime() - workStartMs) / 1000));
-      const timeStr = formatDurationString(activeSec, true);
-      const activeBreak = getCurrentActiveBreak(now);
-      if (activeBreak) {
-        stageDuration = `⏸ ${timeStr} (${activeBreak.name})`;
-      } else {
-        stageDuration = timeStr;
-      }
-    }
-  }
-
-  return {
-    totalElapsedStr: formatDurationString(netSec, true),
-    grossElapsedStr: formatDurationString(grossSec, true),
-    activeStageDuration: stageDuration,
-  };
-};
+const calculateTimers = (vehicle: Vehicle) => computeVehicleModalTimers(vehicle);
 
 export const VehicleDetailsModal: React.FC = () => {
   const { selectedVehicle, setSelectedVehicle, transferVehicleZone, updateVehicleJobOrder, deleteVehicle, updateUrgency } = useVehicles();
-  const { canRelocateVehicle, canAddVehicle, canDeleteVehicle, displayName } = usePermissions();
+  const { canRelocateVehicle, canAddVehicle, canDeleteVehicle, canEditRemarks, canSetUrgent, displayName } = usePermissions();
   const { colors, isDark } = useTheme();
 
   const [isEditing, setIsEditing] = useState<boolean>(false);
@@ -158,136 +115,7 @@ export const VehicleDetailsModal: React.FC = () => {
   // NOTE: must be declared BEFORE the early return to satisfy React Rules of Hooks
   const timelineStagesData = useMemo(() => {
     if (!selectedVehicle) return [];
-
-    const requiredTaskTypes = selectedVehicle.tasks
-      .filter(t => t.is_required)
-      .map(t => t.task_type);
-
-    const isWorkshopReq = requiredTaskTypes.includes('general_service');
-    const isAlignmentReq = requiredTaskTypes.includes('wheel_alignment');
-    const isHoistReq = requiredTaskTypes.includes('hoist_service');
-
-    const isRequiredForZone = (zone: BayZone) => {
-      if (zone === 'workshop') return isWorkshopReq;
-      if (zone === 'alignment') return isAlignmentReq;
-      if (zone === 'hoist') return isHoistReq;
-      if (zone === 'inspection') return true;
-      return false;
-    };
-
-    const masterStages = getStageOrder(colors).map(s => ({
-      ...s,
-      isRequired: isRequiredForZone(s.zone),
-    }));
-
-    // Filter only required stages or stages already visited/active
-    const relevantStages = masterStages.filter(s => {
-      const hasLogs = selectedVehicle.stage_logs.some(l => l.to_zone === s.zone);
-      const isCurrent = selectedVehicle.current_zone === s.zone;
-      return s.isRequired || hasLogs || isCurrent;
-    });
-
-    // Strictly sort: 1. Completed (visited & exited) -> 2. Active Current -> 3. Upcoming (Pending)
-    const completedNodes: typeof relevantStages = [];
-    let activeNode: typeof relevantStages[0] | null = null;
-    const pendingNodes: typeof relevantStages = [];
-
-    const currentZoneInner = selectedVehicle.current_zone;
-    relevantStages.forEach(s => {
-      const isCurrent = currentZoneInner === s.zone;
-      const logsForZone = selectedVehicle.stage_logs.filter(l => l.to_zone === s.zone);
-      const hasExitedAll = logsForZone.length > 0 && logsForZone.every(l => Boolean(l.exited_at));
-
-      if (isCurrent) {
-        activeNode = s;
-      } else if (hasExitedAll && !isCurrent) {
-        completedNodes.push(s);
-      } else {
-        pendingNodes.push(s);
-      }
-    });
-
-    const orderedTimelineNodes = [...completedNodes];
-    if (activeNode) {
-      orderedTimelineNodes.push(activeNode);
-    }
-    orderedTimelineNodes.push(...pendingNodes);
-
-    return orderedTimelineNodes.map((stageDef, idx) => {
-      const isCurrent = currentZoneInner === stageDef.zone;
-      const logsForZone = selectedVehicle.stage_logs.filter(l => l.to_zone === stageDef.zone);
-      const hasVisited = logsForZone.length > 0;
-      const hasExitedAll = hasVisited && logsForZone.every(l => Boolean(l.exited_at));
-      const isCompleted = hasExitedAll && !isCurrent;
-      const isLastInOrder = idx === orderedTimelineNodes.length - 1;
-
-      const isInspection = stageDef.zone === 'inspection';
-
-      // Inspection zone has zero labor machinery: short-circuit cleanly
-      if (isInspection) {
-        return {
-          stageDef,
-          isCurrent,
-          logsForZone,
-          isCompleted,
-          isCancelled: false,
-          isLastInOrder,
-          isInspection: true,
-          isStageIdle: false,
-          spentStr: '',
-          breakNotes: [],
-          queueNotes: [],
-          workCompletedAt: null,
-        };
-      }
-
-      const bayTaskType = getTaskTypeForBay(stageDef.zone);
-      const currentTask = selectedVehicle.tasks.find(t => t.task_type === bayTaskType && t.is_required) || selectedVehicle.tasks.find(t => t.task_type === bayTaskType);
-      const workCompletedAt = currentTask?.is_completed ? currentTask.completed_at : null;
-
-      const latestLog = logsForZone[logsForZone.length - 1];
-      const isStageIdle = Boolean(
-        isCurrent && latestLog && !latestLog.exited_at && (!latestLog.work_started_at || Boolean(workCompletedAt))
-      );
-
-      let totalNetSec = 0;
-      const breakNotes: string[] = [];
-      const queueNotes: string[] = [];
-
-      logsForZone.forEach(l => {
-        const breakdown = getStageDurationBreakdown(
-          l.entered_at,
-          l.exited_at,
-          false,
-          null,
-          0,
-          l.work_started_at,
-          l.idle_seconds,
-          workCompletedAt
-        );
-        totalNetSec += breakdown.netSec;
-        if (breakdown.breakNote) breakNotes.push(breakdown.breakNote);
-        if (breakdown.queueNote) queueNotes.push(breakdown.queueNote);
-      });
-
-      const spentStr = isCurrent ? activeStageDuration : formatDurationString(totalNetSec, true);
-      const isCancelled = stageDef.zone !== 'inspection' && !isCurrent && !isCompleted && (currentZoneInner === 'inspection' || selectedVehicle.is_finished);
-
-      return {
-        stageDef,
-        isCurrent,
-        logsForZone,
-        isCompleted,
-        isCancelled,
-        isLastInOrder,
-        isInspection: false,
-        isStageIdle,
-        spentStr,
-        breakNotes,
-        queueNotes,
-        workCompletedAt,
-      };
-    });
+    return computeVehicleTimelineStages(selectedVehicle, getStageOrder(colors), activeStageDuration);
   }, [selectedVehicle, colors, activeStageDuration]);
 
   if (!selectedVehicle) return null;
@@ -322,8 +150,21 @@ export const VehicleDetailsModal: React.FC = () => {
   const handleSaveJobOrder = async () => {
     setIsSubmitting(true);
     try {
-      await updateVehicleJobOrder(selectedVehicle.id, selectedTasks, remarks);
-      await updateUrgency(selectedVehicle.id, localIsUrgent, localIsUrgent ? localUrgentNote : null);
+      // Only Master Access can alter job order tasks
+      // Non-master roles retain the original required tasks while saving remarks/urgency
+      const tasksToSave = canAddVehicle 
+        ? selectedTasks 
+        : selectedVehicle.tasks.filter(t => t.is_required).map(t => t.task_type);
+
+      const remarksToSave = canEditRemarks ? remarks : (selectedVehicle.remarks || '');
+
+      const urgencyData = canSetUrgent
+        ? { is_urgent: localIsUrgent, urgent_note: localIsUrgent ? (localUrgentNote?.trim() || null) : null }
+        : undefined;
+
+      // Single consolidated save: updates remarks, urgency, and only changed tasks in 1 batch
+      await updateVehicleJobOrder(selectedVehicle.id, tasksToSave, remarksToSave, urgencyData);
+
       setIsEditing(false);
       setSelectedVehicle(null);
     } catch (err) {
@@ -347,7 +188,7 @@ export const VehicleDetailsModal: React.FC = () => {
           </View>
         }
         headerRight={
-          canAddVehicle && !isEditing ? (
+          (canAddVehicle || canEditRemarks || canSetUrgent) && !isEditing ? (
             <TouchableOpacity
               style={[styles.editPencilBtn, { backgroundColor: colors.primaryDim, borderColor: colors.primaryBorder }]}
               onPress={() => setIsEditing(true)}
@@ -381,7 +222,7 @@ export const VehicleDetailsModal: React.FC = () => {
                 activeOpacity={isSubmitting ? 1 : 0.7}
               >
                 <Save size={16} color="#ffffff" />
-                <Text style={styles.saveEditText}>{isSubmitting ? 'Saving...' : 'Save Job Order'}</Text>
+                <Text style={styles.saveEditText}>{isSubmitting ? APP_TERMINOLOGY.actions.saving : APP_TERMINOLOGY.actions.saveJobOrder}</Text>
               </TouchableOpacity>
             </View>
           ) : (
@@ -423,195 +264,52 @@ export const VehicleDetailsModal: React.FC = () => {
             {isEditing ? (
               /* --- EDIT JOB ORDER FORM MODE --- */
               <View style={styles.editContainer}>
-                <Text style={styles.editSectionTitle}>EDIT WORKSHOP TASKS:</Text>
-                <Text style={styles.editSubText}>
-                  Tasks completed by technicians are locked and preserved.
-                </Text>
+                {canAddVehicle && (
+                  <TaskSelectorChips
+                    selectedTasks={selectedTasks}
+                    onToggleTask={toggleTask}
+                    completedTasks={completedTaskTypes}
+                    title="EDIT WORKSHOP TASKS:"
+                    subTitle="Tasks completed by technicians are locked and preserved."
+                  />
+                )}
 
-                <View style={styles.tasksRow}>
-                  {/* General Service */}
-                  {(() => {
-                    const isCompleted = completedTaskTypes.includes('general_service');
-                    const isSelected = selectedTasks.includes('general_service');
-                    return (
-                      <TouchableOpacity
-                        style={[
-                          styles.taskChip,
-                          {
-                            backgroundColor: isSelected 
-                              ? colors.bayWorkshopDim 
-                              : isCompleted 
-                              ? colors.successDim 
-                              : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
-                            borderColor: isSelected 
-                              ? colors.bayWorkshop 
-                              : isCompleted 
-                              ? colors.successBorder 
-                              : colors.borderGlass
-                          }
-                        ]}
-                        onPress={() => { if (!isCompleted) toggleTask('general_service'); }}
-                        activeOpacity={isCompleted ? 1 : 0.7}
-                      >
-                        {isCompleted ? (
-                          <>
-                            <CheckSquare size={16} color={colors.success} />
-                            <Text style={[styles.lockedTaskText, { color: colors.success }]}>General Service (Done ✓)</Text>
-                            <Lock size={12} color={colors.success} />
-                          </>
-                        ) : (
-                          <>
-                            {isSelected ? <CheckSquare size={16} color={colors.bayWorkshopLight} /> : <Square size={16} color={colors.textMuted} />}
-                            <Text style={[styles.chipText, { color: isSelected ? colors.textPrimary : colors.textSecondary }]}>General Service</Text>
-                          </>
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })()}
+                {/* Urgency Section — Edit Mode (Advisors, Workshop Manager, Master Access) */}
+                {canSetUrgent && (
+                  <View style={styles.remarksEditGroup}>
+                    <UrgentToggleInput
+                      isUrgent={localIsUrgent}
+                      onToggleUrgent={setLocalIsUrgent}
+                      urgentNote={localUrgentNote}
+                      onChangeUrgentNote={setLocalUrgentNote}
+                      title={APP_TERMINOLOGY.urgency.sectionTitle}
+                      placeholder={APP_TERMINOLOGY.urgency.placeholder}
+                    />
+                  </View>
+                )}
 
-                  {/* Wheel Alignment */}
-                  {(() => {
-                    const isCompleted = completedTaskTypes.includes('wheel_alignment');
-                    const isSelected = selectedTasks.includes('wheel_alignment');
-                    return (
-                      <TouchableOpacity
-                        style={[
-                          styles.taskChip,
-                          {
-                            backgroundColor: isSelected 
-                              ? colors.bayAlignmentDim 
-                              : isCompleted 
-                              ? colors.successDim 
-                              : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
-                            borderColor: isSelected 
-                              ? colors.bayAlignment 
-                              : isCompleted 
-                              ? colors.successBorder 
-                              : colors.borderGlass
-                          }
-                        ]}
-                        onPress={() => { if (!isCompleted) toggleTask('wheel_alignment'); }}
-                        activeOpacity={isCompleted ? 1 : 0.7}
-                      >
-                        {isCompleted ? (
-                          <>
-                            <CheckSquare size={16} color={colors.success} />
-                            <Text style={[styles.lockedTaskText, { color: colors.success }]}>Wheel Alignment (Done ✓)</Text>
-                            <Lock size={12} color={colors.success} />
-                          </>
-                        ) : (
-                          <>
-                            {isSelected ? <CheckSquare size={16} color={colors.bayAlignmentLight} /> : <Square size={16} color={colors.textMuted} />}
-                            <Text style={[styles.chipText, { color: isSelected ? colors.textPrimary : colors.textSecondary }]}>Wheel Alignment</Text>
-                          </>
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })()}
-
-                  {/* Hoist Service */}
-                  {(() => {
-                    const isCompleted = completedTaskTypes.includes('hoist_service');
-                    const isSelected = selectedTasks.includes('hoist_service');
-                    return (
-                      <TouchableOpacity
-                        style={[
-                          styles.taskChip,
-                          {
-                            backgroundColor: isSelected 
-                              ? colors.bayHoistDim 
-                              : isCompleted 
-                              ? colors.successDim 
-                              : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
-                            borderColor: isSelected 
-                              ? colors.bayHoist 
-                              : isCompleted 
-                              ? colors.successBorder 
-                              : colors.borderGlass
-                          }
-                        ]}
-                        onPress={() => { if (!isCompleted) toggleTask('hoist_service'); }}
-                        activeOpacity={isCompleted ? 1 : 0.7}
-                      >
-                        {isCompleted ? (
-                          <>
-                            <CheckSquare size={16} color={colors.success} />
-                            <Text style={[styles.lockedTaskText, { color: colors.success }]}>Hoist Service (Done ✓)</Text>
-                            <Lock size={12} color={colors.success} />
-                          </>
-                        ) : (
-                          <>
-                            {isSelected ? <CheckSquare size={16} color={colors.bayHoistLight} /> : <Square size={16} color={colors.textMuted} />}
-                            <Text style={[styles.chipText, { color: isSelected ? colors.textPrimary : colors.textSecondary }]}>Hoist Service</Text>
-                          </>
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })()}
-                </View>
-
-                {/* Urgency Section — Edit Mode */}
-                <View style={styles.remarksEditGroup}>
-                  <Text style={[styles.editSectionTitle, { color: colors.textSecondary }]}>VEHICLE PRIORITY / URGENCY:</Text>
-                  <TouchableOpacity
-                    style={[
-                      styles.urgencyToggleCard,
-                      {
-                        borderColor: localIsUrgent ? colors.dangerBorder : colors.borderGlass,
-                        backgroundColor: localIsUrgent ? colors.dangerDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)')
-                      }
-                    ]}
-                    onPress={() => setLocalIsUrgent(!localIsUrgent)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.urgencyToggleRow}>
-                      <AlertTriangle size={16} color={localIsUrgent ? colors.danger : colors.textMuted} />
-                      <Text style={[styles.urgencyToggleLabel, { color: localIsUrgent ? colors.danger : colors.textSecondary }]}>
-                        {localIsUrgent ? '⚡ URGENT VEHICLE — Priority Flagged' : 'Mark as Urgent Vehicle'}
-                      </Text>
-                    </View>
-                    {localIsUrgent && <CheckSquare size={16} color={colors.danger} />}
-                  </TouchableOpacity>
-
-                  {localIsUrgent && (
+                {/* Remarks Section — Edit Mode (Advisors, Workshop Manager, Foremen, Master Access) */}
+                {canEditRemarks && (
+                  <View style={styles.remarksEditGroup}>
+                    <Text style={[styles.editSectionTitle, { color: colors.textSecondary }]}>UPDATE REMARKS / INSTRUCTIONS:</Text>
                     <TextInput
                       style={[
                         styles.textAreaInput,
                         {
                           backgroundColor: isDark ? 'rgba(0, 0, 0, 0.2)' : 'rgba(0, 0, 0, 0.04)',
-                          borderColor: 'rgba(239, 68, 68, 0.4)',
+                          borderColor: colors.borderGlass,
                           color: colors.textPrimary,
                         }
                       ]}
-                      value={localUrgentNote}
-                      onChangeText={setLocalUrgentNote}
-                      placeholder="Add urgent note (e.g. Customer waiting in lounge, delivery by 11:30 AM)..."
+                      placeholder="Enter updated customer requests or service notes..."
                       placeholderTextColor={colors.textMuted}
+                      value={remarks}
+                      onChangeText={setRemarks}
                       multiline
                       numberOfLines={3}
                     />
-                  )}
-                </View>
-
-                <View style={styles.remarksEditGroup}>
-                  <Text style={[styles.editSectionTitle, { color: colors.textSecondary }]}>UPDATE REMARKS / INSTRUCTIONS:</Text>
-                  <TextInput
-                    style={[
-                      styles.textAreaInput,
-                      {
-                        backgroundColor: isDark ? 'rgba(0, 0, 0, 0.2)' : 'rgba(0, 0, 0, 0.04)',
-                        borderColor: colors.borderGlass,
-                        color: colors.textPrimary,
-                      }
-                    ]}
-                    placeholder="Enter updated customer requests or service notes..."
-                    placeholderTextColor={colors.textMuted}
-                    value={remarks}
-                    onChangeText={setRemarks}
-                    multiline
-                    numberOfLines={3}
-                  />
-                </View>
+                  </View>
+                )}
               </View>
             ) : (
               /* --- HIGH-TECH STEPPER TIMELINE STAGE AUDIT MODE --- */
@@ -722,7 +420,7 @@ export const VehicleDetailsModal: React.FC = () => {
                           {isInspection ? (
                             /* Final Inspection: Pure, minimal dispatch entry */
                             logsForZone[0] ? (
-                              <Text style={styles.logSubText}>
+                              <Text style={[styles.logSubText, { color: colors.textSecondary }]}>
                                 • Entered {formatSLSTime(logsForZone[0].entered_at)}
                               </Text>
                             ) : null
@@ -750,11 +448,11 @@ export const VehicleDetailsModal: React.FC = () => {
 
                                 return (
                                   <View key={lIdx} style={styles.logSubRowContainer}>
-                                    <Text style={styles.logSubText}>
+                                    <Text style={[styles.logSubText, { color: colors.textSecondary }]}>
                                       {entryStartStr}
                                     </Text>
                                     {finishExitStr && (
-                                      <Text style={styles.logSubText}>
+                                      <Text style={[styles.logSubText, { color: colors.textSecondary }]}>
                                         {finishExitStr}
                                       </Text>
                                     )}
@@ -764,16 +462,35 @@ export const VehicleDetailsModal: React.FC = () => {
 
                               {/* Break Deductions & Active/Idle Subtext */}
                               {breakNotes.map((note, nIdx) => (
-                                <Text key={`bn-${nIdx}`} style={styles.breakNoteSubText}>
+                                <Text key={`bn-${nIdx}`} style={[styles.breakNoteSubText, { color: colors.warningLight }]}>
                                   {note}
                                 </Text>
                               ))}
 
-                              {queueNotes.map((note, qIdx) => (
-                                <Text key={`qn-${qIdx}`} style={styles.queueNoteSubText}>
-                                  {note}
-                                </Text>
-                              ))}
+                              {queueNotes.map((note, qIdx) => {
+                                const parts = note.split(' · ');
+                                return (
+                                  <View key={`qn-${qIdx}`} style={styles.queueNoteRow}>
+                                    {parts.map((part, pIdx) => {
+                                      const isActive = part.startsWith('Active:');
+                                      const isIdle = part.startsWith('Idle:');
+                                      return (
+                                        <React.Fragment key={pIdx}>
+                                          {pIdx > 0 && <Text style={{ color: colors.textMuted, fontSize: 11 }}> · </Text>}
+                                          <Text
+                                            style={[
+                                              styles.queueNoteSubText,
+                                              { color: isActive ? colors.primaryLight : isIdle ? colors.warningLight : colors.textSecondary }
+                                            ]}
+                                          >
+                                            {part}
+                                          </Text>
+                                        </React.Fragment>
+                                      );
+                                    })}
+                                  </View>
+                                );
+                              })}
                             </>
                           )}
                         </View>
@@ -789,7 +506,7 @@ export const VehicleDetailsModal: React.FC = () => {
       {/* Delete Confirmation Dialog */}
       <ConfirmModal
         visible={showDeleteConfirm}
-        title="Delete Job Sheet?"
+        title={APP_TERMINOLOGY.actions.deleteJobSheet}
         subtitle="Permanent Action"
         confirmVariant="danger"
         icon={<AlertTriangle size={20} color={colors.danger} />}
@@ -814,117 +531,54 @@ export const VehicleDetailsModal: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', padding: 16, ...(Platform.OS === 'web' ? { backdropFilter: 'blur(8px)', transition: 'opacity 100ms ease-out', animationDuration: '100ms' } as any : {}) },
-  modalCard: { backgroundColor: '#0f172a', borderRadius: 24, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', maxHeight: '90%', ...(Platform.OS === 'web' ? { boxShadow: '0px 10px 20px rgba(0, 0, 0, 0.5)', transition: 'transform 100ms ease-out, opacity 100ms ease-out', animationDuration: '100ms' } as any : { shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.5, shadowRadius: 20, elevation: 10 }) },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
   headerLeftRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  headerRightRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  plateBadge: { backgroundColor: '#facc15', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: '#eab308' },
-  plateText: { color: '#000000', fontWeight: '800', fontSize: 16, letterSpacing: 0.5 },
   footerStandardRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, width: '100%' },
   footerRightButtons: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   deleteBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, borderWidth: 1 },
   deleteBtnText: { fontSize: 12, fontWeight: '700' },
-  totalTimePill: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(14, 165, 233, 0.12)', borderWidth: 1, borderColor: 'rgba(14, 165, 233, 0.3)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, flexShrink: 1 },
+  totalTimePill: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, flexShrink: 1 },
   totalTimeTextCol: { gap: 1 },
-  totalTimeText: { color: '#38bdf8', fontSize: 12, fontWeight: '700' },
-  grossTimeSubText: { color: '#94a3b8', fontSize: 10.5, fontWeight: '500' },
-  editPencilBtn: { backgroundColor: 'rgba(14, 165, 233, 0.15)', borderWidth: 1, borderColor: 'rgba(14, 165, 233, 0.3)', padding: 8, borderRadius: 20 },
-  closeBtnIcon: { backgroundColor: 'rgba(255, 255, 255, 0.05)', padding: 8, borderRadius: 20 },
-  body: { padding: 20 },
+  totalTimeText: { fontSize: 12, fontWeight: '700' },
+  grossTimeSubText: { fontSize: 10.5, fontWeight: '500' },
+  editPencilBtn: { borderWidth: 1, padding: 8, borderRadius: 20 },
   bodyContent: { gap: 16 },
-  footer: { padding: 16, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)', width: '100%' },
-  closeBtn: { backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 18, paddingVertical: 10, borderRadius: 10, flexShrink: 0 },
-  closeText: { color: '#ffffff', fontWeight: '700', fontSize: 13 },
-
-  // Confirmation Modal Styles
-  confirmOverlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, justifyContent: 'center', alignItems: 'center', zIndex: 9999, padding: 16 },
-  confirmBackdrop: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0, 0, 0, 0.75)', ...(Platform.OS === 'web' ? { position: 'fixed' as any } : {}) },
-  confirmCard: { width: '100%', maxWidth: 420, borderRadius: 18, borderWidth: 1, padding: 20, gap: 16, zIndex: 10000, ...(Platform.OS === 'web' ? ({ boxShadow: '0px 12px 30px rgba(0, 0, 0, 0.6)' } as any) : { elevation: 12 }) },
-  confirmHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  confirmIconCircle: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
-  confirmTitleGroup: { flex: 1 },
-  confirmTitle: { fontSize: 16, fontWeight: '800' },
-  confirmSub: { fontSize: 11, fontWeight: '600', marginTop: 1 },
+  closeBtn: { paddingHorizontal: 18, paddingVertical: 10, borderRadius: 10, flexShrink: 0 },
+  closeText: { fontWeight: '700', fontSize: 13 },
   confirmBodyText: { fontSize: 13, lineHeight: 20 },
   confirmBoldPlate: { fontWeight: '800' },
-  confirmBtnRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 10, marginTop: 4 },
-  confirmCancelBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, borderWidth: 1 },
-  confirmCancelText: { fontSize: 13, fontWeight: '600' },
-  confirmDeleteBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 8 },
-  confirmDeleteBtnText: { color: '#ffffff', fontSize: 13, fontWeight: '800' },
 
   /* Stepper Timeline Audit Styles */
   stepperContainer: { gap: 16 },
-  remarksBox: { backgroundColor: 'rgba(255, 255, 255, 0.03)', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.08)', padding: 12, borderRadius: 12, gap: 4 },
-  remarksLabel: { color: '#64748b', fontSize: 10, fontWeight: '700', letterSpacing: 1 },
-  remarksText: { color: '#e2e8f0', fontSize: 13, fontStyle: 'italic' },
-  stepperTitle: { color: '#94a3b8', fontSize: 11, fontWeight: '700', letterSpacing: 1 },
+  stepperTitle: { fontSize: 11, fontWeight: '700', letterSpacing: 1 },
   timelineList: { gap: 0 },
   timelineItem: { flexDirection: 'row', gap: 14 },
   timelineNodeColumn: { alignItems: 'center', width: 28, position: 'relative' },
-  nodeCircle: { width: 28, height: 28, borderRadius: 14, borderWidth: 2, borderColor: '#334155', backgroundColor: '#1e293b', alignItems: 'center', justifyContent: 'center', zIndex: 2 },
-  nodeCircleDone: { borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.15)' },
-  nodeCircleCancelled: { borderColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.15)' },
-  nodeCircleUpcoming: { borderColor: '#334155', backgroundColor: 'rgba(255, 255, 255, 0.02)' },
-  timelineLine: { width: 2, position: 'absolute', top: 28, bottom: 0, backgroundColor: 'rgba(255, 255, 255, 0.1)', zIndex: 1 },
-  timelineLineDone: { backgroundColor: '#10b981', zIndex: 2 },
+  nodeCircle: { width: 28, height: 28, borderRadius: 14, borderWidth: 2, alignItems: 'center', justifyContent: 'center', zIndex: 2 },
+  timelineLine: { width: 2, position: 'absolute', top: 28, bottom: 0, zIndex: 1 },
+  timelineLineDone: { zIndex: 2 },
   timelineLineHalf: { height: '50%', zIndex: 2 },
   timelineContent: { flex: 1, paddingBottom: 24, gap: 4 },
   timelineHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  stageNameText: { color: '#f8fafc', fontSize: 13, fontWeight: '600' },
-  activeStageControlGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  stageTimerBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    borderWidth: 1,
-  },
-  stageTimerBtnText: {
-    fontSize: 10,
-    fontWeight: '800',
-  },
+  stageNameText: { fontSize: 13, fontWeight: '600' },
   stageTimeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   timeTag: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  timeTagText: { color: '#94a3b8', fontSize: 12, fontWeight: '500' },
-  bayCodeText: { color: '#475569', fontSize: 10, fontWeight: '700' },
+  timeTagText: { fontSize: 12, fontWeight: '500' },
   logSubRowContainer: { gap: 2, marginTop: 2 },
-  logSubText: { color: '#64748b', fontSize: 10.5, lineHeight: 15 },
-  queueNoteSubText: { color: '#38bdf8', fontSize: 10.5, marginTop: 2 },
-  breakNoteSubText: { color: '#fbbf24', fontSize: 10.5, marginTop: 2 },
-  sectionTitle: { color: '#94a3b8', fontWeight: '700', fontSize: 11, letterSpacing: 1, marginTop: 8 },
-  btnRow: { flexDirection: 'row', gap: 10 },
-  relocateBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.05)', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
-  btnText: { color: '#ffffff', fontSize: 12, fontWeight: '600' },
+  logSubText: { fontSize: 11, lineHeight: 16 },
+  queueNoteRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginTop: 2 },
+  queueNoteSubText: { fontSize: 11, fontWeight: '500' },
+  breakNoteSubText: { fontSize: 11, marginTop: 2, fontWeight: '500' },
 
   /* Edit Mode Styles */
   editContainer: { gap: 14 },
-  editSectionTitle: { color: '#94a3b8', fontSize: 11, fontWeight: '700', letterSpacing: 1 },
-  editSubText: { color: '#64748b', fontSize: 11, marginTop: -8 },
-  tasksRow: { gap: 10 },
-  taskChip: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'rgba(255, 255, 255, 0.02)', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)', padding: 12, borderRadius: 12 },
-  activeTaskChip: { borderColor: '#0ea5e9', backgroundColor: 'rgba(14, 165, 233, 0.1)' },
-  completedLockedChip: { borderColor: 'rgba(16, 185, 129, 0.4)', backgroundColor: 'rgba(16, 185, 129, 0.1)' },
-  chipText: { color: '#94a3b8', fontSize: 13, fontWeight: '500' },
-  activeChipText: { color: '#f8fafc', fontWeight: '600' },
-  lockedTaskText: { color: '#34d399', fontSize: 13, fontWeight: '700', flex: 1 },
+  editSectionTitle: { fontSize: 11, fontWeight: '700', letterSpacing: 1 },
   remarksEditGroup: { gap: 6, marginTop: 10 },
-  textAreaInput: { backgroundColor: 'rgba(0, 0, 0, 0.2)', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.12)', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, color: '#ffffff', fontSize: 13, height: 70, textAlignVertical: 'top' },
+  textAreaInput: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, fontSize: 13, height: 70, textAlignVertical: 'top' },
   editFooterRow: { flexDirection: 'row', gap: 10, width: '100%', justifyContent: 'flex-end' },
-  cancelEditBtn: { backgroundColor: 'rgba(255, 255, 255, 0.05)', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10 },
-  cancelEditText: { color: '#94a3b8', fontSize: 13, fontWeight: '600' },
-  saveEditBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#0ea5e9', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
+  cancelEditBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10 },
+  cancelEditText: { fontSize: 13, fontWeight: '600' },
+  saveEditBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
   saveEditText: { color: '#ffffff', fontSize: 13, fontWeight: '700' },
-  urgencyToggleCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, borderRadius: 12, borderWidth: 1 },
-  urgencyToggleRow: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
-  urgencyToggleLabel: { fontSize: 13, fontWeight: '700' },
 });
 
 

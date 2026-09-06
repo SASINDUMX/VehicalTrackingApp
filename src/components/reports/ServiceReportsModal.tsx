@@ -27,10 +27,15 @@ import {
   Layers,
   Info,
   AlertCircle,
+  Coffee,
+  ShieldCheck,
+  Database,
+  Zap,
 } from 'lucide-react-native';
 import {
   DateFilterPreset,
   StatusFilterPreset,
+  ReportKPIs,
   filterVehiclesForReport,
   getDatePresetRangeDescription,
   calculateReportKPIs,
@@ -38,15 +43,18 @@ import {
   exportServiceLogsToPDF,
   formatDuration,
   getStageTimingForZone,
-  getVehicleTotalPausedSeconds,
   getVehicleIdleAndActiveTotals,
   getVehicleEffectiveCompletion,
 } from '../../utils/reportExportUtils';
+import { vehicleService } from '../../services/vehicleService';
 import { getNetWorkingSeconds, getBreakOverlap } from '../../utils/workshopHoursUtils';
 import { LicensePlate } from '../shared/LicensePlate';
 import { StatusPill } from '../shared/StatusPill';
 import { BaseModal } from '../shared/BaseModal';
+import { LoadingSpot } from '../shared/LoadingSpot';
+import { EmptyStateCard } from '../shared/EmptyStateCard';
 import { Vehicle } from '../../types/vehicle';
+import { APP_TERMINOLOGY } from '../../constants/terminology';
 
 export const ServiceReportsModal: React.FC = () => {
   const { vehicles, fetchHistoricalVehicles } = useVehicles();
@@ -63,7 +71,7 @@ export const ServiceReportsModal: React.FC = () => {
     { id: 'yesterday', label: 'Yesterday' },
     { id: '7days', label: 'Last 7 Days' },
     { id: 'month', label: 'This Month' },
-    { id: 'all', label: 'All Time' },
+    { id: '3months', label: 'Last 3 Months' },
   ];
 
   const STATUS_PRESETS: { id: StatusFilterPreset; label: string }[] = [
@@ -72,12 +80,45 @@ export const ServiceReportsModal: React.FC = () => {
     { id: 'in_progress', label: 'In Progress Only' },
   ];
 
+  const [serverKPIs, setServerKPIs] = useState<ReportKPIs | null>(null);
+
   // Fetch historical data whenever preset changes
   useEffect(() => {
     let isCancelled = false;
+    setServerKPIs(null);
+
+    // Fast-path: Prefetch server-side aggregated KPIs for the preset
+    const now = new Date();
+    let startDate: string | null = null;
+    let endDate: string | null = null;
+
+    if (datePreset === 'today') {
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    } else if (datePreset === 'yesterday') {
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      startDate = new Date(startOfToday.getTime() - 24 * 60 * 60 * 1000).toISOString();
+      endDate = startOfToday.toISOString();
+    } else if (datePreset === '7days') {
+      startDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    } else if (datePreset === 'month') {
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    } else if (datePreset === '3months') {
+      startDate = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate()).toISOString();
+    }
+
+    vehicleService.fetchReportKPIs({
+      startDate,
+      endDate,
+      status: statusPreset,
+    }).then(res => {
+      if (!isCancelled && res) {
+        setServerKPIs(res as ReportKPIs);
+      }
+    }).catch(() => { /* ignore */ });
 
     if (datePreset === 'today') {
       setReportVehicles(vehicles);
+      setIsLoadingReport(false);
     } else {
       setIsLoadingReport(true);
       fetchHistoricalVehicles(datePreset)
@@ -90,19 +131,33 @@ export const ServiceReportsModal: React.FC = () => {
     }
 
     return () => { isCancelled = true; };
-  }, [datePreset, vehicles, fetchHistoricalVehicles]);
+  }, [datePreset, statusPreset, vehicles, fetchHistoricalVehicles]);
 
   const filteredVehicles = useMemo(() => {
     return filterVehiclesForReport(reportVehicles, datePreset, statusPreset);
   }, [reportVehicles, datePreset, statusPreset]);
 
+  // Hybrid KPIs: If client vehicles are loaded, client calculation is authoritative and guaranteed to match the displayed table.
+  // Server KPIs are used as a fast-path preview only when vehicles are still loading and serverKPIs has non-zero data.
   const kpis = useMemo(() => {
+    if (filteredVehicles.length > 0) {
+      return calculateReportKPIs(filteredVehicles);
+    }
+    if (
+      serverKPIs &&
+      serverKPIs.totalVehicles > 0 &&
+      serverKPIs.workshopBay &&
+      serverKPIs.alignmentBay &&
+      serverKPIs.hoistBay
+    ) {
+      return serverKPIs;
+    }
     return calculateReportKPIs(filteredVehicles);
-  }, [filteredVehicles]);
+  }, [serverKPIs, filteredVehicles]);
 
   const dateRangeInfo = useMemo(() => {
-    return getDatePresetRangeDescription(datePreset, reportVehicles);
-  }, [datePreset, reportVehicles]);
+    return getDatePresetRangeDescription(datePreset);
+  }, [datePreset]);
 
   const isMultiDate = dateRangeInfo.isMultiDate;
   const activeStatusLabel = STATUS_PRESETS.find(s => s.id === statusPreset)?.label || 'All Status';
@@ -124,14 +179,14 @@ export const ServiceReportsModal: React.FC = () => {
             <Text style={[styles.pageTitle, { color: colors.textPrimary }]}>
               Service Logs & Reports
             </Text>
-            {/* Calculation Standard Red Indicator Icon */}
+            {/* Calculation Standard & Rules Info Button */}
             <TouchableOpacity
-              style={styles.infoIconButtonOnly}
+              style={[styles.infoIconButtonOnly, { backgroundColor: colors.primaryDim, borderColor: colors.primaryBorder, borderRadius: 14, borderWidth: 1, padding: 4 }]}
               onPress={() => setIsAuditModalOpen(true)}
               activeOpacity={0.7}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <AlertCircle size={18} color="#ef4444" />
+              <Info size={16} color={colors.primaryLight} />
             </TouchableOpacity>
           </View>
         </View>
@@ -204,7 +259,7 @@ export const ServiceReportsModal: React.FC = () => {
               <View style={styles.kpiCardHeaderRow}>
                 <Text style={[styles.kpiLabel, { color: colors.textMuted }]}>SERVICE OVERVIEW</Text>
                 <Text style={[styles.kpiBottomText, { color: colors.textMuted }]}>
-                  {kpis.totalVehicles > 0 ? Math.round((kpis.completedCount / kpis.totalVehicles) * 100) : 0}% COMPLETION RATE
+                  {(kpis?.totalVehicles ?? 0) > 0 ? Math.round(((kpis?.completedCount ?? 0) / (kpis?.totalVehicles ?? 1)) * 100) : 0}% COMPLETION RATE
                 </Text>
               </View>
               <View style={styles.kpiThreeColRow}>
@@ -212,7 +267,7 @@ export const ServiceReportsModal: React.FC = () => {
                 <View style={styles.kpiCol}>
                   <View style={styles.kpiValRow}>
                     <Car size={16} color={colors.primaryLight} />
-                    <Text style={[styles.kpiBigVal, { color: colors.textPrimary }]}>{kpis.totalVehicles}</Text>
+                    <Text style={[styles.kpiBigVal, { color: colors.textPrimary }]}>{kpis?.totalVehicles ?? 0}</Text>
                   </View>
                   <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>TOTAL FLEET</Text>
                 </View>
@@ -221,7 +276,7 @@ export const ServiceReportsModal: React.FC = () => {
                 <View style={styles.kpiCol}>
                   <View style={styles.kpiValRow}>
                     <Clock size={16} color={colors.primaryLight} />
-                    <Text style={[styles.kpiBigVal, { color: colors.primaryLight }]}>{kpis.inProgressCount}</Text>
+                    <Text style={[styles.kpiBigVal, { color: colors.primaryLight }]}>{kpis?.inProgressCount ?? 0}</Text>
                   </View>
                   <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>ACTIVE</Text>
                 </View>
@@ -230,7 +285,7 @@ export const ServiceReportsModal: React.FC = () => {
                 <View style={styles.kpiCol}>
                   <View style={styles.kpiValRow}>
                     <CheckCircle2 size={16} color={colors.success} />
-                    <Text style={[styles.kpiBigVal, { color: colors.success }]}>{kpis.completedCount}</Text>
+                    <Text style={[styles.kpiBigVal, { color: colors.success }]}>{kpis?.completedCount ?? 0}</Text>
                   </View>
                   <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>COMPLETED</Text>
                 </View>
@@ -239,10 +294,10 @@ export const ServiceReportsModal: React.FC = () => {
 
             {/* Bay Velocity Row: 3 Bays in 1 Row */}
             <View style={styles.kpiBayRow}>
-              {/* General Service Bay KPI */}
+              {/* Workshop Bay KPI */}
               <View style={[styles.kpiCard, styles.kpiBayCard, { backgroundColor: colors.bayWorkshopDim, borderColor: colors.bayWorkshop }]}>
                 <View style={styles.kpiCardHeaderRow}>
-                  <Text style={[styles.kpiLabel, { color: colors.bayWorkshopLight }]}>GENERAL</Text>
+                  <Text style={[styles.kpiLabel, { color: colors.bayWorkshopLight }]}>WORKSHOP</Text>
                 </View>
 
                 {/* Gross Avg Bay Time */}
@@ -250,7 +305,7 @@ export const ServiceReportsModal: React.FC = () => {
                   <Wrench size={15} color={colors.bayWorkshopLight} />
                   <View style={styles.kpiMetricCol}>
                     <Text style={[styles.kpiVal, { color: colors.bayWorkshopLight }]}>
-                      {formatDuration(kpis.workshopBay.avgStageSec)}
+                      {formatDuration(kpis?.workshopBay?.avgStageSec ?? 0)}
                     </Text>
                     <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>GROSS AVG TIME</Text>
                   </View>
@@ -261,7 +316,7 @@ export const ServiceReportsModal: React.FC = () => {
                   <Clock size={13} color={colors.success} />
                   <View style={styles.kpiMetricCol}>
                     <Text style={[styles.kpiActiveVal, { color: colors.success }]}>
-                      {formatDuration(kpis.workshopBay.avgActiveSec)}
+                      {formatDuration(kpis?.workshopBay?.avgActiveSec ?? 0)}
                     </Text>
                     <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>BAY AVG ACTIVE TIME</Text>
                   </View>
@@ -270,7 +325,7 @@ export const ServiceReportsModal: React.FC = () => {
                 {/* Bottom Vehicle Count */}
                 <View style={styles.kpiBottomRow}>
                   <Text style={[styles.kpiBottomText, { color: colors.textMuted }]}>
-                    {kpis.workshopBay.vehicleCount} vehicles
+                    {kpis?.workshopBay?.vehicleCount ?? 0} vehicles
                   </Text>
                 </View>
               </View>
@@ -286,7 +341,7 @@ export const ServiceReportsModal: React.FC = () => {
                   <Navigation size={15} color={colors.bayAlignmentLight} />
                   <View style={styles.kpiMetricCol}>
                     <Text style={[styles.kpiVal, { color: colors.bayAlignmentLight }]}>
-                      {formatDuration(kpis.alignmentBay.avgStageSec)}
+                      {formatDuration(kpis?.alignmentBay?.avgStageSec ?? 0)}
                     </Text>
                     <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>GROSS AVG TIME</Text>
                   </View>
@@ -297,7 +352,7 @@ export const ServiceReportsModal: React.FC = () => {
                   <Clock size={13} color={colors.success} />
                   <View style={styles.kpiMetricCol}>
                     <Text style={[styles.kpiActiveVal, { color: colors.success }]}>
-                      {formatDuration(kpis.alignmentBay.avgActiveSec)}
+                      {formatDuration(kpis?.alignmentBay?.avgActiveSec ?? 0)}
                     </Text>
                     <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>BAY AVG ACTIVE TIME</Text>
                   </View>
@@ -306,12 +361,12 @@ export const ServiceReportsModal: React.FC = () => {
                 {/* Bottom Vehicle Count */}
                 <View style={styles.kpiBottomRow}>
                   <Text style={[styles.kpiBottomText, { color: colors.textMuted }]}>
-                    {kpis.alignmentBay.vehicleCount} vehicles
+                    {kpis?.alignmentBay?.vehicleCount ?? 0} vehicles
                   </Text>
                 </View>
               </View>
 
-              {/* Hoist Service Bay KPI */}
+              {/* Hoist Bay KPI */}
               <View style={[styles.kpiCard, styles.kpiBayCard, { backgroundColor: colors.bayHoistDim, borderColor: colors.bayHoist }]}>
                 <View style={styles.kpiCardHeaderRow}>
                   <Text style={[styles.kpiLabel, { color: colors.bayHoistLight }]}>HOIST</Text>
@@ -322,7 +377,7 @@ export const ServiceReportsModal: React.FC = () => {
                   <Droplets size={15} color={colors.bayHoistLight} />
                   <View style={styles.kpiMetricCol}>
                     <Text style={[styles.kpiVal, { color: colors.bayHoistLight }]}>
-                      {formatDuration(kpis.hoistBay.avgStageSec)}
+                      {formatDuration(kpis?.hoistBay?.avgStageSec ?? 0)}
                     </Text>
                     <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>GROSS AVG TIME</Text>
                   </View>
@@ -333,7 +388,7 @@ export const ServiceReportsModal: React.FC = () => {
                   <Clock size={13} color={colors.success} />
                   <View style={styles.kpiMetricCol}>
                     <Text style={[styles.kpiActiveVal, { color: colors.success }]}>
-                      {formatDuration(kpis.hoistBay.avgActiveSec)}
+                      {formatDuration(kpis?.hoistBay?.avgActiveSec ?? 0)}
                     </Text>
                     <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>BAY AVG ACTIVE TIME</Text>
                   </View>
@@ -342,7 +397,7 @@ export const ServiceReportsModal: React.FC = () => {
                 {/* Bottom Vehicle Count */}
                 <View style={styles.kpiBottomRow}>
                   <Text style={[styles.kpiBottomText, { color: colors.textMuted }]}>
-                    {kpis.hoistBay.vehicleCount} vehicles
+                    {kpis?.hoistBay?.vehicleCount ?? 0} vehicles
                   </Text>
                 </View>
               </View>
@@ -358,19 +413,13 @@ export const ServiceReportsModal: React.FC = () => {
             </View>
 
             {isLoadingReport ? (
-              <View style={styles.emptyTable}>
-                <ActivityIndicator size="small" color={colors.primary} />
-                <Text style={[styles.emptyTableText, { color: colors.textSecondary, marginTop: 8 }]}>
-                  Loading historical service records from server...
-                </Text>
-              </View>
+              <LoadingSpot message={APP_TERMINOLOGY.telemetry.loadingReportRecords} />
             ) : filteredVehicles.length === 0 ? (
-              <View style={styles.emptyTable}>
-                <Car size={32} color={colors.textMuted} />
-                <Text style={[styles.emptyTableText, { color: colors.textMuted }]}>
-                  No vehicles found matching the selected date and status filters.
-                </Text>
-              </View>
+              <EmptyStateCard
+                icon={Car}
+                title={APP_TERMINOLOGY.emptyStates.noReportRecordsTitle}
+                subtitle={APP_TERMINOLOGY.emptyStates.noReportRecordsSubtitle}
+              />
             ) : (
               <ScrollView horizontal showsHorizontalScrollIndicator={true} contentContainerStyle={styles.tableScroll}>
                 <View>
@@ -388,13 +437,13 @@ export const ServiceReportsModal: React.FC = () => {
                     <Text style={[styles.thCell, styles.colTime, { color: colors.textSecondary }]}>TOTAL IDLE</Text>
                     <Text style={[styles.thCell, styles.colTime, { color: '#fbbf24' }]}>BREAKS</Text>
                     <View style={[styles.thGroupHeader, { borderColor: colors.borderGlass, backgroundColor: colors.bayWorkshopDim }]}>
-                      <Text style={[styles.thGroupHeaderText, { color: colors.bayWorkshopLight }]}>GENERAL SERVICE</Text>
+                      <Text style={[styles.thGroupHeaderText, { color: colors.bayWorkshopLight }]}>{APP_TERMINOLOGY.tasks.general_service.label.toUpperCase()}</Text>
                     </View>
                     <View style={[styles.thGroupHeader, { borderColor: colors.borderGlass, backgroundColor: colors.bayAlignmentDim }]}>
-                      <Text style={[styles.thGroupHeaderText, { color: colors.bayAlignmentLight }]}>WHEEL ALIGNMENT</Text>
+                      <Text style={[styles.thGroupHeaderText, { color: colors.bayAlignmentLight }]}>{APP_TERMINOLOGY.tasks.wheel_alignment.label.toUpperCase()}</Text>
                     </View>
                     <View style={[styles.thGroupHeader, { borderColor: colors.borderGlass, backgroundColor: colors.bayHoistDim }]}>
-                      <Text style={[styles.thGroupHeaderText, { color: colors.bayHoistLight }]}>HOIST SERVICE</Text>
+                      <Text style={[styles.thGroupHeaderText, { color: colors.bayHoistLight }]}>{APP_TERMINOLOGY.tasks.hoist_service.label.toUpperCase()}</Text>
                     </View>
                     <Text style={[styles.thCell, styles.colTasks, { color: colors.textSecondary }]}>TASKS</Text>
                   </View>
@@ -431,9 +480,7 @@ export const ServiceReportsModal: React.FC = () => {
                     const start = new Date(v.intake_at || v.created_at);
                     const end = effectiveCompletionDate ? effectiveCompletionDate : new Date();
                     const grossSec = Math.max(0, Math.floor((end.getTime() - start.getTime()) / 1000));
-                    const totalPausedSec = getVehicleTotalPausedSeconds(v);
-                    const rawNetSec = getNetWorkingSeconds(start, end);
-                    const netSec = Math.max(0, rawNetSec - totalPausedSec);
+                    const netSec = getNetWorkingSeconds(start, end);
                     const { totalIdleSec, totalActiveSec } = getVehicleIdleAndActiveTotals(v);
                     const activeWorkSec = totalActiveSec > 0 ? totalActiveSec : netSec;
                     const { breakSeconds } = getBreakOverlap(start, end);
@@ -570,7 +617,8 @@ export const ServiceReportsModal: React.FC = () => {
       <BaseModal
         visible={isAuditModalOpen}
         onClose={() => setIsAuditModalOpen(false)}
-        maxWidth={500}
+        maxWidth={560}
+        maxHeight="85%"
         icon={<Info size={20} color={colors.primaryLight} />}
         title="Report Audit & Calculation Standard"
         subtitle="Operational formulas and vehicle metrics standard"
@@ -587,44 +635,95 @@ export const ServiceReportsModal: React.FC = () => {
         }
       >
         <View style={styles.auditModalBody}>
+          {/* 1. Effective Completion Standard */}
+          <View style={[styles.auditRuleCard, { backgroundColor: colors.successDim, borderColor: colors.success }]}>
+            <View style={styles.auditRuleHeader}>
+              <ShieldCheck size={15} color={colors.successLight} />
+              <Text style={[styles.auditRuleTitle, { color: colors.successLight }]}>
+                Turnaround Freeze Standard (Effective Completion)
+              </Text>
+            </View>
+            <Text style={[styles.auditRuleDesc, { color: colors.textSecondary }]}>
+              A vehicle's official Turnaround Time (TAT) definitively freezes the exact second it transitions into the <Text style={{ fontWeight: '700', color: colors.textPrimary }}>Inspection Zone</Text> or is explicitly marked completed.
+            </Text>
+            <View style={[styles.auditPillNote, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.03)' }]}>
+              <Text style={[styles.auditPillNoteText, { color: colors.textMuted }]}>
+                🎯 Customer handoff delays or parking lot dwell times after mechanical handover do NOT inflate workshop turnaround metrics.
+              </Text>
+            </View>
+          </View>
+
+          {/* 2. Automated Break Deductions */}
+          <View style={[styles.auditRuleCard, { backgroundColor: colors.warningDim, borderColor: colors.warning }]}>
+            <View style={styles.auditRuleHeader}>
+              <Coffee size={15} color={colors.warningLight} />
+              <Text style={[styles.auditRuleTitle, { color: colors.warningLight }]}>
+                Workshop Shift Break Deductions
+              </Text>
+            </View>
+            <Text style={[styles.auditRuleDesc, { color: colors.textSecondary }]}>
+              Statutory workshop rest periods are automatically calculated down to the exact second of vehicle tenure overlap and deducted from net working durations:
+            </Text>
+            <View style={styles.auditBreakScheduleRow}>
+              <View style={[styles.auditBreakBadge, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.04)' }]}>
+                <Text style={[styles.auditBreakBadgeText, { color: colors.textPrimary }]}>☕ Morning Tea: 09:45 – 10:00 (15m)</Text>
+              </View>
+              <View style={[styles.auditBreakBadge, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.04)' }]}>
+                <Text style={[styles.auditBreakBadgeText, { color: colors.textPrimary }]}>🍱 Lunch: 12:30 – 13:00 (30m)</Text>
+              </View>
+              <View style={[styles.auditBreakBadge, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.04)' }]}>
+                <Text style={[styles.auditBreakBadgeText, { color: colors.textPrimary }]}>☕ Evening Tea: 14:45 – 15:00 (15m)</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* 3. Gross Avg Time (Dispatched Bay Velocity) */}
           <View style={[styles.auditRuleCard, { backgroundColor: colors.bayWorkshopDim, borderColor: colors.bayWorkshop }]}>
             <View style={styles.auditRuleHeader}>
               <Wrench size={15} color={colors.bayWorkshopLight} />
               <Text style={[styles.auditRuleTitle, { color: colors.bayWorkshopLight }]}>
-                Gross Avg Time (Bay Velocity)
+                Bay Velocity & Stage Duration
               </Text>
             </View>
             <Text style={[styles.auditRuleDesc, { color: colors.textSecondary }]}>
-              Working bay occupancy (<Text style={{ fontWeight: '700', color: colors.textPrimary }}>Active Labor + Idle Time</Text>) calculated strictly for vehicles that have completed their tasks and dispatched to the next station.
+              Working bay occupancy (<Text style={{ fontWeight: '700', color: colors.textPrimary }}>Active Labor + Staging Idle</Text>) calculated strictly for vehicles that have completed their tasks and dispatched to the next station.
             </Text>
-            <View style={[styles.auditPillNote, { backgroundColor: 'rgba(255, 255, 255, 0.05)' }]}>
+            <View style={[styles.auditPillNote, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.03)' }]}>
               <Text style={[styles.auditPillNoteText, { color: colors.textMuted }]}>
-                ⏱ Official scheduled downtime (lunch & tea breaks) is deducted. Vehicles currently sitting undispatched in the bay are excluded so averages reflect true finished velocity.
+                ⏱ In-progress vehicles currently sitting undispatched are excluded from bay averages to ensure historical KPI integrity.
               </Text>
             </View>
           </View>
 
+          {/* 4. Pure Active Labor vs Idle Time Breakdown */}
           <View style={[styles.auditRuleCard, { backgroundColor: colors.bayAlignmentDim, borderColor: colors.bayAlignment }]}>
             <View style={styles.auditRuleHeader}>
               <Clock size={15} color={colors.bayAlignmentLight} />
               <Text style={[styles.auditRuleTitle, { color: colors.bayAlignmentLight }]}>
-                Bay Avg Active Time
+                Net Wrench Time vs. Queue Idle
               </Text>
             </View>
             <Text style={[styles.auditRuleDesc, { color: colors.textSecondary }]}>
-              Pure technician hands-on labor duration logged during active work on stage tasks. Excludes idle waiting time and pause periods.
+              <Text style={{ fontWeight: '700', color: colors.textPrimary }}>Net Working Time</Text> = Gross Turnaround − Shift Breaks.
+            </Text>
+            <Text style={[styles.auditRuleDesc, { color: colors.textSecondary, marginTop: 4 }]}>
+              • <Text style={{ fontWeight: '700', color: colors.textPrimary }}>Active Labor (Wrench Time)</Text>: Pure hands-on labor duration logged during active checklist execution.
+            </Text>
+            <Text style={[styles.auditRuleDesc, { color: colors.textSecondary, marginTop: 2 }]}>
+              • <Text style={{ fontWeight: '700', color: colors.textPrimary }}>Idle Waiting Time</Text>: Duration vehicle spent queued in bay waiting for technician allocation or parts movement.
             </Text>
           </View>
 
+          {/* 5. Autonomous Retention & Daily Rollover */}
           <View style={[styles.auditRuleCard, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)', borderColor: colors.borderGlass }]}>
             <View style={styles.auditRuleHeader}>
-              <Layers size={15} color={colors.warningLight} />
-              <Text style={[styles.auditRuleTitle, { color: colors.warningLight }]}>
-                Idle Time Breakdown
+              <Database size={15} color={colors.primaryLight} />
+              <Text style={[styles.auditRuleTitle, { color: colors.primaryLight }]}>
+                Autonomous Retention & Rollover
               </Text>
             </View>
             <Text style={[styles.auditRuleDesc, { color: colors.textSecondary }]}>
-              Time the vehicle remained parked in the bay awaiting technician labor, staging, or parts inspection between task executions.
+              Historical vehicle logs are preserved for <Text style={{ fontWeight: '700', color: colors.textPrimary }}>90 days</Text> with automatic archiving. Completed inspection vehicles roll over autonomously at midnight via database background reconciliation.
             </Text>
           </View>
         </View>
@@ -758,6 +857,20 @@ const styles = StyleSheet.create({
   auditPillNoteText: {
     fontSize: 10,
     lineHeight: 14,
+  },
+  auditBreakScheduleRow: {
+    flexDirection: 'column',
+    gap: 4,
+    marginTop: 6,
+  },
+  auditBreakBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  auditBreakBadgeText: {
+    fontSize: 10.5,
+    fontWeight: '600',
   },
   auditModalFooter: {
     width: '100%',

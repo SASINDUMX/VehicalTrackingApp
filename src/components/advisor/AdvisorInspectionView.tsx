@@ -1,16 +1,18 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet, Platform, ActivityIndicator, Alert } from 'react-native';
-import { ShieldCheck, Clock, FileCheck, Sparkles, CheckCircle2, Clock3, ChevronDown, ChevronUp, History, XCircle, Bookmark, AlertOctagon } from 'lucide-react-native';
-import { LicensePlate } from '../shared/LicensePlate';
+import React, { useState, useMemo } from 'react';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { FileCheck, Sparkles, CheckCircle2, History, XCircle, Bookmark } from 'lucide-react-native';
 import { EmptyStateCard } from '../shared/EmptyStateCard';
-import { TimerPill } from '../shared/TimerPill';
 import { StatusPill } from '../shared/StatusPill';
-import { VehicleNotePill } from '../shared/VehicleNotePill';
-import { formatTotalTATString } from '../../utils/vehicleUtils';
+import { VehicleCardHeader } from '../shared/VehicleCardHeader';
+import { TransferConfirmModal } from '../shared/TransferConfirmModal';
+import { CalloutBanner } from '../shared/CalloutBanner';
+import { LoadingSpot } from '../shared/LoadingSpot';
+import { sortWorkshopVehicles } from '../../utils/vehicleUtils';
 import { useAdvisorInspection } from '../../hooks/useAdvisorInspection';
 import { usePinnedVehicles } from '../../hooks/usePinnedVehicles';
 import { useTheme } from '../../context/ThemeContext';
 import { Vehicle, VehicleTask } from '../../types/vehicle';
+import { APP_TERMINOLOGY } from '../../constants/terminology';
 
 export const AdvisorInspectionView: React.FC = React.memo(() => {
   const {
@@ -57,16 +59,14 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
     }
   };
 
-  // Sort: urgent first, then pinned, then normal; optionally filter to pinned only
-  const sortedVehicles = [...readyVehicles]
-    .sort((a, b) => {
-      if (a.is_urgent && !b.is_urgent) return -1;
-      if (!a.is_urgent && b.is_urgent) return 1;
-      if (isPinned(a.id) && !isPinned(b.id)) return -1;
-      if (!isPinned(a.id) && isPinned(b.id)) return 1;
-      return 0;
-    });
-  const displayVehicles = showMyVehiclesOnly ? sortedVehicles.filter(v => isPinned(v.id)) : sortedVehicles;
+  // Memoized Sort: urgent first, then pinned, then FIFO; optionally filter to pinned only
+  const sortedVehicles = useMemo(() => {
+    return sortWorkshopVehicles(readyVehicles, isPinned);
+  }, [readyVehicles, isPinned]);
+
+  const displayVehicles = useMemo(() => {
+    return showMyVehiclesOnly ? sortedVehicles.filter(v => isPinned(v.id)) : sortedVehicles;
+  }, [showMyVehiclesOnly, sortedVehicles, isPinned]);
 
   const renderVehicleCard = ({ item: vehicle }: { item: Vehicle }) => {
     const isExpanded = Boolean(expandedCards[vehicle.id]);
@@ -91,36 +91,23 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
           onPress={() => toggleExpand(vehicle.id)}
           activeOpacity={0.8}
         >
-          <View style={styles.plateWithStatusGroup}>
-            <LicensePlate number={vehicle.vehicle_no} size="md" />
-            <VehicleNotePill vehicle={vehicle} size="md" compact />
-          </View>
-
-          <View style={styles.headerRightGroup}>
-            <StatusPill
-              variant="READY"
-              label="READY"
-              IconComponent={CheckCircle2}
-              size="md"
-            />
-
-            {/* Pin toggle button */}
-            <TouchableOpacity
-              style={styles.pinBtn}
-              onPress={() => togglePin(vehicle.id)}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Bookmark
-                size={16}
-                color={isPinned(vehicle.id) ? '#f59e0b' : colors.textMuted}
-                fill={isPinned(vehicle.id) ? '#f59e0b' : 'transparent'}
+          <VehicleCardHeader
+            vehicle={vehicle}
+            size="md"
+            rightAccessory={
+              <StatusPill
+                variant="READY"
+                label="READY"
+                IconComponent={CheckCircle2}
+                size="md"
               />
-            </TouchableOpacity>
-
-            <View style={[styles.chevronWrapper, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)', borderColor: colors.borderGlass }]}>
-              {isExpanded ? <ChevronUp size={20} color={colors.textSecondary} /> : <ChevronDown size={20} color={colors.textSecondary} />}
-            </View>
-          </View>
+            }
+            isPinned={isPinned(vehicle.id)}
+            onTogglePin={() => togglePin(vehicle.id)}
+            isExpanded={isExpanded}
+            onToggleExpand={() => toggleExpand(vehicle.id)}
+            showChevron={true}
+          />
         </TouchableOpacity>
 
         {/* EXPANDED DETAILS CONTENT */}
@@ -128,15 +115,20 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
           <>
             {/* Priority Alert Callout Banner if Urgent */}
             {isUrgent && (
-              <View style={styles.urgentCalloutBox}>
-                <View style={styles.urgentCalloutHeader}>
-                  <AlertOctagon size={14} color="#ef4444" />
-                  <Text style={styles.urgentCalloutTitle}>URGENT VEHICLE</Text>
-                </View>
-                {Boolean(vehicle.urgent_note) && (
-                  <Text style={styles.urgentCalloutText}>{vehicle.urgent_note}</Text>
-                )}
-              </View>
+              <CalloutBanner
+                variant="urgent"
+                title="PRIORITY / URGENT VEHICLE"
+                message={vehicle.urgent_note}
+              />
+            )}
+
+            {/* Vehicle Remarks / Special Instructions Box */}
+            {Boolean(vehicle.remarks && vehicle.remarks.trim()) && (
+              <CalloutBanner
+                variant="remarks"
+                title="REMARKS / SPECIAL INSTRUCTIONS"
+                message={vehicle.remarks}
+              />
             )}
 
             {/* Task Audit Summary */}
@@ -148,7 +140,7 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
                   onPress={() => setSelectedVehicle(vehicle)}
                 >
                   <History size={12} color={colors.primaryLight} />
-                  <Text style={[styles.auditLogLinkText, { color: colors.primaryLight }]}>Full Audit Log</Text>
+                  <Text style={[styles.auditLogLinkText, { color: colors.primaryLight }]}>{APP_TERMINOLOGY.actions.fullAuditLog}</Text>
                 </TouchableOpacity>
               </View>
 
@@ -183,7 +175,7 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
             >
               <Sparkles size={16} color="#ffffff" />
               <Text style={styles.deliverText} numberOfLines={1}>
-                {canFinishJob ? 'FINISH JOB & HANDOVER VEHICLE ✓' : 'ADVISOR ACCESS REQUIRED'}
+                {canFinishJob ? `${APP_TERMINOLOGY.actions.deliverVehicle} ✓` : 'ADVISOR ACCESS REQUIRED'}
               </Text>
             </TouchableOpacity>
           </>
@@ -193,20 +185,27 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
   };
 
   if (isLoading) {
-    return (
-      <View style={[styles.loadingSpot, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)' }]}>
-        <ActivityIndicator size="small" color={colors.bayInspection} />
-        <Text style={[styles.loadingText, { color: colors.textMuted }]}>SYNCING TELEMETRY...</Text>
-      </View>
-    );
+    return <LoadingSpot color={colors.bayInspection} />;
   }
 
   if (displayVehicles.length === 0) {
     return (
       <EmptyStateCard
         icon={showMyVehiclesOnly ? Bookmark : FileCheck}
-        title={showMyVehiclesOnly ? 'No Pinned Vehicles' : searchQuery.trim() ? `No matching vehicles for "${searchQuery}"` : 'All Job Sheets Cleared'}
-        subtitle={showMyVehiclesOnly ? 'You do not have any pinned vehicles in the inspection zone.' : searchQuery.trim() ? 'Try searching another license plate number.' : 'No vehicles currently pending advisor final inspection or delivery.'}
+        title={
+          showMyVehiclesOnly
+            ? APP_TERMINOLOGY.emptyStates.noPinnedTitle
+            : searchQuery.trim()
+            ? APP_TERMINOLOGY.emptyStates.noSearchMatchTitle(searchQuery.trim())
+            : APP_TERMINOLOGY.emptyStates.allClearedTitle
+        }
+        subtitle={
+          showMyVehiclesOnly
+            ? APP_TERMINOLOGY.emptyStates.noPinnedSubtitle
+            : searchQuery.trim()
+            ? APP_TERMINOLOGY.emptyStates.noSearchMatchSubtitle
+            : APP_TERMINOLOGY.emptyStates.allClearedSubtitle
+        }
       />
     );
   }
@@ -226,68 +225,33 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
       />
 
       {/* Confirmation Modal for Final Handover */}
-      {pendingHandover && (
-        <View style={styles.confirmOverlay}>
-          <TouchableOpacity
-            style={styles.confirmBackdrop}
-            activeOpacity={1}
-            onPress={() => {
-              if (!isHandingOver) setPendingHandover(null);
-            }}
-          />
-          <View style={[styles.confirmCard, { backgroundColor: colors.surface, borderColor: colors.borderGlassBright }]}>
-            <View style={styles.confirmHeader}>
-              <Sparkles size={22} color={colors.success} />
-              <Text style={[styles.confirmTitle, { color: colors.textPrimary }]}>Confirm Final Handover</Text>
-            </View>
-
-            {pendingHandover.incompleteCount > 0 ? (
-              <Text style={[styles.confirmBodyText, { color: '#fca5a5' }]}>
-                ⚠️ Attention: <Text style={styles.confirmBoldPlate}>{pendingHandover.plate}</Text> has <Text style={{ fontWeight: '800', color: '#ef4444' }}>{pendingHandover.incompleteCount} incomplete task(s)</Text>. Are you sure you want to finish and handover?
+      <TransferConfirmModal
+        visible={Boolean(pendingHandover)}
+        title={APP_TERMINOLOGY.actions.confirmFinalHandover}
+        icon={<Sparkles size={22} color={colors.success} />}
+        bodyContent={
+          pendingHandover ? (
+            pendingHandover.incompleteCount > 0 ? (
+              <Text style={[styles.confirmBodyText, { color: colors.dangerLight }]}>
+                ⚠️ Attention: <Text style={[styles.confirmBoldPlate, { color: colors.warning }]}>{pendingHandover.plate}</Text> has <Text style={{ fontWeight: '800', color: colors.danger }}>{pendingHandover.incompleteCount} incomplete task(s)</Text>. Are you sure you want to finish and handover?
               </Text>
             ) : (
               <Text style={[styles.confirmBodyText, { color: colors.textSecondary }]}>
-                All required job sheet tasks are verified. Deliver vehicle <Text style={styles.confirmBoldPlate}>{pendingHandover.plate}</Text> to customer?
+                All required job sheet tasks are verified. Deliver vehicle <Text style={[styles.confirmBoldPlate, { color: colors.warning }]}>{pendingHandover.plate}</Text> to customer?
               </Text>
-            )}
-
-            <View style={styles.confirmBtnRow}>
-              <TouchableOpacity
-                style={[
-                  styles.cancelBtn,
-                  { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)', borderColor: colors.borderGlass },
-                  isHandingOver && { opacity: 0.5, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }
-                ]}
-                disabled={isHandingOver}
-                onPress={() => {
-                  if (!isHandingOver) setPendingHandover(null);
-                }}
-              >
-                <Text style={[styles.cancelBtnText, { color: colors.textSecondary }]}>Cancel</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.confirmHandoverBtn,
-                  { backgroundColor: colors.success },
-                  isHandingOver && { opacity: 0.85, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }
-                ]}
-                disabled={isHandingOver}
-                onPress={handleConfirmHandover}
-              >
-                {isHandingOver ? (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <ActivityIndicator size="small" color="#ffffff" />
-                    <Text style={styles.confirmHandoverBtnText}>Handing Over...</Text>
-                  </View>
-                ) : (
-                  <Text style={styles.confirmHandoverBtnText}>Confirm Handover ✓</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      )}
+            )
+          ) : null
+        }
+        confirmLabel={`${APP_TERMINOLOGY.actions.confirmHandover} ✓`}
+        cancelLabel="Cancel"
+        isProcessing={isHandingOver}
+        processingLabel={APP_TERMINOLOGY.actions.handingOver}
+        confirmButtonColor={colors.success}
+        onConfirm={handleConfirmHandover}
+        onCancel={() => {
+          if (!isHandingOver) setPendingHandover(null);
+        }}
+      />
     </View>
   );
 });
@@ -295,115 +259,42 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { paddingBottom: 24 },
-  headerBar: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 },
-  iconWrapper: { backgroundColor: 'rgba(16, 185, 129, 0.15)', padding: 10, borderRadius: 10 },
-  title: { color: '#ffffff', fontWeight: '800', fontSize: 18 },
-  subtitle: { color: '#94a3b8', fontSize: 12, marginTop: 2 },
-  emptyCard: { backgroundColor: '#121a2b', borderRadius: 14, padding: 40, alignItems: 'center', gap: 12 },
-  loadingSpot: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 40,
-    borderRadius: 16,
+  mainCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    gap: 10,
+    ...(Platform.OS === 'web'
+      ? ({ boxShadow: '0px 3px 6px rgba(0, 0, 0, 0.25)' } as any)
+      : { shadowColor: 'rgba(0, 0, 0, 1)', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.25, shadowRadius: 6, elevation: 3 }),
   },
-  loadingText: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  emptyTitle: { color: '#ffffff', fontWeight: '700', fontSize: 16 },
-  emptySub: { color: '#64748b', fontSize: 13 },
-  cardsGrid: { gap: 16 },
-  mainCard: { backgroundColor: '#0f172a', borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)', padding: 20, gap: 20, ...(Platform.OS === 'web' ? ({ boxShadow: '0px 4px 10px rgba(0, 0, 0, 0.3)' } as any) : { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 5, elevation: 5 }) },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', rowGap: 8 },
-  plateWithStatusGroup: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
-  licensePlateContainer: { flexDirection: 'row', backgroundColor: '#facc15', borderRadius: 4, borderWidth: 1, borderColor: '#eab308', overflow: 'hidden' },
-  plateLeftBar: { backgroundColor: '#1d4ed8', paddingHorizontal: 4, paddingVertical: 2, alignItems: 'center', justifyContent: 'center' },
-  plateFlag: { fontSize: 10, lineHeight: 10 },
-  plateCountryCode: { color: '#ffffff', fontSize: 8, fontWeight: '700', marginTop: 1 },
-  plateRightArea: { paddingHorizontal: 8, paddingVertical: 4, justifyContent: 'center' },
-  headerRightGroup: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0 },
-  pinBtn: { width: 28, height: 28, borderRadius: 6, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.08)', alignItems: 'center', justifyContent: 'center' },
-  chevronWrapper: { width: 28, height: 28, borderRadius: 6, backgroundColor: 'rgba(255, 255, 255, 0.05)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.08)' },
-  tatBox: { alignItems: 'flex-end' },
-  tatRow: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(245, 158, 11, 0.1)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(245, 158, 11, 0.3)' },
-  tatText: { color: '#fbbf24', fontSize: 16, fontWeight: '800' },
-  section: { gap: 10 },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' },
+  section: { gap: 6 },
   sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   auditLogLink: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  auditLogLinkText: { color: '#38bdf8', fontSize: 11, fontWeight: '600', textDecorationLine: 'underline' },
-  sectionTitle: { color: '#e2e8f0', fontWeight: '700', fontSize: 12, letterSpacing: 0.5 },
-  stageTimingList: { gap: 8, backgroundColor: 'rgba(255, 255, 255, 0.02)', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.05)' },
-  stageTimingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  stageNameGroup: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  stageDot: { width: 8, height: 8, borderRadius: 4 },
-  stageTimingName: { color: '#cbd5e1', fontSize: 13, fontWeight: '600' },
-  stageTimingVal: { color: '#38bdf8', fontSize: 13, fontWeight: '700', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
-  unvisitedVal: { color: '#64748b', fontWeight: '500', fontStyle: 'italic' },
-  auditList: { gap: 8 },
-  taskAuditRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'rgba(255, 255, 255, 0.03)', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.05)' },
-  taskName: { color: '#ffffff', fontSize: 14, fontWeight: '500' },
-  taskNameCancelled: { color: '#94a3b8', textDecorationLine: 'line-through', opacity: 0.7 },
+  auditLogLinkText: { fontSize: 11, fontWeight: '600', textDecorationLine: 'underline' },
+  sectionTitle: { fontWeight: '700', fontSize: 11, letterSpacing: 0.5 },
+  auditList: { gap: 6 },
+  taskAuditRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1 },
+  taskName: { fontSize: 13, fontWeight: '500' },
   deliverBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#10b981',
-    paddingVertical: 14,
+    gap: 6,
+    paddingVertical: 10,
     paddingHorizontal: 12,
-    borderRadius: 12,
-    ...(Platform.OS === 'web' ? ({ boxShadow: '0px 4px 8px rgba(16, 185, 129, 0.4)' } as any) : { shadowColor: '#10b981', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 5 }),
+    borderRadius: 8,
+    ...(Platform.OS === 'web' ? ({ boxShadow: '0px 4px 8px rgba(16, 185, 129, 0.4)' } as any) : { shadowColor: 'rgba(16, 185, 129, 1)', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.35, shadowRadius: 6, elevation: 4 }),
   },
   deliverText: {
     color: '#ffffff',
     fontWeight: '800',
-    fontSize: 13.5,
+    fontSize: 13,
     letterSpacing: 0.3,
     ...(Platform.OS === 'web' ? ({ whiteSpace: 'nowrap' } as any) : {}),
   },
-  filterRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  filterBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: 'transparent' },
-  filterBtnActive: { backgroundColor: 'rgba(14, 165, 233, 0.1)', borderColor: 'rgba(14, 165, 233, 0.3)' },
-  filterBtnText: { fontSize: 12, fontWeight: '600', color: '#94a3b8' },
-  filterBtnTextActive: { color: '#38bdf8' },
-  urgentCalloutBox: {
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.35)',
-    borderRadius: 10,
-    padding: 12,
-    gap: 6,
-  },
-  urgentCalloutHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  urgentCalloutTitle: {
-    color: '#ef4444',
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-  },
-  urgentCalloutText: {
-    color: '#fca5a5',
-    fontSize: 12.5,
-    fontWeight: '600',
-    lineHeight: 18,
-  },
-  confirmOverlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, justifyContent: 'center', alignItems: 'center', zIndex: 999 },
-  confirmBackdrop: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0, 0, 0, 0.75)', ...(Platform.OS === 'web' ? { position: 'fixed' as any } : {}) },
-  confirmCard: { width: '90%', maxWidth: 420, backgroundColor: '#0f172a', borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)', padding: 20, gap: 16, zIndex: 1000, ...(Platform.OS === 'web' ? ({ boxShadow: '0px 10px 20px rgba(0, 0, 0, 0.5)' } as any) : { shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.5, shadowRadius: 20, elevation: 12 }) },
-  confirmHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  confirmTitle: { color: '#ffffff', fontSize: 16, fontWeight: '800' },
-  confirmBodyText: { color: '#cbd5e1', fontSize: 13, lineHeight: 20 },
-  confirmBoldPlate: { color: '#facc15', fontWeight: '800' },
-  confirmBtnRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 12, marginTop: 4 },
-  cancelBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)', backgroundColor: 'rgba(255, 255, 255, 0.05)' },
-  cancelBtnText: { color: '#94a3b8', fontSize: 13, fontWeight: '700' },
-  confirmHandoverBtn: { paddingHorizontal: 18, paddingVertical: 10, borderRadius: 8, backgroundColor: '#10b981' },
-  confirmHandoverBtnText: { color: '#ffffff', fontSize: 13, fontWeight: '800' },
+  confirmBodyText: { fontSize: 13, lineHeight: 20 },
+  confirmBoldPlate: { fontWeight: '800' },
 });
 

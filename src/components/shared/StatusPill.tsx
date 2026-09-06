@@ -13,7 +13,6 @@ export type StatusPillVariant =
   | 'idle'
   | 'cancelled'
   | 'remarks'
-  | 'queue_out'
   | AppStatusKey;
 
 interface StatusPillProps {
@@ -56,8 +55,6 @@ export const StatusPill: React.FC<StatusPillProps> = ({ label, variant, size = '
       case 'REMARKS':
       case 'remarks':
         return getStatusStyle('REMARKS', colors);
-      case 'queue_out':
-        return { color: colors.queueOut, bg: colors.queueOutDim, border: colors.queueOutBorder };
       default:
         return getStatusStyle('PENDING', colors);
     }

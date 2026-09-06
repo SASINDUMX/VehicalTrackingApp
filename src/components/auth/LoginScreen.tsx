@@ -12,7 +12,59 @@ import {
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
-import { Car, LogIn, AlertCircle, Shield, Wrench, Headphones, UserCheck } from 'lucide-react-native';
+import { APP_TERMINOLOGY } from '../../constants/terminology';
+import { UserRole } from '../../types/vehicle';
+import { ThemeColors } from '../../constants/theme';
+import {
+  Car,
+  LogIn,
+  AlertCircle,
+  Shield,
+  Wrench,
+  Headphones,
+  Navigation,
+  Droplets,
+  Briefcase,
+  Users,
+  Award,
+  Sliders,
+} from 'lucide-react-native';
+
+type QuickCategory = 'management' | 'foremen' | 'advisors';
+
+interface DemoAccount {
+  label: string;
+  email: string;
+  pass: string;
+  Icon: any;
+  dimColorKey: keyof ThemeColors;
+  borderColorKey: keyof ThemeColors;
+  lightColorKey: keyof ThemeColors;
+}
+
+const MANAGEMENT_ACCOUNTS: DemoAccount[] = [
+  { label: APP_TERMINOLOGY.roles.service_executive.title, email: 'executive@unitedmotors.com', pass: 'Exec@123', Icon: Award, dimColorKey: 'primaryDim', borderColorKey: 'primaryBorder', lightColorKey: 'primaryLight' },
+  { label: APP_TERMINOLOGY.roles.agm.title, email: 'agm@unitedmotors.com', pass: 'Agm@123', Icon: Briefcase, dimColorKey: 'primaryDim', borderColorKey: 'primaryBorder', lightColorKey: 'primaryLight' },
+  { label: APP_TERMINOLOGY.roles.job_controller.title, email: 'controller@unitedmotors.com', pass: 'Controller@123', Icon: Sliders, dimColorKey: 'primaryDim', borderColorKey: 'primaryBorder', lightColorKey: 'primaryLight' },
+  { label: APP_TERMINOLOGY.roles.workshop_manager.title, email: 'manager@unitedmotors.com', pass: 'Manager@123', Icon: Shield, dimColorKey: 'purpleDim', borderColorKey: 'purpleBorder', lightColorKey: 'purpleLight' },
+];
+
+const FOREMEN_ACCOUNTS: DemoAccount[] = [
+  { label: 'Foreman (CAR)', email: 'foreman.car@unitedmotors.com', pass: 'Foreman@123', Icon: Wrench, dimColorKey: 'bayWorkshopDim', borderColorKey: 'bayWorkshopBorder', lightColorKey: 'bayWorkshopLight' },
+  { label: 'Foreman (SUV)', email: 'foreman.suv@unitedmotors.com', pass: 'Foreman@123', Icon: Wrench, dimColorKey: 'bayWorkshopDim', borderColorKey: 'bayWorkshopBorder', lightColorKey: 'bayWorkshopLight' },
+  { label: 'Foreman (LCV)', email: 'foreman.lcv@unitedmotors.com', pass: 'Foreman@123', Icon: Wrench, dimColorKey: 'bayWorkshopDim', borderColorKey: 'bayWorkshopBorder', lightColorKey: 'bayWorkshopLight' },
+  { label: 'Foreman (Hoist)', email: 'foreman.hoist@unitedmotors.com', pass: 'Foreman@123', Icon: Droplets, dimColorKey: 'bayHoistDim', borderColorKey: 'bayHoistBorder', lightColorKey: 'bayHoistLight' },
+  { label: 'Foreman (Alignment)', email: 'foreman.alignment@unitedmotors.com', pass: 'Foreman@123', Icon: Navigation, dimColorKey: 'bayAlignmentDim', borderColorKey: 'bayAlignmentBorder', lightColorKey: 'bayAlignmentLight' },
+];
+
+const ADVISOR_ACCOUNTS: DemoAccount[] = [
+  { label: 'Advisor Car 1', email: 'advisor.car1@unitedmotors.com', pass: 'Advisor@123', Icon: Headphones, dimColorKey: 'bayInspectionDim', borderColorKey: 'bayInspectionBorder', lightColorKey: 'bayInspectionLight' },
+  { label: 'Advisor Car 2', email: 'advisor.car2@unitedmotors.com', pass: 'Advisor@123', Icon: Headphones, dimColorKey: 'bayInspectionDim', borderColorKey: 'bayInspectionBorder', lightColorKey: 'bayInspectionLight' },
+  { label: 'Advisor SUV 1', email: 'advisor.suv1@unitedmotors.com', pass: 'Advisor@123', Icon: Headphones, dimColorKey: 'bayInspectionDim', borderColorKey: 'bayInspectionBorder', lightColorKey: 'bayInspectionLight' },
+  { label: 'Advisor SUV 2', email: 'advisor.suv2@unitedmotors.com', pass: 'Advisor@123', Icon: Headphones, dimColorKey: 'bayInspectionDim', borderColorKey: 'bayInspectionBorder', lightColorKey: 'bayInspectionLight' },
+  { label: 'Advisor LCV 1', email: 'advisor.lcv1@unitedmotors.com', pass: 'Advisor@123', Icon: Headphones, dimColorKey: 'bayInspectionDim', borderColorKey: 'bayInspectionBorder', lightColorKey: 'bayInspectionLight' },
+  { label: 'Advisor LCV 2', email: 'advisor.lcv2@unitedmotors.com', pass: 'Advisor@123', Icon: Headphones, dimColorKey: 'bayInspectionDim', borderColorKey: 'bayInspectionBorder', lightColorKey: 'bayInspectionLight' },
+];
 
 export const LoginScreen: React.FC = () => {
   const { signIn } = useAuth();
@@ -21,6 +73,7 @@ export const LoginScreen: React.FC = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [activeCategory, setActiveCategory] = useState<QuickCategory>('management');
 
   const handleSignIn = async () => {
     if (!email.trim() || !password.trim()) {
@@ -43,29 +96,9 @@ export const LoginScreen: React.FC = () => {
     }
   };
 
-  const fillQuickAccount = (role: 'supervisor' | 'tech1' | 'tech2' | 'tech3' | 'advisor') => {
-    switch (role) {
-      case 'supervisor':
-        setEmail('supervisor@unitedmotors.com');
-        setPassword('Super@123');
-        break;
-      case 'tech1':
-        setEmail('tech1@unitedmotors.com');
-        setPassword('Tech1@123');
-        break;
-      case 'tech2':
-        setEmail('tech2@unitedmotors.com');
-        setPassword('Tech2@123');
-        break;
-      case 'tech3':
-        setEmail('tech3@unitedmotors.com');
-        setPassword('Tech3@123');
-        break;
-      case 'advisor':
-        setEmail('advisor@unitedmotors.com');
-        setPassword('Advisor@123');
-        break;
-    }
+  const fillQuickAccount = (accountEmail: string, accountPass: string) => {
+    setEmail(accountEmail);
+    setPassword(accountPass);
     setError(null);
   };
 
@@ -166,56 +199,115 @@ export const LoginScreen: React.FC = () => {
             )}
           </TouchableOpacity>
 
-          {/* Quick Test Accounts */}
+          {/* Quick Demo Accounts by Organization Tier */}
           <View style={styles.quickAccountsSection}>
             <View style={styles.dividerRow}>
               <View style={[styles.dividerLine, { backgroundColor: colors.borderGlass }]} />
               <Text style={[styles.dividerText, { color: colors.textMuted }]}>Quick Demo Accounts</Text>
               <View style={[styles.dividerLine, { backgroundColor: colors.borderGlass }]} />
             </View>
-            
-            <View style={styles.pillsContainer}>
+
+            {/* Category Tabs */}
+            <View style={[styles.categoryTabRow, { borderColor: colors.borderGlass, backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.03)' }]}>
               <TouchableOpacity
-                style={[styles.pill, { backgroundColor: colors.primaryDim, borderColor: colors.primaryBorder }]}
-                onPress={() => { if (!isLoading) fillQuickAccount('supervisor'); }}
-                activeOpacity={isLoading ? 1 : 0.7}
+                style={[
+                  styles.categoryTab,
+                  activeCategory === 'management' && { backgroundColor: colors.primaryDim, borderColor: colors.primary }
+                ]}
+                onPress={() => setActiveCategory('management')}
+                activeOpacity={0.7}
               >
-                <Shield size={13} color={colors.primaryLight} />
-                <Text style={[styles.pillText, { color: colors.primaryLight }]}>Supervisor</Text>
+                <Text style={[styles.categoryTabText, { color: activeCategory === 'management' ? colors.primaryLight : colors.textMuted }]}>
+                  Management
+                </Text>
               </TouchableOpacity>
+
               <TouchableOpacity
-                style={[styles.pill, { backgroundColor: colors.primaryDim, borderColor: colors.primaryBorder }]}
-                onPress={() => { if (!isLoading) fillQuickAccount('tech1'); }}
-                activeOpacity={isLoading ? 1 : 0.7}
+                style={[
+                  styles.categoryTab,
+                  activeCategory === 'foremen' && { backgroundColor: colors.bayWorkshopDim, borderColor: colors.bayWorkshop }
+                ]}
+                onPress={() => setActiveCategory('foremen')}
+                activeOpacity={0.7}
               >
-                <Wrench size={13} color={colors.primaryLight} />
-                <Text style={[styles.pillText, { color: colors.primaryLight }]}>Tech 1 (General)</Text>
+                <Text style={[styles.categoryTabText, { color: activeCategory === 'foremen' ? colors.bayWorkshopLight : colors.textMuted }]}>
+                  Foremen (05)
+                </Text>
               </TouchableOpacity>
+
               <TouchableOpacity
-                style={[styles.pill, { backgroundColor: colors.successDim, borderColor: colors.successBorder }]}
-                onPress={() => { if (!isLoading) fillQuickAccount('tech2'); }}
-                activeOpacity={isLoading ? 1 : 0.7}
+                style={[
+                  styles.categoryTab,
+                  activeCategory === 'advisors' && { backgroundColor: colors.bayInspectionDim, borderColor: colors.bayInspection }
+                ]}
+                onPress={() => setActiveCategory('advisors')}
+                activeOpacity={0.7}
               >
-                <UserCheck size={13} color={colors.success} />
-                <Text style={[styles.pillText, { color: colors.success }]}>Tech 2 (Alignment)</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.pill, { backgroundColor: colors.warningDim, borderColor: colors.warningBorder }]}
-                onPress={() => { if (!isLoading) fillQuickAccount('tech3'); }}
-                activeOpacity={isLoading ? 1 : 0.7}
-              >
-                <Shield size={13} color={colors.warning} />
-                <Text style={[styles.pillText, { color: colors.warning }]}>Tech 3 (Hoist)</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.pill, { backgroundColor: colors.purpleDim, borderColor: colors.purpleBorder }]}
-                onPress={() => { if (!isLoading) fillQuickAccount('advisor'); }}
-                activeOpacity={isLoading ? 1 : 0.7}
-              >
-                <Headphones size={13} color={colors.purple} />
-                <Text style={[styles.pillText, { color: colors.purple }]}>Advisor</Text>
+                <Text style={[styles.categoryTabText, { color: activeCategory === 'advisors' ? colors.bayInspectionLight : colors.textMuted }]}>
+                  Advisors (06)
+                </Text>
               </TouchableOpacity>
             </View>
+            
+            {/* Category 1: Management & Control */}
+            {activeCategory === 'management' && (
+              <View style={styles.pillsContainer}>
+                {MANAGEMENT_ACCOUNTS.map(acc => {
+                  const Icon = acc.Icon;
+                  return (
+                    <TouchableOpacity
+                      key={acc.email}
+                      style={[styles.pill, { backgroundColor: colors[acc.dimColorKey], borderColor: colors[acc.borderColorKey] }]}
+                      onPress={() => fillQuickAccount(acc.email, acc.pass)}
+                      activeOpacity={0.7}
+                    >
+                      <Icon size={13} color={colors[acc.lightColorKey]} />
+                      <Text style={[styles.pillText, { color: colors[acc.lightColorKey] }]}>{acc.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+
+            {/* Category 2: Foremen (05 Sections) */}
+            {activeCategory === 'foremen' && (
+              <View style={styles.pillsContainer}>
+                {FOREMEN_ACCOUNTS.map(acc => {
+                  const Icon = acc.Icon;
+                  return (
+                    <TouchableOpacity
+                      key={acc.email}
+                      style={[styles.pill, { backgroundColor: colors[acc.dimColorKey], borderColor: colors[acc.borderColorKey] }]}
+                      onPress={() => fillQuickAccount(acc.email, acc.pass)}
+                      activeOpacity={0.7}
+                    >
+                      <Icon size={13} color={colors[acc.lightColorKey]} />
+                      <Text style={[styles.pillText, { color: colors[acc.lightColorKey] }]}>{acc.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+
+            {/* Category 3: Service Advisors (06) */}
+            {activeCategory === 'advisors' && (
+              <View style={styles.pillsContainer}>
+                {ADVISOR_ACCOUNTS.map(acc => {
+                  const Icon = acc.Icon;
+                  return (
+                    <TouchableOpacity
+                      key={acc.email}
+                      style={[styles.pill, { backgroundColor: colors[acc.dimColorKey], borderColor: colors[acc.borderColorKey] }]}
+                      onPress={() => fillQuickAccount(acc.email, acc.pass)}
+                      activeOpacity={0.7}
+                    >
+                      <Icon size={13} color={colors[acc.lightColorKey]} />
+                      <Text style={[styles.pillText, { color: colors[acc.lightColorKey] }]}>{acc.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
           </View>
         </View>
 
@@ -399,6 +491,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  categoryTabRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 16,
+  },
+  categoryTab: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+  },
+  categoryTabText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   pillsContainer: {
     flexDirection: 'row',

@@ -1,17 +1,15 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, TextInput, Platform, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, TextInput, Platform } from 'react-native';
 import { useVehicles } from '../../context/VehicleContext';
-import { useAuth } from '../../context/AuthContext';
 import { usePermissions } from '../../hooks/usePermissions';
-import { UserRole } from '../../types/vehicle';
-import { Compass, Wrench, Shield, UserCheck, CheckCircle2, Search, X, ChevronLeft, ChevronRight, Plus, Car, Bookmark } from 'lucide-react-native';
+import { Search, X, Plus, Car, Bookmark } from 'lucide-react-native';
 
 import { useTheme } from '../../context/ThemeContext';
-
 import { usePinnedVehicles } from '../../hooks/usePinnedVehicles';
+import { APP_TERMINOLOGY } from '../../constants/terminology';
 
 export const SearchBarRow: React.FC = () => {
-  const { searchQuery, setSearchQuery, showMyVehiclesOnly, setShowMyVehiclesOnly, setIsAddModalOpen, currentRole, vehicles } = useVehicles();
+  const { searchQuery, setSearchQuery, showMyVehiclesOnly, setShowMyVehiclesOnly, setIsAddModalOpen, activeTab, vehicles } = useVehicles();
   const { canAddVehicle } = usePermissions();
   const { colors, isDark } = useTheme();
   const { isPinned } = usePinnedVehicles();
@@ -36,23 +34,11 @@ export const SearchBarRow: React.FC = () => {
     const roleFiltered = vehicles.filter(v => {
       if (v.is_finished) return false;
       if (showMyVehiclesOnly && !isPinned(v.id)) return false;
-      switch (currentRole) {
-        case 'supervisor':
-          return true;
-        case 'tech_workshop':
-          return v.current_zone === 'workshop';
-        case 'tech_alignment':
-          return v.current_zone === 'alignment';
-        case 'tech_hoist':
-          return v.current_zone === 'hoist';
-        case 'advisor':
-          return v.current_zone === 'inspection';
-        default:
-          return true;
-      }
+      if (activeTab === 'overview') return true;
+      return v.current_zone === activeTab;
     });
     return roleFiltered.length;
-  }, [vehicles, currentRole, showMyVehiclesOnly, isPinned]);
+  }, [vehicles, activeTab, showMyVehiclesOnly, isPinned]);
 
   return (
     <View style={[styles.topSearchContainer, { backgroundColor: colors.background, borderBottomColor: colors.borderGlass }]}>
@@ -81,53 +67,41 @@ export const SearchBarRow: React.FC = () => {
                 setLocalSearch('');
                 setSearchQuery('');
               }}
-              style={[
-                styles.clearSearchBtn,
-                { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.1)' }
-              ]}
+              style={styles.clearSearchBtn}
             >
-              <X size={14} color={colors.textSecondary} />
+              <X size={14} color={colors.textMuted} />
             </TouchableOpacity>
           )}
         </View>
 
-        {/* Single Click Toggle Button: All ↔ My */}
+        {/* My Vehicles Filter Button */}
         <TouchableOpacity
           style={[
             styles.singleFilterToggleBtn,
             {
-              backgroundColor: showMyVehiclesOnly ? 'rgba(245, 158, 11, 0.15)' : (isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)'),
-              borderColor: showMyVehiclesOnly ? colors.warning : colors.primaryBorder,
+              backgroundColor: showMyVehiclesOnly ? colors.primaryDim : 'transparent',
+              borderColor: showMyVehiclesOnly ? colors.primary : colors.borderGlass,
             }
           ]}
           onPress={() => setShowMyVehiclesOnly(!showMyVehiclesOnly)}
           activeOpacity={0.7}
         >
-          <Bookmark
-            size={13}
-            color={showMyVehiclesOnly ? colors.warning : colors.textSecondary}
-            fill={showMyVehiclesOnly ? colors.warning : 'transparent'}
-          />
-          <Text
-            style={[
-              styles.singleFilterToggleText,
-              { color: showMyVehiclesOnly ? colors.warning : colors.textSecondary }
-            ]}
-          >
-            {showMyVehiclesOnly ? 'My' : 'All'}
+          <Bookmark size={15} color={showMyVehiclesOnly ? colors.primaryLight : colors.textMuted} fill={showMyVehiclesOnly ? colors.primaryLight : 'transparent'} />
+          <Text style={[styles.singleFilterToggleText, { color: showMyVehiclesOnly ? colors.primaryLight : colors.textMuted }]}>
+            {showMyVehiclesOnly ? APP_TERMINOLOGY.navigation.myVehicles : APP_TERMINOLOGY.navigation.allVehicles}
           </Text>
         </TouchableOpacity>
 
-        {/* Dynamic Vehicle Count Badge */}
+        {/* Active Vehicle Counter Badge */}
         <View style={[styles.vehicleCountPill, { backgroundColor: colors.primaryDim, borderColor: colors.primaryBorder }]}>
           <Car size={14} color={colors.primaryLight} />
           <Text style={[styles.vehicleCountPillText, { color: colors.primaryLight }]}>{activeCount}</Text>
         </View>
 
-        {canAddVehicle && currentRole === 'supervisor' && (
+        {canAddVehicle && (
           <TouchableOpacity style={[styles.addVehicleBtn, { backgroundColor: colors.primary }]} onPress={() => setIsAddModalOpen(true)}>
-            <Plus size={15} color="#ffffff" />
-            <Text style={styles.addVehicleBtnText}>Vehicle</Text>
+            <Plus size={15} color={colors.textDark} />
+            <Text style={[styles.addVehicleBtnText, { color: colors.textDark }]}>Vehicle</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -136,13 +110,13 @@ export const SearchBarRow: React.FC = () => {
 };
 
 export const SegmentedTabs: React.FC = () => {
-  const { currentRole, setCurrentRole } = useVehicles();
+  const { activeTab, setActiveTab } = useVehicles();
   const { colors, isDark } = useTheme();
-  const isOverviewActive = currentRole === 'supervisor';
-  const isWorkshopActive = currentRole === 'tech_workshop';
-  const isAlignmentActive = currentRole === 'tech_alignment';
-  const isHoistActive = currentRole === 'tech_hoist';
-  const isAdvisorActive = currentRole === 'advisor';
+  const isOverviewActive = activeTab === 'overview';
+  const isWorkshopActive = activeTab === 'workshop';
+  const isAlignmentActive = activeTab === 'alignment';
+  const isHoistActive = activeTab === 'hoist';
+  const isAdvisorActive = activeTab === 'inspection';
 
   return (
     <View style={[styles.segmentedContainer, { backgroundColor: colors.surface, borderBottomColor: colors.borderGlass }]}>
@@ -158,7 +132,7 @@ export const SegmentedTabs: React.FC = () => {
               borderColor: isOverviewActive ? colors.primary : colors.borderGlass,
             }
           ]}
-          onPress={() => setCurrentRole('supervisor')}
+          onPress={() => setActiveTab('overview')}
           activeOpacity={0.7}
         >
           <Text 
@@ -167,13 +141,13 @@ export const SegmentedTabs: React.FC = () => {
               styles.segmentBtnText,
               {
                 color: isOverviewActive 
-                  ? (isDark ? '#38bdf8' : colors.primary) 
+                  ? (isDark ? colors.primaryLight : colors.primary) 
                   : colors.textSecondary,
                 fontWeight: isOverviewActive ? '800' : '600',
               }
             ]}
           >
-            Overview
+            {APP_TERMINOLOGY.navigation.overview}
           </Text>
         </TouchableOpacity>
 
@@ -193,7 +167,7 @@ export const SegmentedTabs: React.FC = () => {
                 borderColor: colors.bayWorkshop,
               }
             ]}
-            onPress={() => setCurrentRole('tech_workshop')}
+            onPress={() => setActiveTab('workshop')}
             activeOpacity={0.7}
           >
             <Text 
@@ -208,7 +182,7 @@ export const SegmentedTabs: React.FC = () => {
                 }
               ]}
             >
-              General
+              {APP_TERMINOLOGY.stations.workshop.tabLabel}
             </Text>
           </TouchableOpacity>
 
@@ -222,7 +196,7 @@ export const SegmentedTabs: React.FC = () => {
                 borderColor: colors.bayAlignment,
               }
             ]}
-            onPress={() => setCurrentRole('tech_alignment')}
+            onPress={() => setActiveTab('alignment')}
             activeOpacity={0.7}
           >
             <Text 
@@ -237,7 +211,7 @@ export const SegmentedTabs: React.FC = () => {
                 }
               ]}
             >
-              Alignment
+              {APP_TERMINOLOGY.stations.alignment.tabLabel}
             </Text>
           </TouchableOpacity>
 
@@ -251,7 +225,7 @@ export const SegmentedTabs: React.FC = () => {
                 borderColor: colors.bayHoist,
               }
             ]}
-            onPress={() => setCurrentRole('tech_hoist')}
+            onPress={() => setActiveTab('hoist')}
             activeOpacity={0.7}
           >
             <Text 
@@ -266,7 +240,7 @@ export const SegmentedTabs: React.FC = () => {
                 }
               ]}
             >
-              Hoist
+              {APP_TERMINOLOGY.stations.hoist.tabLabel}
             </Text>
           </TouchableOpacity>
         </View>
@@ -282,7 +256,7 @@ export const SegmentedTabs: React.FC = () => {
               borderColor: isAdvisorActive ? colors.bayInspection : colors.borderGlass,
             }
           ]}
-          onPress={() => setCurrentRole('advisor')}
+          onPress={() => setActiveTab('inspection')}
           activeOpacity={0.7}
         >
           <Text 
@@ -297,7 +271,7 @@ export const SegmentedTabs: React.FC = () => {
               }
             ]}
           >
-            Ready
+            {APP_TERMINOLOGY.stations.inspection.tabLabel}
           </Text>
         </TouchableOpacity>
       </View>
@@ -336,14 +310,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     borderRadius: 10,
   },
-  activeSingleBtn: {
-    backgroundColor: 'rgba(14, 165, 233, 0.15)',
-    borderColor: '#0ea5e9',
-  },
-  activeAdvisorBtn: {
-    backgroundColor: 'rgba(168, 85, 247, 0.15)',
-    borderColor: '#a855f7',
-  },
   groupedStagesBox: {
     flex: 1,
     flexDirection: 'row',
@@ -366,104 +332,19 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
     paddingHorizontal: 2,
   },
-  activeWorkshopStage: {
-    backgroundColor: 'rgba(6, 182, 212, 0.15)',
-    borderColor: 'rgba(6, 182, 212, 0.4)',
-  },
-  activeAlignmentStage: {
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    borderColor: 'rgba(16, 185, 129, 0.4)',
-  },
-  activeHoistStage: {
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
-    borderColor: 'rgba(245, 158, 11, 0.4)',
-  },
   stageDivider: {
     width: 1,
     height: 14,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   segmentBtnText: {
-    color: '#94a3b8',
     fontSize: 11.5,
     fontWeight: '600',
   },
-  activeBtnText: {
-    fontWeight: '800',
-  },
   topSearchContainer: {
-    backgroundColor: '#070b14',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
     paddingVertical: 8,
     paddingHorizontal: 16,
-  },
-  footerContainer: {
-    backgroundColor: '#070b14',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.08)',
-    paddingVertical: 10,
-  },
-  swiperRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-  },
-  arrowBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(14, 165, 233, 0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(14, 165, 233, 0.3)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  disabledArrowBtn: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    borderColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  pageInfoPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  pageTitleText: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  pageBadge: {
-    backgroundColor: 'rgba(14, 165, 233, 0.15)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  pageBadgeText: {
-    color: '#38bdf8',
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  youBadge: {
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.3)',
-  },
-  youText: {
-    color: '#10b981',
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 0.5,
   },
   searchBarRow: {
     flexDirection: 'row',
@@ -476,9 +357,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 5,
     height: 36,
-    backgroundColor: 'rgba(14, 165, 233, 0.12)',
     borderWidth: 1,
-    borderColor: 'rgba(14, 165, 233, 0.3)',
     paddingHorizontal: 12,
     borderRadius: 20,
     flexShrink: 0,
@@ -499,7 +378,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   vehicleCountPillText: {
-    color: '#38bdf8',
     fontSize: 12,
     fontWeight: '700',
   },
@@ -509,9 +387,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     height: 36,
     gap: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(14, 165, 233, 0.3)',
     borderRadius: 20,
     paddingHorizontal: 12,
     minWidth: 0,
@@ -524,7 +399,6 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    color: '#ffffff',
     fontSize: 13,
     padding: 0,
     minWidth: 0,
@@ -535,7 +409,6 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
@@ -547,13 +420,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 4,
     height: 36,
-    backgroundColor: '#0ea5e9',
     paddingHorizontal: 10,
     borderRadius: 20,
     flexShrink: 0,
   },
   addVehicleBtnText: {
-    color: '#ffffff',
     fontSize: 12,
     fontWeight: 'bold',
   },

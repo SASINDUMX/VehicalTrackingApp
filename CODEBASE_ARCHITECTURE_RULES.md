@@ -129,9 +129,11 @@ const selectedVehicle = useMemo(() => {
 }, [vehicles, selectedVehicleState]);
 ```
 
-### Rule 3.3: Realtime Debounced Reconciliation
+### Rule 3.3: Realtime Debounced Reconciliation & In-Place State Mutation
 * Multiple connected tablets on the shop floor can trigger rapid simultaneous PostgreSQL CDC events.
-* Realtime handlers must debounce database refetches by **300ms** to prevent the thundering-herd problem.
+* Realtime handlers debounce full database refetches by **300ms** to prevent the thundering-herd problem.
+* **Child Table In-Place Mutations**: Changes to `vehicle_tasks` (checkbox toggles) and `stage_logs` (timer/work start) update state in-place optimistically inside the active vehicle domain tree without waiting for a full network round-trip.
+* **Flicker-Free Insertion**: Newly arriving vehicles on WebSocket `INSERT` immediately fetch full relational data via `fetchVehicleById(id)` to eliminate blank-card layout flashing.
 
 ### Rule 3.4: Selective In-Memory Querying (Zero Full-Table Scans)
 * When hydrating or refetching live vehicles, tasks and stage logs **MUST NOT** perform unconstrained `.select('*')`.
@@ -195,11 +197,31 @@ To guarantee instant rendering (< 100ms) on low-power workshop tablets:
 * Every child table (`vehicle_tasks`, `stage_logs`) **MUST** declare `REFERENCES vehicles(id) ON DELETE CASCADE`.
 * All operational tables **MUST** have `REPLICA IDENTITY FULL` enabled in PostgreSQL so Realtime WebSocket payloads supply complete data on `DELETE` and `UPDATE` events.
 
-### Rule 5.3: Silent 90-Day Retention Auto-Purge
-* To prevent database degradation, the schema defines `purge_records_older_than_90_days()`.
-* The client invokes this RPC fire-and-forget on supervisor launch.
+### Rule 5.3: Autonomous 90-Day Retention Auto-Purge & Midnight Rollover
+* To prevent database degradation and maintain optimal table index performance, the database defines `purge_records_older_than_90_days()` and `reconcile_daily_vehicles()`.
+* **Automated Backend Execution**: Runs 100% autonomously in the background via PostgreSQL `pg_cron` schedules:
+  * `daily-midnight-reconciliation`: Runs at `0 0 * * *` (midnight UTC) to close stale inspection vehicles.
+  * `weekly-90day-retention-purge`: Runs at `0 3 * * 0` (every Sunday at 03:00 UTC) to archive records older than 90 days.
+* **Zero Client Responsibility**: Client application devices do not fire purge triggers on startup/login; maintenance is isolated completely to PostgreSQL.
 
-### Rule 5.4: Future-Proof Multi-Branch Architecture
+### Rule 5.4: Engine-Level Active Plate Uniqueness & Status Integrity
+* The database enforces a PostgreSQL partial unique index:
+  ```sql
+  CREATE UNIQUE INDEX idx_vehicles_unique_active_plate 
+  ON vehicles (UPPER(TRIM(vehicle_no))) 
+  WHERE is_finished = FALSE;
+  ```
+  This guarantees zero duplicate active vehicles even under simultaneous intakes across multiple workshop tablets, while naturally permitting finished vehicles to return for future services.
+* The `vehicles.status` column is constrained via `CHECK (status IN ('active', 'finished', 'incomplete'))`.
+
+### Rule 5.5: Wire-Level Relational Log Sorting & Selective Projection
+* Client repositories must delegate child relation ordering directly to PostgREST:
+  ```typescript
+  .order('entered_at', { foreignTable: 'stage_logs', ascending: true })
+  ```
+* Historical reporting queries must explicitly project only necessary columns (`id`, `vehicle_no`, `current_zone`, `assigned_tech`, `remarks`, `intake_at`, `completed_at`, `effective_completed_at`, `is_finished`, `status`, `is_urgent`, `urgent_note`, `branch_id`, `gross_tat_seconds`, `net_tat_seconds`, `total_break_seconds`, `created_at`, embedded tasks, embedded stage logs) rather than using wildcard `*`, reducing network payload overhead by ~35%.
+
+### Rule 5.6: Future-Proof Multi-Branch Architecture
 All operational tables must support multi-dealership expansion by including:
 ```sql
 branch_id VARCHAR(50) NOT NULL DEFAULT 'main_workshop';
@@ -218,7 +240,7 @@ This ensures zero-friction migration when United Motors adds new regional branch
 * **License Plates**: Must always use `<LicensePlate number={...} size="sm"|"md"|"lg" />` reflecting Sri Lankan plate specifications.
 * **Status Pills**: Must use `<StatusPill variant="success"|"warning"|"danger"|"timer"|"neutral" label={...} />`.
 * **Timers**: Must use `<TimerPill elapsedText={...} variant="cyan"|"amber" size="sm"|"md" />`.
-* **Action Buttons**: Standardized to `28×28px` (`borderRadius: 6`) for card headers (play arrowhead, bookmark pin, chevron expand).
+* **Action Buttons**: Standardized to `28×28px` circular badges (`borderRadius: 14`) for card headers (play arrowhead, bookmark pin, chevron expand) to ensure uniform touch targets and visual harmony across overview cards and station queues.
 * **Empty States**: Must use `<EmptyStateCard icon={...} title={...} subtitle={...} />`.
 
 ### Rule 6.3: Strictly Zero Browser/OS Popups

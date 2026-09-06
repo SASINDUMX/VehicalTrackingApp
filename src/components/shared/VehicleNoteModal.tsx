@@ -4,6 +4,7 @@ import { AlertOctagon, FileText, Check } from 'lucide-react-native';
 import { useTheme } from '../../context/ThemeContext';
 import { LicensePlate } from './LicensePlate';
 import { BaseModal } from './BaseModal';
+import { APP_TERMINOLOGY } from '../../constants/terminology';
 
 export interface VehicleNoteModalProps {
   visible: boolean;
@@ -33,14 +34,14 @@ export const VehicleNoteModal: React.FC<VehicleNoteModalProps> = ({
   const modalTitle = hasUrgent
     ? hasRemarks
       ? 'Priority Notice & Remarks'
-      : 'Urgent Vehicle Instructions'
+      : APP_TERMINOLOGY.urgency.bannerTitle
     : 'Vehicle Remarks & Instructions';
 
   const modalSubtitle = hasUrgent
     ? 'PRIORITY ACTION REQUIRED'
     : 'CUSTOMER SERVICE INSTRUCTIONS';
 
-  const borderColor = hasUrgent ? 'rgba(239, 68, 68, 0.4)' : colors.primaryBorder;
+  const borderColor = hasUrgent ? colors.dangerBorder : colors.primaryBorder;
 
   return (
     <BaseModal
@@ -51,8 +52,8 @@ export const VehicleNoteModal: React.FC<VehicleNoteModalProps> = ({
       borderColor={borderColor}
       icon={
         hasUrgent ? (
-          <View style={[styles.iconCircle, styles.urgentIconCircle]}>
-            <AlertOctagon size={20} color="#ef4444" />
+          <View style={[styles.iconCircle, styles.urgentIconCircle, { backgroundColor: colors.dangerDim, borderColor: colors.dangerBorder }]}>
+            <AlertOctagon size={20} color={colors.danger} />
           </View>
         ) : (
           <View style={[styles.iconCircle, { backgroundColor: colors.primaryDim, borderColor: colors.primaryBorder }]}>
@@ -66,7 +67,7 @@ export const VehicleNoteModal: React.FC<VehicleNoteModalProps> = ({
         <TouchableOpacity
           style={[
             styles.ackBtn,
-            { backgroundColor: hasUrgent ? '#ef4444' : colors.primary }
+            { backgroundColor: hasUrgent ? colors.danger : colors.primary }
           ]}
           onPress={onClose}
           activeOpacity={0.8}
@@ -89,11 +90,11 @@ export const VehicleNoteModal: React.FC<VehicleNoteModalProps> = ({
         {hasUrgent && (
           <View style={styles.sectionContainer}>
             <View style={styles.sectionHeaderRow}>
-              <AlertOctagon size={14} color="#ef4444" />
-              <Text style={styles.urgentLabel}>PRIORITY / URGENT INSTRUCTIONS:</Text>
+              <AlertOctagon size={14} color={colors.danger} />
+              <Text style={[styles.urgentLabel, { color: colors.danger }]}>PRIORITY / URGENT INSTRUCTIONS:</Text>
             </View>
-            <View style={styles.urgentContentBox}>
-              <Text style={styles.urgentText}>
+            <View style={[styles.urgentContentBox, { backgroundColor: colors.cardUrgentBg, borderColor: colors.cardUrgentBorder }]}>
+              <Text style={[styles.urgentText, { color: colors.dangerLight }]}>
                 {urgentNote && urgentNote.trim()
                   ? urgentNote.trim()
                   : 'Marked as high priority. Immediate workshop attention requested.'}

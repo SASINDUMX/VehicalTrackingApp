@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, ReactNode } from 'react';
-import { Vehicle, VehicleTask, StageLog, BayZone, UserRole, TaskType } from '../types/vehicle';
+import { Vehicle, VehicleTask, StageLog, BayZone, UserRole, NavigationTab, TaskType } from '../types/vehicle';
 import { getRoleBay } from '../constants/bays';
 import { supabase, isSupabaseConnected } from '../lib/supabase';
 import { safeStorage } from '../lib/supabase';
@@ -17,6 +17,8 @@ export interface VehicleContextType {
   vehicles: Vehicle[];
   currentRole: UserRole;
   setCurrentRole: (role: UserRole) => void;
+  activeTab: NavigationTab;
+  setActiveTab: (tab: NavigationTab) => void;
   selectedVehicle: Vehicle | null;
   setSelectedVehicle: (vehicle: Vehicle | null) => void;
 
@@ -51,7 +53,8 @@ export interface VehicleContextType {
   updateVehicleJobOrder: (
     vehicleId: string,
     updatedTaskTypes: TaskType[],
-    updatedRemarks: string
+    updatedRemarks: string,
+    urgencyData?: { is_urgent: boolean; urgent_note: string | null }
   ) => Promise<void>;
   toggleTaskCompletion: (
     vehicleId: string,
@@ -63,15 +66,10 @@ export interface VehicleContextType {
     targetZone: BayZone,
     targetZoneName: string
   ) => Promise<boolean>;
-  toggleStageTimer: (
-    vehicleId: string,
-    pause: boolean,
-    updatedBy?: string
-  ) => Promise<void>;
   startStageWork: (
     vehicleId: string,
     startedBy: string
-  ) => Promise<void>;
+  ) => Promise<boolean>;
   finishVehicleJobSheet: (
     vehicleId: string,
     advisorName: string
@@ -83,7 +81,7 @@ export interface VehicleContextType {
     note?: string | null
   ) => Promise<void>;
   refreshVehicles: () => Promise<void>;
-  fetchHistoricalVehicles: (datePreset: 'today' | 'yesterday' | '7days' | 'month' | 'all') => Promise<Vehicle[]>;
+  fetchHistoricalVehicles: (datePreset: 'today' | 'yesterday' | '7days' | 'month' | '3months') => Promise<Vehicle[]>;
 
   // Telemetry & Network Status
   isLoading: boolean;
@@ -94,14 +92,23 @@ const VehicleContext = createContext<VehicleContextType | undefined>(undefined);
 
 export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const ui = useUI();
-  const [currentRole, setCurrentRole] = useState<UserRole>('supervisor');
+  const [currentRole, setCurrentRole] = useState<UserRole>('service_executive');
+  const [activeTab, setActiveTab] = useState<NavigationTab>('overview');
   const currentRoleRef = useRef<UserRole>(currentRole);
+  const activeTabRef = useRef<NavigationTab>(activeTab);
   useEffect(() => {
     currentRoleRef.current = currentRole;
   }, [currentRole]);
+  useEffect(() => {
+    activeTabRef.current = activeTab;
+  }, [activeTab]);
 
   // Reactive Derived Selection
   const [selectedVehicleState, setSelectedVehicleState] = useState<Vehicle | null>(null);
+  const selectedVehicleStateRef = useRef<Vehicle | null>(null);
+  useEffect(() => {
+    selectedVehicleStateRef.current = selectedVehicleState;
+  }, [selectedVehicleState]);
 
   // Vehicles Domain State with Offline Cache Hydration
   const [vehicles, setVehicles] = useState<Vehicle[]>(() => {
@@ -127,6 +134,11 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   const isMountedRef = useRef<boolean>(true);
   const realtimeDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const locallyCreatedVehiclesRef = useRef<Set<string>>(new Set());
+  const vehiclesRef = useRef<Vehicle[]>(vehicles);
+  useEffect(() => {
+    vehiclesRef.current = vehicles;
+  }, [vehicles]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -194,98 +206,155 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   // 2. Realtime Subscriptions & Initial Mount
   useEffect(() => {
+    // Initial fetch of floor data (midnight rollover and retention are handled 100% autonomously by PostgreSQL pg_cron)
     fetchSupabaseData(true);
-
-    // Silent 90-day auto-cleanup
-    vehicleService.purgeOldRecords();
 
     const client = supabase;
     if (client && isSupabaseConnected) {
       const channel = client
         .channel('public:vehicle_changes')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'vehicles' }, (payload) => {
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'vehicles' }, async (payload) => {
           if (payload.new && isMountedRef.current) {
             const newV = payload.new as Record<string, unknown>;
-            const targetZone = newV.current_zone as BayZone;
-            const userBay = getRoleBay(currentRoleRef.current);
+            const vehicleId = newV.id as string;
+            const vehicleNo = typeof newV.vehicle_no === 'string' ? newV.vehicle_no.trim().toUpperCase() : '';
 
-            if (targetZone === userBay) {
+            // Suppress duplicate fetch if this client created the vehicle locally (already fetched & mapped by createVehicle)
+            if (locallyCreatedVehiclesRef.current.has(vehicleId) || (vehicleNo && locallyCreatedVehiclesRef.current.has(vehicleNo))) {
+              return;
+            }
+
+            const targetZone = newV.current_zone as BayZone;
+            const currentTab = activeTabRef.current;
+
+            if (targetZone === currentTab || currentTab === 'overview') {
               try { chimeService.playArrivalChime(); } catch { /* ignore */ }
               try { hapticService.triggerArrivalHaptic(); } catch { /* ignore */ }
             }
 
-            setVehicles(prev => {
-              if (prev.some(v => v.id === newV.id)) return prev;
-              const vehicle: Vehicle = {
-                id: newV.id as string,
-                vehicle_no: newV.vehicle_no as string,
-                current_zone: targetZone,
-                assigned_tech: (newV.assigned_tech as string) || 'Unassigned',
-                remarks: (newV.remarks as string) || '',
-                intake_at: newV.intake_at as string,
-                completed_at: newV.completed_at as string | null,
-                is_finished: newV.is_finished as boolean,
-                created_at: newV.created_at as string,
-                status: (newV.status as 'active' | 'finished' | 'incomplete') || 'active',
-                is_urgent: (newV.is_urgent as boolean) || false,
-                urgent_note: (newV.urgent_note as string) || null,
-                tasks: [],
-                stage_logs: [],
-              };
-              return [vehicle, ...prev];
-            });
-            debouncedRefetch();
+            // Fetch the newly inserted vehicle with tasks and logs immediately to prevent blank cards
+            const fullVehicle = await vehicleService.fetchVehicleById(vehicleId);
+            if (isMountedRef.current) {
+              if (fullVehicle) {
+                setVehicles(prev => {
+                  if (prev.some(v => v.id === fullVehicle.id)) {
+                    return prev.map(v => (v.id === fullVehicle.id ? fullVehicle : v));
+                  }
+                  return [fullVehicle, ...prev];
+                });
+              } else {
+                debouncedRefetch();
+              }
+            }
           }
         })
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'vehicles' }, (payload) => {
           if (payload.new && isMountedRef.current) {
             const updated = payload.new as Record<string, unknown>;
             const targetZone = updated.current_zone as BayZone;
-            const userBay = getRoleBay(currentRoleRef.current);
+            const currentTab = activeTabRef.current;
 
-            setVehicles(prev => {
-              const prevV = prev.find(v => v.id === updated.id);
-              if (prevV && prevV.current_zone !== targetZone && targetZone === userBay) {
-                try { chimeService.playArrivalChime(); } catch { /* ignore */ }
-                try { hapticService.triggerArrivalHaptic(); } catch { /* ignore */ }
-              }
+            const prevV = vehiclesRef.current.find(v => v.id === updated.id);
+            if (prevV && prevV.current_zone !== targetZone && (targetZone === currentTab || currentTab === 'overview')) {
+              try { chimeService.playArrivalChime(); } catch { /* ignore */ }
+              try { hapticService.triggerArrivalHaptic(); } catch { /* ignore */ }
+            }
 
-              return prev.map(v => {
-                if (v.id !== updated.id) return v;
-                return {
-                  ...v,
-                  vehicle_no: updated.vehicle_no as string,
-                  current_zone: targetZone,
-                  assigned_tech: (updated.assigned_tech as string) || v.assigned_tech,
-                  remarks: (updated.remarks as string) ?? v.remarks,
-                  completed_at: updated.completed_at as string | null,
-                  is_finished: updated.is_finished as boolean,
-                  status: (updated.status as 'active' | 'finished' | 'incomplete') || v.status,
-                  is_urgent: (updated.is_urgent as boolean) ?? v.is_urgent,
-                  urgent_note: (updated.urgent_note as string) ?? v.urgent_note,
-                  is_paused: (updated.is_paused as boolean) ?? v.is_paused,
-                  paused_at: (updated.paused_at as string | null) ?? v.paused_at,
-                  paused_seconds: (updated.paused_seconds as number) ?? v.paused_seconds,
-                };
-              });
-            });
-            debouncedRefetch();
+            setVehicles(prev => prev.map(v => {
+              if (v.id !== updated.id) return v;
+              return {
+                ...v,
+                vehicle_no: updated.vehicle_no as string,
+                current_zone: targetZone,
+                assigned_tech: (updated.assigned_tech as string) || v.assigned_tech,
+                remarks: (updated.remarks as string) ?? v.remarks,
+                completed_at: updated.completed_at as string | null,
+                is_finished: updated.is_finished as boolean,
+                status: (updated.status as 'active' | 'finished' | 'incomplete') || v.status,
+                is_urgent: (updated.is_urgent as boolean) ?? v.is_urgent,
+                urgent_note: (updated.urgent_note as string) ?? v.urgent_note,
+                is_paused: (updated.is_paused as boolean) ?? v.is_paused,
+                paused_at: (updated.paused_at as string | null) ?? v.paused_at,
+                paused_seconds: (updated.paused_seconds as number) ?? v.paused_seconds,
+                effective_completed_at: (updated.effective_completed_at as string | null) ?? v.effective_completed_at,
+              };
+            }));
           }
         })
         .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'vehicles' }, (payload) => {
           if (payload.old && isMountedRef.current) {
             const deletedId = (payload.old as { id: string }).id;
             setVehicles(prev => prev.filter(v => v.id !== deletedId));
-            if (selectedVehicleState?.id === deletedId) {
+            if (selectedVehicleStateRef.current?.id === deletedId) {
               setSelectedVehicleState(null);
             }
           }
         })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'vehicle_tasks' }, () => {
-          debouncedRefetch();
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'vehicle_tasks' }, (payload) => {
+          if (!isMountedRef.current) return;
+          const taskData = (payload.new || payload.old) as VehicleTask | null;
+          if (!taskData?.vehicle_id || !taskData?.id) return;
+
+          setVehicles(prev => prev.map(v => {
+            if (v.id !== taskData.vehicle_id) return v;
+
+            if (payload.eventType === 'INSERT') {
+              if (v.tasks.some(t => t.id === taskData.id)) return v;
+              return { ...v, tasks: [...v.tasks, taskData] };
+            }
+
+            if (payload.eventType === 'DELETE') {
+              return { ...v, tasks: v.tasks.filter(t => t.id !== taskData.id) };
+            }
+
+            // UPDATE (or default)
+            const updatedTasks = v.tasks.map(t => {
+              if (t.id !== taskData.id) return t;
+              return {
+                ...t,
+                is_completed: typeof taskData.is_completed === 'boolean' ? taskData.is_completed : t.is_completed,
+                completed_at: taskData.completed_at !== undefined ? taskData.completed_at : t.completed_at,
+                completed_by: taskData.completed_by !== undefined ? taskData.completed_by : t.completed_by,
+                is_required: typeof taskData.is_required === 'boolean' ? taskData.is_required : t.is_required,
+                task_name: taskData.task_name || t.task_name,
+                task_type: taskData.task_type || t.task_type,
+              };
+            });
+            return { ...v, tasks: updatedTasks };
+          }));
         })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'stage_logs' }, () => {
-          debouncedRefetch();
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'stage_logs' }, (payload) => {
+          if (!isMountedRef.current) return;
+          const logData = (payload.new || payload.old) as StageLog | null;
+          if (!logData?.vehicle_id || !logData?.id) return;
+
+          setVehicles(prev => prev.map(v => {
+            if (v.id !== logData.vehicle_id) return v;
+
+            if (payload.eventType === 'INSERT') {
+              if (v.stage_logs.some(l => l.id === logData.id)) return v;
+              return { ...v, stage_logs: [...v.stage_logs, logData] };
+            }
+
+            if (payload.eventType === 'DELETE') {
+              return { ...v, stage_logs: v.stage_logs.filter(l => l.id !== logData.id) };
+            }
+
+            // UPDATE (or default)
+            const updatedLogs = v.stage_logs.map(l => {
+              if (l.id !== logData.id) return l;
+              return {
+                ...l,
+                work_started_at: logData.work_started_at !== undefined ? logData.work_started_at : l.work_started_at,
+                idle_seconds: typeof logData.idle_seconds === 'number' ? logData.idle_seconds : l.idle_seconds,
+                exited_at: logData.exited_at !== undefined ? logData.exited_at : l.exited_at,
+                duration_seconds: typeof logData.duration_seconds === 'number' ? logData.duration_seconds : l.duration_seconds,
+                to_zone: logData.to_zone || l.to_zone,
+                from_zone: logData.from_zone !== undefined ? logData.from_zone : l.from_zone,
+              };
+            });
+            return { ...v, stage_logs: updatedLogs };
+          }));
         })
         .subscribe((status) => {
           if (isMountedRef.current) {
@@ -297,32 +366,25 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
         client.removeChannel(channel);
       };
     }
-  }, [fetchSupabaseData, debouncedRefetch, selectedVehicleState?.id]);
+  }, [fetchSupabaseData, debouncedRefetch]);
 
   // 2b. Midnight Rollover: Automatically reconciles and resets bays at 12:00:01 AM every day
   useEffect(() => {
     let timer: NodeJS.Timeout;
-
-    const scheduleMidnightRollover = () => {
+    const scheduleMidnightRefresh = () => {
       const now = new Date();
       // Calculate next midnight in local time
-      const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 1);
+      const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 5);
       const msUntilMidnight = Math.max(1000, nextMidnight.getTime() - now.getTime());
 
-      timer = setTimeout(async () => {
-        console.log('[VehicleContext] Midnight reached! Resetting bays for new service day...');
-        try {
-          await vehicleService.reconcileDailyVehicles();
-        } catch (err) {
-          console.warn('[VehicleContext] Midnight reconciliation error:', err);
-        }
+      timer = setTimeout(() => {
+        // Backend pg_cron runs reconcile_daily_vehicles() at 00:00. Client simply refreshes UI.
         fetchSupabaseData(false);
-        // Schedule next midnight rollover
-        scheduleMidnightRollover();
+        scheduleMidnightRefresh();
       }, msUntilMidnight);
     };
 
-    scheduleMidnightRollover();
+    scheduleMidnightRefresh();
     return () => {
       if (timer) clearTimeout(timer);
     };
@@ -344,6 +406,9 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
       showError('Duplicate Vehicle', `Vehicle ${cleanNo} is already active in the workshop.`);
       return;
     }
+
+    // Suppress self-echo from Realtime WebSocket for this vehicle
+    locallyCreatedVehiclesRef.current.add(cleanNo);
 
     try { hapticService.triggerSuccessHaptic(); } catch { /* ignore */ }
     const now = new Date().toISOString();
@@ -416,10 +481,18 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
         },
         tasksList
       );
+      if (created?.id) {
+        locallyCreatedVehiclesRef.current.add(created.id);
+        setTimeout(() => {
+          locallyCreatedVehiclesRef.current.delete(cleanNo);
+          locallyCreatedVehiclesRef.current.delete(created.id);
+        }, 5000);
+      }
       if (isMountedRef.current) {
         setVehicles(prev => prev.map(v => (v.id === newVehicleId ? created : v)));
       }
     } catch (err) {
+      locallyCreatedVehiclesRef.current.delete(cleanNo);
       console.error('[VehicleContext] addVehicle error:', err);
       if (isMountedRef.current) {
         setVehicles(prevVehicles);
@@ -432,7 +505,8 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
   const updateVehicleJobOrder = useCallback(async (
     vehicleId: string,
     updatedTaskTypes: TaskType[],
-    updatedRemarks: string
+    updatedRemarks: string,
+    urgencyData?: { is_urgent: boolean; urgent_note: string | null }
   ) => {
     try { hapticService.triggerLightHaptic(); } catch { /* ignore */ }
     const targetVehicle = vehicles.find(v => v.id === vehicleId);
@@ -470,12 +544,26 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
           };
         });
 
-        return { ...v, tasks: updatedTasks, remarks: updatedRemarks };
+        return {
+          ...v,
+          tasks: updatedTasks,
+          remarks: updatedRemarks,
+          ...(urgencyData !== undefined ? {
+            is_urgent: urgencyData.is_urgent,
+            urgent_note: urgencyData.urgent_note,
+          } : {}),
+        };
       })
     );
 
     try {
-      await vehicleService.updateJobOrder(vehicleId, targetVehicle.tasks, finalTaskTypes, updatedRemarks);
+      await vehicleService.updateJobOrder(
+        vehicleId,
+        targetVehicle.tasks,
+        finalTaskTypes,
+        updatedRemarks,
+        urgencyData
+      );
     } catch (err) {
       console.error('[VehicleContext] updateJobOrder error:', err);
       if (isMountedRef.current) {
@@ -597,42 +685,19 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
     }
   }, [vehicles, showError]);
 
-  // 7. START STAGE WORK (Transitions from IDLE to ACTIVE)
-  const startStageWork = useCallback(async (vehicleId: string, startedBy: string) => {
-    try { hapticService.triggerLightHaptic(); } catch { /* ignore */ }
+  // 7. START STAGE WORK (Transitions from IDLE to ACTIVE - Waits for Backend Response)
+  const startStageWork = useCallback(async (vehicleId: string, startedBy: string): Promise<boolean> => {
     const now = new Date().toISOString();
     const targetVehicle = vehicles.find(v => v.id === vehicleId);
-    const activeLog = targetVehicle?.stage_logs.find(l => !l.exited_at && !l.work_started_at);
+    if (!targetVehicle) return false;
+
+    const activeLog = targetVehicle.stage_logs.find(l => !l.exited_at && !l.work_started_at);
     const computedIdle = activeLog?.entered_at
       ? Math.max(0, Math.floor((new Date(now).getTime() - new Date(activeLog.entered_at).getTime()) / 1000))
       : 0;
 
-    setVehicles(prev =>
-      prev.map(v => {
-        if (v.id !== vehicleId) return v;
-        const updatedLogs = [...v.stage_logs];
-        const lastIdx = updatedLogs.length - 1;
-
-        if (lastIdx >= 0) {
-          const log = updatedLogs[lastIdx];
-          if (!log.exited_at && !log.work_started_at) {
-            updatedLogs[lastIdx] = {
-              ...log,
-              work_started_at: now,
-              idle_seconds: computedIdle,
-            };
-          }
-        }
-
-        return {
-          ...v,
-          assigned_tech: startedBy || v.assigned_tech,
-          stage_logs: updatedLogs,
-        };
-      })
-    );
-
     try {
+      // 1. Await backend persistence first
       await vehicleService.startWork(
         vehicleId,
         startedBy,
@@ -640,10 +705,43 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
         activeLog?.id || null,
         activeLog?.entered_at || null
       );
-    } catch (err) {
-      console.warn('[VehicleContext] startStageWork error:', err);
+
+      // 2. Only mutate client state after backend confirmation
+      try { hapticService.triggerLightHaptic(); } catch { /* ignore */ }
+
+      setVehicles(prev =>
+        prev.map(v => {
+          if (v.id !== vehicleId) return v;
+          const updatedLogs = [...v.stage_logs];
+          const lastIdx = updatedLogs.length - 1;
+
+          if (lastIdx >= 0) {
+            const log = updatedLogs[lastIdx];
+            if (!log.exited_at && !log.work_started_at) {
+              updatedLogs[lastIdx] = {
+                ...log,
+                work_started_at: now,
+                idle_seconds: computedIdle,
+              };
+            }
+          }
+
+          return {
+            ...v,
+            assigned_tech: startedBy || v.assigned_tech,
+            stage_logs: updatedLogs,
+          };
+        })
+      );
+      return true;
+    } catch (err: any) {
+      console.error('[VehicleContext] startStageWork error:', err);
+      if (isMountedRef.current) {
+        showError('Start Work Failed', err?.message || 'Could not start work on vehicle. Please try again.');
+      }
+      return false;
     }
-  }, [vehicles]);
+  }, [vehicles, showError]);
 
   // 8. FINISH VEHICLE JOB SHEET (Advisor Handover - Waits for Backend Response)
   const finishVehicleJobSheet = useCallback(async (vehicleId: string, advisorName: string): Promise<boolean> => {
@@ -709,64 +807,13 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
     }
   }, [vehicles, showError]);
 
-  // 9. TOGGLE STAGE TIMER (Pause / Resume)
-  const toggleStageTimer = useCallback(async (vehicleId: string, pause: boolean) => {
-    try { hapticService.triggerLightHaptic(); } catch { /* ignore */ }
-    const now = new Date().toISOString();
-    const targetVehicle = vehicles.find(v => v.id === vehicleId);
-    if (!targetVehicle) return;
-
-    setVehicles(prev =>
-      prev.map(v => {
-        if (v.id !== vehicleId) return v;
-        const updatedLogs = [...v.stage_logs];
-        const lastIdx = updatedLogs.length - 1;
-
-        if (pause) {
-          if (lastIdx >= 0 && !updatedLogs[lastIdx].exited_at) {
-            updatedLogs[lastIdx] = { ...updatedLogs[lastIdx], is_paused: true, paused_at: now };
-          }
-          return { ...v, is_paused: true, paused_at: now, stage_logs: updatedLogs };
-        } else {
-          const pausedAtTime = v.paused_at ? new Date(v.paused_at).getTime() : Date.now();
-          const addedDuration = Math.max(0, Math.floor((Date.now() - pausedAtTime) / 1000));
-          const newPaused = (v.paused_seconds || 0) + addedDuration;
-
-          if (lastIdx >= 0 && !updatedLogs[lastIdx].exited_at) {
-            const logPaused = (updatedLogs[lastIdx].paused_seconds || 0) + addedDuration;
-            updatedLogs[lastIdx] = {
-              ...updatedLogs[lastIdx],
-              is_paused: false,
-              paused_at: null,
-              paused_seconds: logPaused,
-            };
-          }
-
-          return { ...v, is_paused: false, paused_at: null, paused_seconds: newPaused, stage_logs: updatedLogs };
-        }
-      })
-    );
-
-    try {
-      await vehicleService.toggleTimer(
-        vehicleId,
-        pause,
-        now,
-        targetVehicle.paused_seconds || 0,
-        targetVehicle.paused_at || null
-      );
-    } catch (err) {
-      console.warn('[VehicleContext] toggleStageTimer note:', err);
-    }
-  }, [vehicles]);
-
-  // 10. DELETE VEHICLE
+  // 9. DELETE VEHICLE
   const deleteVehicle = useCallback(async (vehicleId: string) => {
     try { hapticService.triggerLightHaptic(); } catch { /* ignore */ }
     const prevVehicles = vehicles;
 
     setVehicles(prev => prev.filter(v => v.id !== vehicleId));
-    if (selectedVehicleState?.id === vehicleId) {
+    if (selectedVehicleStateRef.current?.id === vehicleId) {
       setSelectedVehicleState(null);
     }
 
@@ -779,7 +826,7 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
         showError('Delete Failed', 'Could not delete vehicle.');
       }
     }
-  }, [vehicles, selectedVehicleState?.id]);
+  }, [vehicles]);
 
   // 11. UPDATE URGENCY
   const updateUrgency = useCallback(async (vehicleId: string, isUrgent: boolean, note?: string | null) => {
@@ -804,22 +851,24 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   // 12. HISTORICAL VEHICLES QUERY (On Demand)
   const fetchHistoricalVehicles = useCallback(async (
-    datePreset: 'today' | 'yesterday' | '7days' | 'month' | 'all'
+    datePreset: 'today' | 'yesterday' | '7days' | 'month' | '3months'
   ): Promise<Vehicle[]> => {
-    if (!isSupabaseConnected) return vehicles;
+    if (!isSupabaseConnected) return vehiclesRef.current;
     try {
       return await vehicleService.fetchHistoricalVehicles(datePreset);
     } catch (err) {
       console.warn('[VehicleContext] fetchHistoricalVehicles error:', err);
-      return vehicles;
+      return vehiclesRef.current;
     }
-  }, [vehicles]);
+  }, []);
 
   const value = useMemo<VehicleContextType>(
     () => ({
       vehicles,
       currentRole,
       setCurrentRole,
+      activeTab,
+      setActiveTab,
       selectedVehicle,
       setSelectedVehicle,
 
@@ -846,7 +895,6 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
       updateVehicleJobOrder,
       toggleTaskCompletion,
       transferVehicleZone,
-      toggleStageTimer,
       startStageWork,
       finishVehicleJobSheet,
       deleteVehicle,
@@ -860,6 +908,7 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
     [
       vehicles,
       currentRole,
+      activeTab,
       selectedVehicle,
       setSelectedVehicle,
       ui,
@@ -867,7 +916,6 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
       updateVehicleJobOrder,
       toggleTaskCompletion,
       transferVehicleZone,
-      toggleStageTimer,
       startStageWork,
       finishVehicleJobSheet,
       deleteVehicle,

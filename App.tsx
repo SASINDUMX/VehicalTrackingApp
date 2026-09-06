@@ -13,11 +13,11 @@ import { AddVehicleModal } from './src/components/supervisor/AddVehicleModal';
 import { VehicleDetailsModal } from './src/components/shared/VehicleDetailsModal';
 import { ServiceReportsModal } from './src/components/reports/ServiceReportsModal';
 import { VehicleNoteModal } from './src/components/shared/VehicleNoteModal';
-import { UserRole } from './src/types/vehicle';
+import { UserRole, NavigationTab } from './src/types/vehicle';
 
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 
-const rolesList: UserRole[] = ['supervisor', 'tech_workshop', 'tech_alignment', 'tech_hoist', 'advisor'];
+const navigationTabs: NavigationTab[] = ['overview', 'workshop', 'alignment', 'hoist', 'inspection'];
 
 const TabTransitionWrapper: React.FC<{ activeKey: string; children: React.ReactNode }> = ({ activeKey, children }) => {
   const fadeAnim = React.useRef(new Animated.Value(0.3)).current;
@@ -52,18 +52,32 @@ const TabTransitionWrapper: React.FC<{ activeKey: string; children: React.ReactN
 
 const AppContent: React.FC = () => {
   const { userProfile } = useAuth();
-  const { currentRole, setCurrentRole, isReportsModalOpen, vehicleNoteModalData, hideVehicleNotes } = useVehicles();
+  const { activeTab, setActiveTab, setCurrentRole, isReportsModalOpen, vehicleNoteModalData, hideVehicleNotes } = useVehicles();
   const { colors, isDark } = useTheme();
   const [touchStart, setTouchStart] = React.useState<{ x: number; y: number } | null>(null);
 
-  // Automatically direct user to their corresponding role page on login
+  // Automatically direct user to their corresponding home station on login
   useEffect(() => {
     if (userProfile?.role) {
       setCurrentRole(userProfile.role);
+      if (userProfile.role === 'advisor') {
+        setActiveTab('inspection');
+      } else if (userProfile.role === 'foreman') {
+        if (userProfile.section === 'hoist') {
+          setActiveTab('hoist');
+        } else if (userProfile.section === 'alignment') {
+          setActiveTab('alignment');
+        } else {
+          setActiveTab('workshop');
+        }
+      } else {
+        // Management (service_executive, agm, job_controller, workshop_manager)
+        setActiveTab('overview');
+      }
     }
-  }, [userProfile?.role]);
+  }, [userProfile?.role, userProfile?.section]);
 
-  const currentIndex = rolesList.indexOf(currentRole);
+  const currentIndex = navigationTabs.indexOf(activeTab);
 
   const handleTouchStart = (e: any) => {
     const touch = e.nativeEvent.touches ? e.nativeEvent.touches[0] : e.nativeEvent;
@@ -82,12 +96,12 @@ const AppContent: React.FC = () => {
 
     if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 60) {
       if (dx < 0) {
-        if (currentIndex < rolesList.length - 1) {
-          setCurrentRole(rolesList[currentIndex + 1]);
+        if (currentIndex < navigationTabs.length - 1) {
+          setActiveTab(navigationTabs[currentIndex + 1]);
         }
       } else {
         if (currentIndex > 0) {
-          setCurrentRole(rolesList[currentIndex - 1]);
+          setActiveTab(navigationTabs[currentIndex - 1]);
         }
       }
     }
@@ -140,12 +154,12 @@ const AppContent: React.FC = () => {
               onTouchStart={handleTouchStart}
               onTouchEnd={handleTouchEnd}
             >
-              <TabTransitionWrapper activeKey={currentRole}>
-                {currentRole === 'supervisor' && <FloorPlan2D />}
-                {(currentRole === 'tech_workshop' || currentRole === 'tech_hoist' || currentRole === 'tech_alignment') && (
+              <TabTransitionWrapper activeKey={activeTab}>
+                {activeTab === 'overview' && <FloorPlan2D />}
+                {(activeTab === 'workshop' || activeTab === 'hoist' || activeTab === 'alignment') && (
                   <TechnicianStationView />
                 )}
-                {currentRole === 'advisor' && <AdvisorInspectionView />}
+                {activeTab === 'inspection' && <AdvisorInspectionView />}
               </TabTransitionWrapper>
             </View>
           </>

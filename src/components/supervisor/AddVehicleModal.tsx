@@ -5,8 +5,12 @@ import { BayZone, TaskType } from '../../types/vehicle';
 import { X, Car, Wrench, Shield, Navigation, Send, CheckSquare, Square, AlertTriangle, Droplets } from 'lucide-react-native';
 
 import { formatVehicleNoInput, isValidVehicleNo } from '../../utils/vehicleNumberUtils';
+import { computeRecommendedStation } from '../../utils/bayLogicUtils';
 import { useTheme } from '../../context/ThemeContext';
 import { BaseModal } from '../shared/BaseModal';
+import { TaskSelectorChips } from '../shared/TaskSelectorChips';
+import { UrgentToggleInput } from '../shared/UrgentToggleInput';
+import { APP_TERMINOLOGY } from '../../constants/terminology';
 
 export const AddVehicleModal: React.FC = () => {
   const { isAddModalOpen, setIsAddModalOpen, addVehicle, vehicles } = useVehicles();
@@ -19,7 +23,7 @@ export const AddVehicleModal: React.FC = () => {
     'hoist_service'
   ]);
   const [targetZone, setTargetZone] = useState<BayZone>('workshop');
-  const [assignedTech, setAssignedTech] = useState<string>('Technician 1 (General Service)');
+  const [assignedTech, setAssignedTech] = useState<string>(APP_TERMINOLOGY.stations.workshop.name);
   const [remarks, setRemarks] = useState<string>('');
   const [isUrgent, setIsUrgent] = useState<boolean>(false);
   const [urgentNote, setUrgentNote] = useState<string>('');
@@ -32,20 +36,6 @@ export const AddVehicleModal: React.FC = () => {
   );
   const isNoValid = isValidVehicleNo(vehicleNo) && !isDuplicate;
   const isNoTouched = vehicleNo.length > 0;
-
-  // Auto-determine recommended starting station based on shop flow (General Service -> Alignment -> Hoist)
-  const computeRecommendedStation = (tasks: TaskType[]): { zone: BayZone; tech: string } => {
-    if (tasks.includes('general_service')) {
-      return { zone: 'workshop', tech: 'Technician 1 (General Service)' };
-    }
-    if (tasks.includes('wheel_alignment')) {
-      return { zone: 'alignment', tech: 'Technician 3 (Wheel Alignment)' };
-    }
-    if (tasks.includes('hoist_service')) {
-      return { zone: 'hoist', tech: 'Technician 2 (Hoist Bay)' };
-    }
-    return { zone: 'workshop', tech: 'Technician 1 (General Service)' };
-  };
 
   const toggleTask = (type: TaskType) => {
     let nextTasks: TaskType[];
@@ -164,68 +154,11 @@ export const AddVehicleModal: React.FC = () => {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={[styles.label, { color: colors.textSecondary }]}>REQUIRED WORKSHOP TASKS:</Text>
-              <View style={styles.tasksRow}>
-                <TouchableOpacity
-                  style={[
-                    styles.taskChip,
-                    {
-                      backgroundColor: selectedTasks.includes('general_service') ? colors.bayWorkshopDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
-                      borderColor: selectedTasks.includes('general_service') ? colors.bayWorkshop : colors.borderGlass,
-                    }
-                  ]}
-                  onPress={() => toggleTask('general_service')}
-                >
-                  {selectedTasks.includes('general_service') ? (
-                    <CheckSquare size={16} color={colors.bayWorkshopLight} />
-                  ) : (
-                    <Square size={16} color={colors.textMuted} />
-                  )}
-                  <Text style={[styles.chipText, { color: selectedTasks.includes('general_service') ? colors.textPrimary : colors.textSecondary }]}>
-                    General Service
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.taskChip,
-                    {
-                      backgroundColor: selectedTasks.includes('wheel_alignment') ? colors.bayAlignmentDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
-                      borderColor: selectedTasks.includes('wheel_alignment') ? colors.bayAlignment : colors.borderGlass,
-                    }
-                  ]}
-                  onPress={() => toggleTask('wheel_alignment')}
-                >
-                  {selectedTasks.includes('wheel_alignment') ? (
-                    <CheckSquare size={16} color={colors.bayAlignmentLight} />
-                  ) : (
-                    <Square size={16} color={colors.textMuted} />
-                  )}
-                  <Text style={[styles.chipText, { color: selectedTasks.includes('wheel_alignment') ? colors.textPrimary : colors.textSecondary }]}>
-                    Wheel Alignment
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.taskChip,
-                    {
-                      backgroundColor: selectedTasks.includes('hoist_service') ? colors.bayHoistDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
-                      borderColor: selectedTasks.includes('hoist_service') ? colors.bayHoist : colors.borderGlass,
-                    }
-                  ]}
-                  onPress={() => toggleTask('hoist_service')}
-                >
-                  {selectedTasks.includes('hoist_service') ? (
-                    <CheckSquare size={16} color={colors.bayHoistLight} />
-                  ) : (
-                    <Square size={16} color={colors.textMuted} />
-                  )}
-                  <Text style={[styles.chipText, { color: selectedTasks.includes('hoist_service') ? colors.textPrimary : colors.textSecondary }]}>
-                    Hoist Service
-                  </Text>
-                </TouchableOpacity>
-              </View>
+              <TaskSelectorChips
+                selectedTasks={selectedTasks}
+                onToggleTask={toggleTask}
+                title="REQUIRED WORKSHOP TASKS:"
+              />
             </View>
 
             <View style={styles.formGroup}>
@@ -243,12 +176,12 @@ export const AddVehicleModal: React.FC = () => {
                     ]}
                     onPress={() => {
                       setTargetZone('workshop');
-                      setAssignedTech('Technician 1 (General Service)');
+                      setAssignedTech(APP_TERMINOLOGY.stations.workshop.name);
                     }}
                   >
                     <Wrench size={16} color={targetZone === 'workshop' ? colors.bayWorkshopLight : colors.textMuted} />
                     <Text style={[styles.dispatchText, { color: targetZone === 'workshop' ? colors.textPrimary : colors.textSecondary }]}>
-                      TO General
+                      TO {APP_TERMINOLOGY.stations.workshop.shortName}
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -265,12 +198,12 @@ export const AddVehicleModal: React.FC = () => {
                     ]}
                     onPress={() => {
                       setTargetZone('alignment');
-                      setAssignedTech('Technician 3 (Wheel Alignment)');
+                      setAssignedTech(APP_TERMINOLOGY.stations.alignment.name);
                     }}
                   >
                     <Navigation size={16} color={targetZone === 'alignment' ? colors.bayAlignmentLight : colors.textMuted} />
                     <Text style={[styles.dispatchText, { color: targetZone === 'alignment' ? colors.textPrimary : colors.textSecondary }]}>
-                      TO Alignment
+                      TO {APP_TERMINOLOGY.stations.alignment.shortName}
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -287,12 +220,12 @@ export const AddVehicleModal: React.FC = () => {
                     ]}
                     onPress={() => {
                       setTargetZone('hoist');
-                      setAssignedTech('Technician 2 (Hoist Bay)');
+                      setAssignedTech(APP_TERMINOLOGY.stations.hoist.name);
                     }}
                   >
                     <Droplets size={16} color={targetZone === 'hoist' ? colors.bayHoistLight : colors.textMuted} />
                     <Text style={[styles.dispatchText, { color: targetZone === 'hoist' ? colors.textPrimary : colors.textSecondary }]}>
-                      TO Hoist
+                      TO {APP_TERMINOLOGY.stations.hoist.shortName}
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -316,55 +249,20 @@ export const AddVehicleModal: React.FC = () => {
                 value={remarks}
                 onChangeText={setRemarks}
                 multiline
-                numberOfLines={3}
+                numberOfLines={2}
               />
             </View>
 
             {/* Urgent Toggle */}
             <View style={[styles.formGroup, { marginTop: 4 }]}>
-              <TouchableOpacity
-                style={[
-                  styles.urgentToggleRow,
-                  {
-                    backgroundColor: isUrgent
-                      ? 'rgba(239, 68, 68, 0.08)'
-                      : (isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)'),
-                    borderColor: isUrgent ? 'rgba(239, 68, 68, 0.4)' : colors.borderGlass,
-                  }
-                ]}
-                onPress={() => setIsUrgent(p => !p)}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.urgentIconWrap, { backgroundColor: isUrgent ? 'rgba(239,68,68,0.15)' : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)') }]}>
-                  <AlertTriangle size={16} color={isUrgent ? '#ef4444' : colors.textMuted} />
-                </View>
-                <Text style={[styles.urgentLabel, { color: isUrgent ? '#ef4444' : colors.textSecondary }]}>
-                  Mark as URGENT
-                </Text>
-                <View style={[styles.urgentCheckbox, { borderColor: isUrgent ? '#ef4444' : colors.borderGlass, backgroundColor: isUrgent ? '#ef4444' : 'transparent' }]}>
-                  {isUrgent && <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>✓</Text>}
-                </View>
-              </TouchableOpacity>
-              {isUrgent && (
-                <TextInput
-                  style={[
-                    styles.input,
-                    styles.textArea,
-                    {
-                      backgroundColor: 'rgba(239, 68, 68, 0.05)',
-                      borderColor: 'rgba(239, 68, 68, 0.3)',
-                      color: colors.textPrimary,
-                      marginTop: 8,
-                    }
-                  ]}
-                  placeholder="Urgency reason (e.g. VIP customer, fleet vehicle, warranty recall)"
-                  placeholderTextColor={colors.textMuted}
-                  value={urgentNote}
-                  onChangeText={setUrgentNote}
-                  multiline
-                  numberOfLines={2}
-                />
-              )}
+              <UrgentToggleInput
+                isUrgent={isUrgent}
+                onToggleUrgent={setIsUrgent}
+                urgentNote={urgentNote}
+                onChangeUrgentNote={setUrgentNote}
+                title="VEHICLE PRIORITY / URGENCY:"
+                placeholder="Urgency reason (e.g. VIP customer, fleet vehicle, warranty recall)..."
+              />
             </View>
           </View>
         </BaseModal>
@@ -483,36 +381,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   textArea: {
-    height: 80,
+    height: 64,
+    minHeight: 64,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 13,
+    fontWeight: '500',
+    lineHeight: 18,
     textAlignVertical: 'top',
     letterSpacing: 0,
     fontFamily: undefined,
-  },
-  tasksRow: {
-    gap: 10,
-  },
-  taskChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.02)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    padding: 12,
-    borderRadius: 12,
-  },
-  activeTaskChip: {
-    borderColor: '#0ea5e9',
-    backgroundColor: 'rgba(14, 165, 233, 0.1)',
-  },
-  chipText: {
-    color: '#94a3b8',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  activeChipText: {
-    color: '#f8fafc',
-    fontWeight: '600',
   },
   dispatchGrid: {
     flexDirection: 'row',
@@ -599,32 +477,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontSize: 14,
     letterSpacing: 0.5,
-  },
-  urgentToggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    borderWidth: 1,
-    padding: 12,
-    borderRadius: 12,
-  },
-  urgentIconWrap: {
-    padding: 6,
-    borderRadius: 8,
-  },
-  urgentLabel: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  urgentCheckbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-    borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });
 

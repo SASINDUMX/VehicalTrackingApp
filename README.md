@@ -90,9 +90,17 @@ Automatically calculates productive **Net Working Time** by deducting scheduled 
 
 - **Vintage / Provincial Numbers**: `##-####` (e.g. `14-1234`, `64-9842`). Auto-hyphens after 2 numbers.
 - **Modern Letter Numbers**: `AA-####` or `AAA-####` (e.g. `WP-1234`, `CAB-7712`). Auto-hyphens after 3 letters or when a number follows 2 letters.
-- **Active Duplicate Prevention**: Automatically blocks duplicate active entries in real-time.
+- **Active Duplicate Prevention**: Database engine-level partial unique index (`idx_vehicles_unique_active_plate`) prevents duplicate active entries in real-time across concurrent devices, while naturally allowing finished vehicles to return for future visits.
 
 ---
+
+## 🗄️ Database Schema & Autonomous Maintenance
+
+- **Fresh Production Schema**: [`supabase_schema.sql`](file:///c:/Users/mxsas/Documents/GitHub/UnitedMoters-VehicalTrackingApp/supabase_schema.sql) contains a complete, self-contained SQL setup script.
+- **Autonomous `pg_cron` Schedules**:
+  - `0 0 * * *`: Runs `reconcile_daily_vehicles()` at midnight UTC to automatically close stale inspection vehicles.
+  - `0 3 * * 0`: Runs `purge_records_older_than_90_days()` weekly to archive records older than 90 days.
+- **Performance Indexes**: High-performance indexes covering live floor sorting, 48-hour queries, and chronological stage log ordering directly over the wire.
 
 ## 🚀 Deployment & CI/CD
 
