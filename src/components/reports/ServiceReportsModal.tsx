@@ -719,7 +719,7 @@ export const ServiceReportsModal: React.FC = () => {
               </Text>
             </View>
             <Text style={[styles.auditRuleDesc, { color: colors.textSecondary }]}>
-              Historical vehicle logs are preserved for <Text style={{ fontWeight: '700', color: colors.textPrimary }}>90 days</Text> with automatic archiving. Completed inspection vehicles roll over autonomously at midnight via database background reconciliation.
+              Historical vehicle logs are preserved for <Text style={{ fontWeight: '700', color: colors.textPrimary }}>90 days</Text> with automatic archiving. Completed inspection vehicles roll over autonomously.
             </Text>
           </View>
         </View>
