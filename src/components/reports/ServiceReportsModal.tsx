@@ -303,15 +303,15 @@ export const ServiceReportsModal: React.FC = () => {
                     <Text style={[styles.kpiVal, { color: colors.bayWorkshopLight }]}>
                       {formatDuration(kpis?.workshopBay?.avgStageSec ?? 0)}
                     </Text>
-                    <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>GROSS AVG TIME</Text>
+                    <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>BAY GROSS AVG STAY TIME</Text>
                   </View>
                 </View>
 
                 {/* Bay Avg Active Time */}
                 <View style={[styles.kpiValRow, styles.kpiActiveRow]}>
-                  <Clock size={13} color={colors.success} />
+                  <Clock size={13} color={colors.primaryLight} />
                   <View style={styles.kpiMetricCol}>
-                    <Text style={[styles.kpiActiveVal, { color: colors.success }]}>
+                    <Text style={[styles.kpiActiveVal, { color: colors.primaryLight }]}>
                       {formatDuration(kpis?.workshopBay?.avgActiveSec ?? 0)}
                     </Text>
                     <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>BAY AVG ACTIVE TIME</Text>
@@ -339,15 +339,15 @@ export const ServiceReportsModal: React.FC = () => {
                     <Text style={[styles.kpiVal, { color: colors.bayAlignmentLight }]}>
                       {formatDuration(kpis?.alignmentBay?.avgStageSec ?? 0)}
                     </Text>
-                    <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>GROSS AVG TIME</Text>
+                    <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>BAY GROSS AVG STAY TIME</Text>
                   </View>
                 </View>
 
                 {/* Bay Avg Active Time */}
                 <View style={[styles.kpiValRow, styles.kpiActiveRow]}>
-                  <Clock size={13} color={colors.success} />
+                  <Clock size={13} color={colors.primaryLight} />
                   <View style={styles.kpiMetricCol}>
-                    <Text style={[styles.kpiActiveVal, { color: colors.success }]}>
+                    <Text style={[styles.kpiActiveVal, { color: colors.primaryLight }]}>
                       {formatDuration(kpis?.alignmentBay?.avgActiveSec ?? 0)}
                     </Text>
                     <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>BAY AVG ACTIVE TIME</Text>
@@ -375,7 +375,7 @@ export const ServiceReportsModal: React.FC = () => {
                     <Text style={[styles.kpiVal, { color: colors.bayHoistLight }]}>
                       {formatDuration(kpis?.hoistBay?.avgStageSec ?? 0)}
                     </Text>
-                    <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>GROSS AVG TIME</Text>
+                    <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>BAY GROSS AVG STAY TIME</Text>
                   </View>
                 </View>
 
@@ -421,14 +421,14 @@ export const ServiceReportsModal: React.FC = () => {
                 <View>
                   {/* Table Header Row 1: Top Grouped Categories */}
                   <View style={[styles.thRowTop, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.05)', borderBottomColor: colors.borderGlass }]}>
-                    <Text style={[styles.thCell, styles.colPlate, { color: colors.textSecondary }]}>PLATE</Text>
+                    <Text style={[styles.thCell, styles.colPlate, { color: colors.textSecondary }]}>VEHICLE NO</Text>
                     <Text style={[styles.thCell, styles.colStatus, { color: colors.textSecondary }]}>STATUS</Text>
                     {isMultiDate && (
                       <Text style={[styles.thCell, styles.colDate, { color: colors.textSecondary }]}>DATE</Text>
                     )}
                     <Text style={[styles.thCell, styles.colTime, { color: colors.textSecondary }]}>INTAKE</Text>
                     <Text style={[styles.thCell, styles.colTime, { color: colors.textSecondary }]}>FINISHED</Text>
-                    <Text style={[styles.thCell, styles.colTime, { color: colors.textSecondary }]}>GROSS TAT</Text>
+                    <Text style={[styles.thCell, styles.colTime, { color: colors.textSecondary }]}>TOTAL STAY</Text>
                     <Text style={[styles.thCell, styles.colTime, { color: colors.textSecondary }]}>ACTIVE WORK</Text>
                     <Text style={[styles.thCell, styles.colTime, { color: colors.textSecondary }]}>TOTAL IDLE</Text>
                     <Text style={[styles.thCell, styles.colTime, { color: '#fbbf24' }]}>BREAKS</Text>
@@ -524,7 +524,7 @@ export const ServiceReportsModal: React.FC = () => {
                         <Text style={[styles.tdText, styles.colTime, { color: colors.primaryLight, fontWeight: '700' }]}>
                           {formatDuration(grossSec)}
                         </Text>
-                        <Text style={[styles.tdText, styles.colTime, { color: colors.success, fontWeight: '700' }]}>
+                        <Text style={[styles.tdText, styles.colTime, { color: colors.primaryLight, fontWeight: '700' }]}>
                           {formatDuration(activeWorkSec)}
                         </Text>
                         <Text style={[styles.tdText, styles.colTime, { color: colors.warning, fontWeight: '700' }]}>
@@ -673,12 +673,12 @@ export const ServiceReportsModal: React.FC = () => {
             </View>
           </View>
 
-          {/* 3. Gross Avg Time (Dispatched Bay Velocity) */}
+          {/* 3. Bay Gross Avg Stay Time (Dispatched Bay Velocity) */}
           <View style={[styles.auditRuleCard, { backgroundColor: colors.bayWorkshopDim, borderColor: colors.bayWorkshop }]}>
             <View style={styles.auditRuleHeader}>
               <Wrench size={15} color={colors.bayWorkshopLight} />
               <Text style={[styles.auditRuleTitle, { color: colors.bayWorkshopLight }]}>
-                Bay Velocity & Stage Duration
+                Bay Gross Avg Stay Time & Velocity
               </Text>
             </View>
             <Text style={[styles.auditRuleDesc, { color: colors.textSecondary }]}>

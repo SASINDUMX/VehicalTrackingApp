@@ -404,7 +404,7 @@ export const exportServiceLogsToCSV = (
   rows.push(`"Total Records: ${vehicles.length}"`);
   if (kpis) {
     rows.push(`"Summary: ${kpis.completedCount ?? 0} Completed, ${kpis.inProgressCount ?? 0} In Progress"`);
-    rows.push(`"Bay Velocity - Workshop: Gross Avg Time ${formatDuration(kpis.workshopBay?.avgStageSec ?? 0)}, Bay Avg Active Time ${formatDuration(kpis.workshopBay?.avgActiveSec ?? 0)} (${kpis.workshopBay?.vehicleCount ?? 0} vehicles) | Alignment: Gross Avg Time ${formatDuration(kpis.alignmentBay?.avgStageSec ?? 0)}, Bay Avg Active Time ${formatDuration(kpis.alignmentBay?.avgActiveSec ?? 0)} (${kpis.alignmentBay?.vehicleCount ?? 0} vehicles) | Hoist: Gross Avg Time ${formatDuration(kpis.hoistBay?.avgStageSec ?? 0)}, Bay Avg Active Time ${formatDuration(kpis.hoistBay?.avgActiveSec ?? 0)} (${kpis.hoistBay?.vehicleCount ?? 0} vehicles)"`);
+    rows.push(`"Bay Velocity - Workshop: Bay Gross Avg Stay Time ${formatDuration(kpis.workshopBay?.avgStageSec ?? 0)}, Bay Avg Active Time ${formatDuration(kpis.workshopBay?.avgActiveSec ?? 0)} (${kpis.workshopBay?.vehicleCount ?? 0} vehicles) | Alignment: Bay Gross Avg Stay Time ${formatDuration(kpis.alignmentBay?.avgStageSec ?? 0)}, Bay Avg Active Time ${formatDuration(kpis.alignmentBay?.avgActiveSec ?? 0)} (${kpis.alignmentBay?.vehicleCount ?? 0} vehicles) | Hoist: Bay Gross Avg Stay Time ${formatDuration(kpis.hoistBay?.avgStageSec ?? 0)}, Bay Avg Active Time ${formatDuration(kpis.hoistBay?.avgActiveSec ?? 0)} (${kpis.hoistBay?.vehicleCount ?? 0} vehicles)"`);
   }
   rows.push(''); // Empty line
 
@@ -442,7 +442,7 @@ export const exportServiceLogsToCSV = (
     'Intake Date',
     'Intake Time',
     'Completion Time',
-    'Gross TAT',
+    'Total Stay',
     'Net Active Work',
     'Total Idle Time',
     'Total Shift Breaks',
@@ -528,7 +528,7 @@ export const exportServiceLogsToCSV = (
   // Calculation & Audit Policy Footnote
   rows.push('');
   rows.push(`"--- AUDIT & CALCULATION POLICY ---"`);
-  rows.push(`"1. Gross Avg Time: Reflects actual operational bay occupancy (Active Labor + Idle Time) strictly for vehicles completed and dispatched to the next station. Undispatched stages are excluded to protect average accuracy. Official shift breaks (lunch & tea) are deducted."`);
+  rows.push(`"1. Bay Gross Avg Stay Time: Reflects actual operational bay occupancy (Active Labor + Idle Time) strictly for vehicles completed and dispatched to the next station. Undispatched stages are excluded to protect average accuracy. Official shift breaks (lunch & tea) are deducted."`);
   rows.push(`"2. Bay Avg Active Time: Pure technician hands-on labor duration for completed & dispatched stages."`);
 
   const csvContent = '\uFEFF' + rows.join('\r\n'); // Add UTF-8 BOM for Microsoft Excel
@@ -605,43 +605,43 @@ export const exportServiceLogsToPDF = (
         <td style="padding: 8px 10px; font-weight: 700; font-size: 11px; color: #0284c7; border-bottom: 1px solid #e2e8f0;">
           ${formatDuration(grossSec)}
         </td>
-        <td style="padding: 8px 10px; font-weight: 700; font-size: 11px; color: #16a34a; border-bottom: 1px solid #e2e8f0;">
+        <td style="padding: 8px 10px; font-weight: 700; font-size: 11px; color: #0284c7; border-bottom: 1px solid #e2e8f0;">
           ${formatDuration(totalActiveSec)}
         </td>
-        <td style="padding: 8px 10px; font-weight: 700; font-size: 11px; color: #d97706; border-bottom: 1px solid #e2e8f0;">
+        <td style="padding: 8px 10px; font-weight: 700; font-size: 11px; color: #f59e0b; border-bottom: 1px solid #e2e8f0;">
           ${formatDuration(totalIdleSec)}
         </td>
-        <td style="padding: 8px 10px; font-size: 11px; color: #b45309; font-weight: 700; border-bottom: 1px solid #e2e8f0;">
+        <td style="padding: 8px 10px; font-size: 11px; color: #fbbf24; font-weight: 700; border-bottom: 1px solid #e2e8f0;">
           ${breakSeconds > 0 ? formatDuration(breakSeconds) : '-'}
         </td>
         <!-- General Workshop -->
-        <td style="padding: 8px 6px; font-size: 11px; color: #d97706; text-align: center; border-bottom: 1px solid #e2e8f0;">
+        <td style="padding: 8px 6px; font-size: 11px; color: #f59e0b; text-align: center; border-bottom: 1px solid #e2e8f0;">
           ${workshopTiming.idleSec > 0 ? formatDuration(workshopTiming.idleSec) : '-'}
         </td>
-        <td style="padding: 8px 6px; font-size: 11px; color: #16a34a; text-align: center; border-bottom: 1px solid #e2e8f0;">
+        <td style="padding: 8px 6px; font-size: 11px; color: #0284c7; font-weight: 700; text-align: center; border-bottom: 1px solid #e2e8f0;">
           ${workshopTiming.activeSec > 0 ? formatDuration(workshopTiming.activeSec) : '-'}
         </td>
-        <td style="padding: 8px 6px; font-size: 11px; color: #b45309; text-align: center; border-bottom: 1px solid #e2e8f0;">
+        <td style="padding: 8px 6px; font-size: 11px; color: #fbbf24; text-align: center; border-bottom: 1px solid #e2e8f0;">
           ${workshopTiming.breakSec > 0 ? formatDuration(workshopTiming.breakSec) : '-'}
         </td>
         <!-- Wheel Alignment -->
-        <td style="padding: 8px 6px; font-size: 11px; color: #d97706; text-align: center; border-bottom: 1px solid #e2e8f0;">
+        <td style="padding: 8px 6px; font-size: 11px; color: #f59e0b; text-align: center; border-bottom: 1px solid #e2e8f0;">
           ${alignmentTiming.idleSec > 0 ? formatDuration(alignmentTiming.idleSec) : '-'}
         </td>
-        <td style="padding: 8px 6px; font-size: 11px; color: #16a34a; text-align: center; border-bottom: 1px solid #e2e8f0;">
+        <td style="padding: 8px 6px; font-size: 11px; color: #0284c7; font-weight: 700; text-align: center; border-bottom: 1px solid #e2e8f0;">
           ${alignmentTiming.activeSec > 0 ? formatDuration(alignmentTiming.activeSec) : '-'}
         </td>
-        <td style="padding: 8px 6px; font-size: 11px; color: #b45309; text-align: center; border-bottom: 1px solid #e2e8f0;">
+        <td style="padding: 8px 6px; font-size: 11px; color: #fbbf24; text-align: center; border-bottom: 1px solid #e2e8f0;">
           ${alignmentTiming.breakSec > 0 ? formatDuration(alignmentTiming.breakSec) : '-'}
         </td>
         <!-- Hoist Service -->
-        <td style="padding: 8px 6px; font-size: 11px; color: #d97706; text-align: center; border-bottom: 1px solid #e2e8f0;">
+        <td style="padding: 8px 6px; font-size: 11px; color: #f59e0b; text-align: center; border-bottom: 1px solid #e2e8f0;">
           ${hoistTiming.idleSec > 0 ? formatDuration(hoistTiming.idleSec) : '-'}
         </td>
-        <td style="padding: 8px 6px; font-size: 11px; color: #16a34a; text-align: center; border-bottom: 1px solid #e2e8f0;">
+        <td style="padding: 8px 6px; font-size: 11px; color: #0284c7; font-weight: 700; text-align: center; border-bottom: 1px solid #e2e8f0;">
           ${hoistTiming.activeSec > 0 ? formatDuration(hoistTiming.activeSec) : '-'}
         </td>
-        <td style="padding: 8px 6px; font-size: 11px; color: #b45309; text-align: center; border-bottom: 1px solid #e2e8f0;">
+        <td style="padding: 8px 6px; font-size: 11px; color: #fbbf24; text-align: center; border-bottom: 1px solid #e2e8f0;">
           ${hoistTiming.breakSec > 0 ? formatDuration(hoistTiming.breakSec) : '-'}
         </td>
         <td style="padding: 8px 10px; font-size: 11px; color: #0f172a; border-bottom: 1px solid #e2e8f0;">
@@ -708,10 +708,10 @@ export const exportServiceLogsToPDF = (
             <div class="kpi-label" style="color: #0284c7;">Workshop</div>
             <div style="margin-top: 4px;">
               <div style="font-size: 14px; font-weight: 900; color: #0284c7;">${formatDuration(kpis.workshopBay?.avgStageSec ?? 0)}</div>
-              <div style="font-size: 8px; font-weight: 700; color: #64748b; letter-spacing: 0.3px;">GROSS AVG TIME</div>
+              <div style="font-size: 8px; font-weight: 700; color: #64748b; letter-spacing: 0.3px;">BAY GROSS AVG STAY TIME</div>
             </div>
             <div style="margin-top: 4px; padding-top: 4px; border-top: 1px solid #e2e8f0;">
-              <div style="font-size: 12px; font-weight: 800; color: #16a34a;">${formatDuration(kpis.workshopBay?.avgActiveSec ?? 0)}</div>
+              <div style="font-size: 12px; font-weight: 800; color: #0284c7;">${formatDuration(kpis.workshopBay?.avgActiveSec ?? 0)}</div>
               <div style="font-size: 8px; font-weight: 700; color: #64748b; letter-spacing: 0.3px;">BAY AVG ACTIVE TIME</div>
             </div>
             <div style="margin-top: 4px; padding-top: 4px; border-top: 1px solid #e2e8f0; font-size: 8.5px; font-weight: 700; color: #64748b; text-align: center;">
@@ -722,10 +722,10 @@ export const exportServiceLogsToPDF = (
             <div class="kpi-label" style="color: #16a34a;">Alignment</div>
             <div style="margin-top: 4px;">
               <div style="font-size: 14px; font-weight: 900; color: #16a34a;">${formatDuration(kpis.alignmentBay?.avgStageSec ?? 0)}</div>
-              <div style="font-size: 8px; font-weight: 700; color: #64748b; letter-spacing: 0.3px;">GROSS AVG TIME</div>
+              <div style="font-size: 8px; font-weight: 700; color: #64748b; letter-spacing: 0.3px;">BAY GROSS AVG STAY TIME</div>
             </div>
             <div style="margin-top: 4px; padding-top: 4px; border-top: 1px solid #e2e8f0;">
-              <div style="font-size: 12px; font-weight: 800; color: #16a34a;">${formatDuration(kpis.alignmentBay?.avgActiveSec ?? 0)}</div>
+              <div style="font-size: 12px; font-weight: 800; color: #0284c7;">${formatDuration(kpis.alignmentBay?.avgActiveSec ?? 0)}</div>
               <div style="font-size: 8px; font-weight: 700; color: #64748b; letter-spacing: 0.3px;">BAY AVG ACTIVE TIME</div>
             </div>
             <div style="margin-top: 4px; padding-top: 4px; border-top: 1px solid #e2e8f0; font-size: 8.5px; font-weight: 700; color: #64748b; text-align: center;">
@@ -736,10 +736,10 @@ export const exportServiceLogsToPDF = (
             <div class="kpi-label" style="color: #d97706;">Hoist</div>
             <div style="margin-top: 4px;">
               <div style="font-size: 14px; font-weight: 900; color: #d97706;">${formatDuration(kpis.hoistBay?.avgStageSec ?? 0)}</div>
-              <div style="font-size: 8px; font-weight: 700; color: #64748b; letter-spacing: 0.3px;">GROSS AVG TIME</div>
+              <div style="font-size: 8px; font-weight: 700; color: #64748b; letter-spacing: 0.3px;">BAY GROSS AVG STAY TIME</div>
             </div>
             <div style="margin-top: 4px; padding-top: 4px; border-top: 1px solid #e2e8f0;">
-              <div style="font-size: 12px; font-weight: 800; color: #16a34a;">${formatDuration(kpis.hoistBay?.avgActiveSec ?? 0)}</div>
+              <div style="font-size: 12px; font-weight: 800; color: #0284c7;">${formatDuration(kpis.hoistBay?.avgActiveSec ?? 0)}</div>
               <div style="font-size: 8px; font-weight: 700; color: #64748b; letter-spacing: 0.3px;">BAY AVG ACTIVE TIME</div>
             </div>
             <div style="margin-top: 4px; padding-top: 4px; border-top: 1px solid #e2e8f0; font-size: 8.5px; font-weight: 700; color: #64748b; text-align: center;">
@@ -756,7 +756,7 @@ export const exportServiceLogsToPDF = (
               <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Date</th>
               <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Intake</th>
               <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Finished</th>
-              <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Gross TAT</th>
+              <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Total Stay</th>
               <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Net Active</th>
               <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Total Idle</th>
               <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Breaks</th>
@@ -767,17 +767,17 @@ export const exportServiceLogsToPDF = (
             </tr>
             <tr style="background: #1e293b; color: #94a3b8;">
               <!-- General Service -->
-              <th style="padding: 4px; text-align: center; font-size: 8.5px; color: #fbbf24; border-right: 1px solid #334155;">Idle</th>
-              <th style="padding: 4px; text-align: center; font-size: 8.5px; color: #34d399; border-right: 1px solid #334155;">Active</th>
-              <th style="padding: 4px; text-align: center; font-size: 8.5px; color: #f59e0b; border-right: 1px solid #334155;">Breaks</th>
+              <th style="padding: 4px; text-align: center; font-size: 8.5px; color: #f59e0b; border-right: 1px solid #334155;">Idle</th>
+              <th style="padding: 4px; text-align: center; font-size: 8.5px; color: #0284c7; border-right: 1px solid #334155;">Active</th>
+              <th style="padding: 4px; text-align: center; font-size: 8.5px; color: #fbbf24; border-right: 1px solid #334155;">Breaks</th>
               <!-- Wheel Alignment -->
-              <th style="padding: 4px; text-align: center; font-size: 8.5px; color: #fbbf24; border-right: 1px solid #334155;">Idle</th>
-              <th style="padding: 4px; text-align: center; font-size: 8.5px; color: #34d399; border-right: 1px solid #334155;">Active</th>
-              <th style="padding: 4px; text-align: center; font-size: 8.5px; color: #f59e0b; border-right: 1px solid #334155;">Breaks</th>
+              <th style="padding: 4px; text-align: center; font-size: 8.5px; color: #f59e0b; border-right: 1px solid #334155;">Idle</th>
+              <th style="padding: 4px; text-align: center; font-size: 8.5px; color: #0284c7; border-right: 1px solid #334155;">Active</th>
+              <th style="padding: 4px; text-align: center; font-size: 8.5px; color: #fbbf24; border-right: 1px solid #334155;">Breaks</th>
               <!-- Hoist Service -->
-              <th style="padding: 4px; text-align: center; font-size: 8.5px; color: #fbbf24; border-right: 1px solid #334155;">Idle</th>
-              <th style="padding: 4px; text-align: center; font-size: 8.5px; color: #34d399; border-right: 1px solid #334155;">Active</th>
-              <th style="padding: 4px; text-align: center; font-size: 8.5px; color: #f59e0b; border-right: 1px solid #334155;">Breaks</th>
+              <th style="padding: 4px; text-align: center; font-size: 8.5px; color: #f59e0b; border-right: 1px solid #334155;">Idle</th>
+              <th style="padding: 4px; text-align: center; font-size: 8.5px; color: #0284c7; border-right: 1px solid #334155;">Active</th>
+              <th style="padding: 4px; text-align: center; font-size: 8.5px; color: #fbbf24; border-right: 1px solid #334155;">Breaks</th>
             </tr>
           </thead>
           <tbody>
@@ -788,7 +788,7 @@ export const exportServiceLogsToPDF = (
         <!-- Operational Audit Legend -->
         <div style="margin-top: 14px; padding: 10px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 9.5px; color: #475569; line-height: 1.5;">
           <div><strong style="color: #0f172a;">Audit & Calculation Policy:</strong></div>
-          <div>• <strong>Gross Avg Time:</strong> Working bay occupancy (Active Labor + Idle Time) strictly for vehicles completed and dispatched to the next station. Undispatched/in-progress stages are excluded to protect average accuracy. Scheduled breaks (morning/afternoon tea, lunch) are deducted.</div>
+          <div>• <strong>Bay Gross Avg Stay Time:</strong> Working bay occupancy (Active Labor + Idle Time) strictly for vehicles completed and dispatched to the next station. Undispatched/in-progress stages are excluded to protect average accuracy. Scheduled breaks (morning/afternoon tea, lunch) are deducted.</div>
           <div>• <strong>Bay Avg Active Time:</strong> Pure hands-on labor duration by assigned technicians on completed & dispatched stages.</div>
         </div>
 
