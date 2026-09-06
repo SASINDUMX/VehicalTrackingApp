@@ -242,12 +242,14 @@ export const VehicleDetailsModal: React.FC = () => {
           ) : (
             <View style={styles.footerStandardRow}>
               <View style={[styles.totalTimePill, { backgroundColor: colors.primaryDim, borderColor: colors.primaryBorder }]}>
-                <Clock size={15} color={colors.primaryLight} />
+                <Clock size={16} color={colors.primaryLight} />
                 <View style={styles.totalTimeTextCol}>
-                  <Text style={[styles.totalTimeText, { color: colors.primaryLight }]}>Net Work: {totalElapsedStr}</Text>
-                  {grossElapsedStr !== totalElapsedStr && (
-                    <Text style={[styles.grossTimeSubText, { color: colors.textMuted }]}>Total Shop: {grossElapsedStr}</Text>
-                  )}
+                  <Text style={[styles.totalTimeText, { color: colors.primaryLight }]}>
+                    Net Work: <Text style={{ color: colors.textPrimary, fontWeight: '800' }}>{totalElapsedStr}</Text>
+                  </Text>
+                  <Text style={[styles.grossTimeSubText, { color: colors.textSecondary }]}>
+                    Total Stay: <Text style={{ color: colors.textPrimary, fontWeight: '700' }}>{grossElapsedStr}</Text>
+                  </Text>
                 </View>
               </View>
 
@@ -336,6 +338,8 @@ export const VehicleDetailsModal: React.FC = () => {
                   {timelineStagesData.map((node, nodeIdx) => {
                     const {
                       stageDef,
+                      status,
+                      connectorType,
                       isCurrent,
                       logsForZone,
                       isCompleted,
@@ -349,90 +353,62 @@ export const VehicleDetailsModal: React.FC = () => {
                       queueNotes,
                       workCompletedAt,
                     } = node;
-                    const isTaskDone = Boolean(workCompletedAt);
-                    // A stage is only fully finished/done if it has been exited and completed (isCompleted)
-                    const isFullyFinishedOrDone = isCompleted;
-                    const isSecondIdleDone = isCurrent && isTaskDone && isStageIdle;
-                    // Inspection is the final ready/handover staging area - never color a working blue line from it
-                    const isWorkingActive = isCurrent && !isStageIdle && !isTaskDone && !isInspection;
 
-                    const nextNode = timelineStagesData[nodeIdx + 1];
-                    const isNextCancelled = nextNode?.isCancelled || nextNode?.isBypassed;
+                    // Direct, clean mapping from single-source status
+                    const isStrikethrough = status === 'skipped' || status === 'bypassed';
+                    const nodeTheme = {
+                      completed: { iconColor: colors.success, circleBorder: colors.success, circleBg: colors.successDim, pillVariant: 'DONE' as const, pillLabel: 'DONE' },
+                      bypassed:  { iconColor: colors.danger, circleBorder: colors.danger, circleBg: colors.dangerDim, pillVariant: 'SKIPPED' as const, pillLabel: 'BYPASSED' },
+                      active:    { iconColor: colors.primaryLight, circleBorder: colors.primary, circleBg: colors.primaryDim, pillVariant: 'ACTIVE' as const, pillLabel: 'ACTIVE' },
+                      idle:      { iconColor: colors.warningLight, circleBorder: colors.warning, circleBg: colors.warningDim, pillVariant: 'IDLE' as const, pillLabel: 'IDLE' },
+                      ready:     { iconColor: colors.success, circleBorder: colors.success, circleBg: colors.successDim, pillVariant: 'READY' as const, pillLabel: 'READY' },
+                      skipped:   { iconColor: colors.danger, circleBorder: colors.danger, circleBg: colors.dangerDim, pillVariant: 'SKIPPED' as const, pillLabel: 'SKIPPED' },
+                      pending:   { iconColor: colors.textMuted, circleBorder: colors.borderGlassBright, circleBg: colors.surfaceOverlay, pillVariant: 'PENDING' as const, pillLabel: 'PENDING' },
+                    }[status];
 
-                    // Icon color harmonizes with node state
-                    const nodeIconColor = isCurrent && isInspection
-                      ? colors.success
-                      : isStageIdle && isCurrent
-                      ? colors.warningLight
-                      : isFullyFinishedOrDone
-                      ? colors.success
-                      : isWorkingActive
-                      ? colors.primaryLight
-                      : isCancelled || isBypassed
-                      ? colors.danger
-                      : colors.textMuted;
-
-                    const StageIconComponent = stageDef.icon;
+                    const StageIconComponent = stageDef.icon || CheckCircle2;
 
                     return (
-                      <View key={stageDef.zone} style={styles.timelineItem}>
+                      <View key={node.id || `${stageDef.zone}-${nodeIdx}`} style={styles.timelineItem}>
                         <View style={styles.timelineNodeColumn}>
                           <View style={[
                             styles.nodeCircle,
-                            { backgroundColor: colors.surfaceElevated, borderColor: colors.borderGlassBright },
-                            isCurrent && isInspection && { borderColor: colors.success, backgroundColor: colors.successDim },
-                            isCurrent && isStageIdle && { borderColor: colors.warning, backgroundColor: colors.warningDim },
-                            !isStageIdle && isFullyFinishedOrDone && { borderColor: colors.success, backgroundColor: colors.successDim },
-                            !isStageIdle && isWorkingActive && { borderColor: colors.primary, backgroundColor: colors.primaryDim },
-                            (isCancelled || isBypassed) && { borderColor: colors.danger, backgroundColor: colors.dangerDim },
-                            !isCurrent && !isCompleted && !isBypassed && !isCancelled && { borderColor: colors.borderGlassBright, backgroundColor: colors.surfaceOverlay }
+                            { backgroundColor: nodeTheme.circleBg, borderColor: nodeTheme.circleBorder }
                           ]}>
-                            <StageIconComponent size={16} color={nodeIconColor} />
+                            <StageIconComponent size={16} color={nodeTheme.iconColor} />
                           </View>
                           {!isLastInOrder && (
                             <>
-                              {/* Background empty line */}
+                              {/* Background track */}
                               <View style={[styles.timelineLine, { backgroundColor: colors.borderGlassBright }]} />
-                              {/* Do not color the stepper line if this is the final inspection zone or leading to a skipped/cancelled stage */}
-                              {!isInspection && !isNextCancelled && (
-                                <>
-                                  {/* 100% full green line when stage has completed and exited */}
-                                  {isFullyFinishedOrDone && <View style={[styles.timelineLine, styles.timelineLineDone, { backgroundColor: colors.success }]} />}
-                                  {/* 100% amber line when task finished but vehicle is in 2nd idle waiting for dispatch to next bay */}
-                                  {isSecondIdleDone && <View style={[styles.timelineLine, styles.timelineLineDone, { backgroundColor: colors.warning }]} />}
-                                  {/* 50% blue line when stage is actively in progress */}
-                                  {isWorkingActive && <View style={[styles.timelineLine, styles.timelineLineHalf, { backgroundColor: colors.primary }]} />}
-                                </>
+                              {/* Connector driven directly by state engine */}
+                              {connectorType === 'completed' && (
+                                <View style={[styles.timelineLine, styles.timelineLineDone, { backgroundColor: colors.success }]} />
                               )}
-                              {/* When first arrived & idle (queue in): 0% line (only the amber circle is lit) */}
+                              {connectorType === 'bypassed' && (
+                                <View style={[styles.timelineLine, styles.timelineLineDone, { backgroundColor: colors.danger }]} />
+                              )}
+                              {connectorType === 'idle_done' && (
+                                <View style={[styles.timelineLine, styles.timelineLineDone, { backgroundColor: colors.warning }]} />
+                              )}
+                              {connectorType === 'working' && (
+                                <View style={[styles.timelineLine, styles.timelineLineHalf, { backgroundColor: colors.primary }]} />
+                              )}
                             </>
                           )}
                         </View>
 
                         <View style={styles.timelineContent}>
                           <View style={styles.timelineHeaderRow}>
-                            <Text style={[styles.stageNameText, { color: colors.textPrimary }, isCurrent && { fontWeight: '800' }, (isCancelled || isBypassed) && { color: colors.textMuted, textDecorationLine: 'line-through' }]}>
+                            <Text style={[
+                              styles.stageNameText,
+                              { color: colors.textPrimary },
+                              isCurrent && { fontWeight: '800' },
+                              isStrikethrough && { color: colors.textMuted, textDecorationLine: 'line-through' }
+                            ]}>
                               {stageDef.name}
                             </Text>
-                            {isCurrent ? (
-                              isInspection ? (
-                                <StatusPill variant="READY" label="READY" size="sm" />
-                              ) : (
-                                <StatusPill
-                                  variant={isStageIdle ? 'IDLE' : 'ACTIVE'}
-                                  label={isStageIdle ? 'IDLE' : 'ACTIVE'}
-                                  size="sm"
-                                />
-                              )
-                            ) : isCompleted ? (
-                              <StatusPill variant="DONE" label="DONE" size="sm" />
-                            ) : isBypassed ? (
-                              <StatusPill variant="SKIPPED" label="BYPASSED" size="sm" />
-                            ) : isCancelled ? (
-                              <StatusPill variant="SKIPPED" label="SKIPPED" size="sm" />
-                            ) : (
-                              <StatusPill variant="PENDING" label="PENDING" size="sm" />
-                            )}
+                            <StatusPill variant={nodeTheme.pillVariant} label={nodeTheme.pillLabel} size="sm" />
                           </View>
 
                           {isInspection ? (
@@ -442,22 +418,26 @@ export const VehicleDetailsModal: React.FC = () => {
                                 • Entered {formatSLSTime(logsForZone[0].entered_at)}
                               </Text>
                             ) : null
-                          ) : (
+                  ) : (
                             /* Service Bays: Active/Idle status, timestamps, breaks & queue notes */
                             <>
                               <View style={styles.stageTimeRow}>
                                 <View style={styles.timeTag}>
-                                  <Clock size={12} color={isCurrent ? (isStageIdle ? colors.warning : colors.primary) : (isCancelled || isBypassed) ? colors.danger : colors.textMuted} />
-                                  <Text style={[styles.timeTagText, { color: isCurrent ? (isStageIdle ? colors.warningLight : colors.primaryLight) : colors.textSecondary }, isCurrent && { fontWeight: '700' }, (isCancelled || isBypassed) && { color: colors.danger }]}>
-                                    {isCurrent
-                                      ? `${isStageIdle ? 'Idle: ' : 'Active: '}${spentStr}`
-                                      : isCompleted
-                                      ? `Spent: ${spentStr}`
-                                      : isBypassed
-                                      ? 'Bypassed'
-                                      : isCancelled
-                                      ? 'Skipped'
-                                      : 'Pending'}
+                                  <Clock size={12} color={nodeTheme.iconColor} />
+                                  <Text style={[
+                                    styles.timeTagText,
+                                    { color: nodeTheme.iconColor },
+                                    isCurrent && { fontWeight: '700' }
+                                  ]}>
+                                    {{
+                                      active: `Active: ${spentStr}`,
+                                      idle: `Idle: ${spentStr}`,
+                                      completed: `Spent: ${spentStr}`,
+                                      bypassed: 'Bypassed',
+                                      skipped: 'Skipped',
+                                      ready: 'Ready',
+                                      pending: 'Pending'
+                                    }[status] || 'Pending'}
                                   </Text>
                                 </View>
                               </View>

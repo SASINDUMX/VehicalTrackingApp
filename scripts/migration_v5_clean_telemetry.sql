@@ -1,22 +1,88 @@
 -- ==============================================================================
--- United Motors Vehicle Tracking - Migration v4: Backend Hardening & Automation
+-- United Motors Vehicle Tracking - Migration v5: Clean Telemetry & Hardening
 -- ==============================================================================
 
--- 1. ENABLE EXTENSIONS (pg_cron for automated background scheduling)
--- Note: pg_cron is fully supported on Supabase FREE tier (toggleable under Database > Extensions or via SQL)
-CREATE EXTENSION IF NOT EXISTS pg_cron;
+-- 1. ADD BREAK_SECONDS COLUMN TO STAGE_LOGS
+ALTER TABLE stage_logs ADD COLUMN IF NOT EXISTS break_seconds INT NOT NULL DEFAULT 0;
 
--- 2. ENSURE COLUMN FOR CANONICAL COMPLETION TIMESTAMP
-ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS effective_completed_at TIMESTAMPTZ;
+-- 2. DEDUCT WORKSHOP BREAK OVERLAP (SRI LANKA WORKSHOP STANDARD)
+-- Morning Tea: 09:45 - 10:00 (15m)
+-- Lunch Break: 12:30 - 13:00 (30m)
+-- Evening Tea: 14:45 - 15:00 (15m)
+CREATE OR REPLACE FUNCTION calculate_break_overlap_seconds(
+  p_start TIMESTAMPTZ,
+  p_end TIMESTAMPTZ
+)
+RETURNS INT AS 
+DECLARE
+  v_total_break_sec INT := 0;
+  v_day_start DATE;
+  v_day_end DATE;
+  v_curr_day DATE;
+  v_start_colombo TIMESTAMPTZ;
+  v_end_colombo TIMESTAMPTZ;
+  v_break_start TIMESTAMPTZ;
+  v_break_end TIMESTAMPTZ;
+  v_overlap_start TIMESTAMPTZ;
+  v_overlap_end TIMESTAMPTZ;
+BEGIN
+  IF p_start IS NULL OR p_end IS NULL OR p_end <= p_start THEN
+    RETURN 0;
+  END IF;
 
--- 3. ENHANCE ATOMIC RPC: TRANSFER VEHICLE ZONE
--- When vehicle is transferred to 'inspection', set effective_completed_at = v_now
+  v_start_colombo := p_start AT TIME ZONE 'Asia/Colombo';
+  v_end_colombo := p_end AT TIME ZONE 'Asia/Colombo';
+  v_day_start := v_start_colombo::DATE;
+  v_day_end := v_end_colombo::DATE;
+  v_curr_day := v_day_start;
+
+  WHILE v_curr_day <= v_day_end LOOP
+    -- Morning Tea: 09:45 to 10:00
+    v_break_start := (v_curr_day || ' 09:45:00')::TIMESTAMP AT TIME ZONE 'Asia/Colombo';
+    v_break_end := (v_curr_day || ' 10:00:00')::TIMESTAMP AT TIME ZONE 'Asia/Colombo';
+    v_overlap_start := GREATEST(p_start, v_break_start);
+    v_overlap_end := LEAST(p_end, v_break_end);
+    IF v_overlap_end > v_overlap_start THEN
+      v_total_break_sec := v_total_break_sec + EXTRACT(EPOCH FROM (v_overlap_end - v_overlap_start))::INT;
+    END IF;
+
+    -- Lunch Break: 12:30 to 13:00
+    v_break_start := (v_curr_day || ' 12:30:00')::TIMESTAMP AT TIME ZONE 'Asia/Colombo';
+    v_break_end := (v_curr_day || ' 13:00:00')::TIMESTAMP AT TIME ZONE 'Asia/Colombo';
+    v_overlap_start := GREATEST(p_start, v_break_start);
+    v_overlap_end := LEAST(p_end, v_break_end);
+    IF v_overlap_end > v_overlap_start THEN
+      v_total_break_sec := v_total_break_sec + EXTRACT(EPOCH FROM (v_overlap_end - v_overlap_start))::INT;
+    END IF;
+
+    -- Evening Tea: 14:45 to 15:00
+    v_break_start := (v_curr_day || ' 14:45:00')::TIMESTAMP AT TIME ZONE 'Asia/Colombo';
+    v_break_end := (v_curr_day || ' 15:00:00')::TIMESTAMP AT TIME ZONE 'Asia/Colombo';
+    v_overlap_start := GREATEST(p_start, v_break_start);
+    v_overlap_end := LEAST(p_end, v_break_end);
+    IF v_overlap_end > v_overlap_start THEN
+      v_total_break_sec := v_total_break_sec + EXTRACT(EPOCH FROM (v_overlap_end - v_overlap_start))::INT;
+    END IF;
+
+    v_curr_day := v_curr_day + INTERVAL '1 day';
+  END LOOP;
+
+  RETURN v_total_break_sec;
+END;
+ LANGUAGE plpgsql IMMUTABLE;
+
+-- 3. BACKFILL BREAK_SECONDS ON HISTORICAL CLOSED LOGS
+UPDATE stage_logs
+SET break_seconds = calculate_break_overlap_seconds(entered_at, exited_at)
+WHERE exited_at IS NOT NULL AND break_seconds = 0;
+
+-- 4. HARDEN ATOMIC RPC: TRANSFER VEHICLE ZONE
 CREATE OR REPLACE FUNCTION transfer_vehicle_zone(
   p_vehicle_id UUID,
   p_to_zone bay_zone,
   p_moved_by TEXT DEFAULT NULL
 )
-RETURNS JSONB AS $$
+RETURNS JSONB AS 
 DECLARE
   v_from_zone bay_zone;
   v_active_log_id UUID;
@@ -25,18 +91,18 @@ DECLARE
   v_existing_idle INT;
   v_duration INT := 0;
   v_idle INT := 0;
+  v_break INT := 0;
   v_new_log_id UUID;
   v_now TIMESTAMPTZ := NOW();
   v_effective_completed TIMESTAMPTZ := NULL;
   v_task_completed_at TIMESTAMPTZ := NULL;
 BEGIN
-  -- Get current zone
   SELECT current_zone INTO v_from_zone FROM vehicles WHERE id = p_vehicle_id;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Vehicle not found: %', p_vehicle_id;
   END IF;
 
-  -- Close active stage log
+  -- Close active log
   SELECT id, entered_at, work_started_at, idle_seconds
   INTO v_active_log_id, v_entered_at, v_work_started_at, v_existing_idle
   FROM stage_logs
@@ -46,6 +112,8 @@ BEGIN
 
   IF v_active_log_id IS NOT NULL THEN
     v_duration := GREATEST(0, EXTRACT(EPOCH FROM (v_now - v_entered_at))::INT);
+    v_break := calculate_break_overlap_seconds(v_entered_at, v_now);
+
     IF v_work_started_at IS NOT NULL THEN
       -- 1. Queue-In idle: entered_at to work_started_at
       v_idle := COALESCE(v_existing_idle, GREATEST(0, EXTRACT(EPOCH FROM (v_work_started_at - v_entered_at))::INT));
@@ -74,30 +142,28 @@ BEGIN
     UPDATE stage_logs
     SET exited_at = v_now,
         duration_seconds = v_duration,
-        idle_seconds = v_idle
+        idle_seconds = v_idle,
+        break_seconds = v_break
     WHERE id = v_active_log_id;
   END IF;
 
   -- Insert new stage log
   INSERT INTO stage_logs (
     vehicle_id, from_zone, to_zone, entered_at, moved_by,
-    work_started_at, idle_seconds, duration_seconds
+    work_started_at, idle_seconds, break_seconds, duration_seconds
   ) VALUES (
     p_vehicle_id, v_from_zone, p_to_zone, v_now, COALESCE(p_moved_by, 'Staff'),
-    NULL, 0, 0
+    NULL, 0, 0, 0
   ) RETURNING id INTO v_new_log_id;
 
-  -- If dispatching to inspection zone, freeze turnaround time by stamping effective_completed_at
+  -- Turnaround Freeze on entering inspection zone
   IF p_to_zone = 'inspection' THEN
     v_effective_completed := v_now;
   END IF;
 
-  -- Update vehicle current zone, effective completion, and unpause
   UPDATE vehicles
   SET current_zone = p_to_zone,
-      effective_completed_at = COALESCE(v_effective_completed, effective_completed_at),
-      is_paused = FALSE,
-      paused_at = NULL
+      effective_completed_at = COALESCE(v_effective_completed, effective_completed_at)
   WHERE id = p_vehicle_id;
 
   RETURN jsonb_build_object(
@@ -107,27 +173,26 @@ BEGIN
     'new_log_id', v_new_log_id,
     'duration_seconds', v_duration,
     'idle_seconds', v_idle,
+    'break_seconds', v_break,
     'effective_completed_at', v_effective_completed
   );
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+ LANGUAGE plpgsql SECURITY DEFINER;
 
-
--- 4. ENHANCE ATOMIC RPC: FINISH VEHICLE JOB SHEET (ADVISOR HANDOVER)
--- Marks job finished, sets completed_at = NOW(), preserving effective_completed_at
+-- 5. HARDEN ATOMIC RPC: FINISH VEHICLE JOB
 CREATE OR REPLACE FUNCTION finish_vehicle_job(
   p_vehicle_id UUID,
   p_advisor_name TEXT DEFAULT NULL
 )
-RETURNS JSONB AS $$
+RETURNS JSONB AS 
 DECLARE
   v_active_log_id UUID;
   v_entered_at TIMESTAMPTZ;
   v_duration INT := 0;
+  v_break INT := 0;
   v_now TIMESTAMPTZ := NOW();
   v_existing_effective TIMESTAMPTZ;
 BEGIN
-  -- Close active inspection log
   SELECT id, entered_at
   INTO v_active_log_id, v_entered_at
   FROM stage_logs
@@ -137,61 +202,45 @@ BEGIN
 
   IF v_active_log_id IS NOT NULL THEN
     v_duration := GREATEST(0, EXTRACT(EPOCH FROM (v_now - v_entered_at))::INT);
+    v_break := calculate_break_overlap_seconds(v_entered_at, v_now);
     UPDATE stage_logs
     SET exited_at = v_now,
         duration_seconds = v_duration,
-        idle_seconds = v_duration
+        break_seconds = v_break
     WHERE id = v_active_log_id;
   END IF;
 
-  -- Insert completed terminal stage log
-  INSERT INTO stage_logs (
-    vehicle_id, from_zone, to_zone, entered_at, exited_at,
-    duration_seconds, idle_seconds, moved_by
-  ) VALUES (
-    p_vehicle_id, 'inspection', 'completed', v_now, v_now,
-    0, 0, COALESCE(p_advisor_name, 'Service Advisor')
-  );
-
-  -- Retrieve existing effective_completed_at or fallback to entered_at / now
   SELECT effective_completed_at INTO v_existing_effective FROM vehicles WHERE id = p_vehicle_id;
-  IF v_existing_effective IS NULL THEN
-    v_existing_effective := COALESCE(v_entered_at, v_now);
-  END IF;
 
-  -- Mark vehicle as finished
   UPDATE vehicles
-  SET current_zone = 'completed',
-      is_finished = TRUE,
+  SET is_finished = TRUE,
       completed_at = v_now,
-      effective_completed_at = v_existing_effective,
-      is_paused = FALSE,
-      paused_at = NULL
+      effective_completed_at = COALESCE(v_existing_effective, v_now),
+      status = 'finished'
   WHERE id = p_vehicle_id;
 
   RETURN jsonb_build_object(
     'success', true,
+    'vehicle_id', p_vehicle_id,
     'completed_at', v_now,
-    'effective_completed_at', v_existing_effective
+    'advisor_name', p_advisor_name
   );
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+ LANGUAGE plpgsql SECURITY DEFINER;
 
-
--- 5. ENHANCE ATOMIC RPC: GET SERVICE REPORT KPIS (SERVER-SIDE AGGREGATION)
+-- 6. HARDEN ATOMIC RPC: GET SERVICE REPORT KPIS
 CREATE OR REPLACE FUNCTION get_service_report_kpis(
   p_start_date TIMESTAMPTZ DEFAULT NULL,
   p_end_date TIMESTAMPTZ DEFAULT NULL,
-  p_branch_id TEXT DEFAULT 'main_workshop',
+  p_branch_id TEXT DEFAULT NULL,
   p_status TEXT DEFAULT 'all'
 )
-RETURNS JSONB AS $$
+RETURNS JSONB AS 
 DECLARE
   v_result JSONB;
 BEGIN
-  -- Filter matching vehicles
   WITH filtered_vehicles AS (
-    SELECT v.id, v.is_finished, v.current_zone, v.intake_at, v.effective_completed_at, v.completed_at
+    SELECT v.id, v.is_finished, v.current_zone, v.intake_at, v.effective_completed_at
     FROM vehicles v
     WHERE (p_branch_id IS NULL OR v.branch_id = p_branch_id)
       AND (p_start_date IS NULL OR v.intake_at >= p_start_date)
@@ -213,17 +262,23 @@ BEGIN
     SELECT
       sl.to_zone,
       COUNT(DISTINCT sl.vehicle_id) AS vehicle_count,
-      COALESCE(SUM(GREATEST(0, sl.duration_seconds - sl.idle_seconds)), 0) AS active_sec,
+      -- Active Labor = Duration - Idle (QueueIn + QueueOut) - Overlapping Breaks
+      COALESCE(SUM(GREATEST(0, sl.duration_seconds - sl.idle_seconds - COALESCE(sl.break_seconds, 0))), 0) AS active_sec,
       COALESCE(SUM(sl.idle_seconds), 0) AS idle_sec,
       COALESCE(SUM(sl.duration_seconds), 0) AS stage_sec
     FROM stage_logs sl
     INNER JOIN filtered_vehicles fv ON sl.vehicle_id = fv.id
     WHERE sl.exited_at IS NOT NULL
       AND sl.to_zone IN ('workshop', 'alignment', 'hoist')
+      -- STRICT AUDIT & MULTI-VISIT RESILIENT RULE:
+      -- Only count the specific visit log in which the task was actually completed
       AND EXISTS (
         SELECT 1 FROM vehicle_tasks vt
         WHERE vt.vehicle_id = sl.vehicle_id
           AND vt.is_completed = TRUE
+          AND vt.completed_at IS NOT NULL
+          AND vt.completed_at >= sl.entered_at
+          AND vt.completed_at <= sl.exited_at
           AND (
             (sl.to_zone = 'workshop' AND vt.task_type = 'general_service')
             OR (sl.to_zone = 'alignment' AND vt.task_type = 'wheel_alignment')
@@ -301,60 +356,4 @@ BEGIN
     'hoistBay', jsonb_build_object('zone', 'hoist', 'name', 'Hoist Service', 'vehicleCount', 0, 'totalActiveSec', 0, 'avgActiveSec', 0, 'totalIdleSec', 0, 'avgIdleSec', 0, 'totalStageSec', 0, 'avgStageSec', 0)
   ));
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
-
--- 6. ATOMIC RPC: 90-DAY RETENTION AUTO-CLEANUP
--- Purges finished vehicles older than 90 days (cascading to stage_logs and vehicle_tasks)
-CREATE OR REPLACE FUNCTION purge_records_older_than_90_days()
-RETURNS JSONB AS $$
-DECLARE
-  v_deleted_count INT := 0;
-BEGIN
-  WITH purged AS (
-    DELETE FROM vehicles
-    WHERE is_finished = TRUE
-      AND created_at < NOW() - INTERVAL '90 days'
-    RETURNING id
-  )
-  SELECT COUNT(*) INTO v_deleted_count FROM purged;
-
-  RETURN jsonb_build_object(
-    'success', true,
-    'purged_count', v_deleted_count,
-    'purged_at', NOW()
-  );
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
-
--- 7. AUTOMATED SCHEDULED JOBS (VIA pg_cron)
--- Midnight daily vehicle reconciliation + Weekly 90-day retention auto-cleanup
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
-    -- 1. Unschedule & reschedule midnight daily vehicle reconciliation (00:00 UTC / ~05:30 SLST)
-    PERFORM cron.unschedule('daily-vehicle-reconciliation')
-    WHERE EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'daily-vehicle-reconciliation');
-
-    PERFORM cron.schedule(
-      'daily-vehicle-reconciliation',
-      '0 0 * * *',
-      'SELECT reconcile_daily_vehicles()'
-    );
-
-    -- 2. Unschedule & reschedule weekly 90-day retention auto-cleanup (Every Sunday at 03:00 UTC)
-    PERFORM cron.unschedule('weekly-90day-retention-purge')
-    WHERE EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'weekly-90day-retention-purge');
-
-    PERFORM cron.schedule(
-      'weekly-90day-retention-purge',
-      '0 3 * * 0',
-      'SELECT purge_records_older_than_90_days()'
-    );
-  END IF;
-EXCEPTION
-  WHEN OTHERS THEN
-    RAISE NOTICE 'pg_cron scheduling note: %', SQLERRM;
-END;
-$$;
+ LANGUAGE plpgsql SECURITY DEFINER;

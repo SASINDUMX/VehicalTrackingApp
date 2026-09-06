@@ -631,7 +631,7 @@ export const vehicleService = {
         const entered = enteredAt ? new Date(enteredAt).getTime() : new Date(now).getTime();
         const duration = Math.max(0, Math.floor((new Date(now).getTime() - entered) / 1000));
         const idle = workStartedAt
-          ? (existingIdleSec || Math.max(0, Math.floor((new Date(workStartedAt).getTime() - entered) / 1000)))
+          ? (existingIdleSec ?? Math.max(0, Math.floor((new Date(workStartedAt).getTime() - entered) / 1000)))
           : duration;
 
         const { error: updateErr } = await client
@@ -653,7 +653,7 @@ export const vehicleService = {
           const entered = new Date(activeLog.entered_at).getTime();
           const duration = Math.max(0, Math.floor((new Date(now).getTime() - entered) / 1000));
           const idle = activeLog.work_started_at
-            ? (activeLog.idle_seconds || Math.max(0, Math.floor((new Date(activeLog.work_started_at).getTime() - entered) / 1000)))
+            ? (existingIdleSec ?? activeLog.idle_seconds ?? Math.max(0, Math.floor((new Date(activeLog.work_started_at).getTime() - entered) / 1000)))
             : duration;
           const { error: updateActiveErr } = await client
             .from('stage_logs')

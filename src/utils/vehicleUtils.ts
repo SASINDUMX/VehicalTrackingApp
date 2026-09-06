@@ -246,9 +246,11 @@ export const getStageTiming = (
   const workStartedMs = new Date(workStartedAt).getTime();
   const queueInSec = Math.max(0, Math.floor((workStartedMs - enteredMs) / 1000));
 
-  // Case 2: Work has completed (Task marked Done)
-  if (workCompletedAt) {
-    const completedMs = new Date(workCompletedAt).getTime();
+  // Case 2: Work has completed during this stage (Task marked Done on or before exit)
+  const completedMs = workCompletedAt ? new Date(workCompletedAt).getTime() : NaN;
+  const isDoneInThisStage = !isNaN(completedMs) && completedMs <= endMs;
+
+  if (isDoneInThisStage) {
     // Clamp completedMs between workStartedMs and endMs
     const validCompletedMs = Math.min(Math.max(completedMs, workStartedMs), endMs);
     const rawActiveSec = Math.max(0, Math.floor((validCompletedMs - workStartedMs) / 1000));

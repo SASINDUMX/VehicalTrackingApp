@@ -501,7 +501,7 @@ export const exportServiceLogsToCSV = (
       escapeCSV(intakeTimeStr),
       escapeCSV(effectiveCompletionDate ? effectiveCompletionDate.toLocaleString('en-US', { timeZone: 'Asia/Colombo' }) : 'Pending'),
       escapeCSV(formatDuration(grossSec)),
-      escapeCSV(formatDuration(totalActiveSec > 0 ? totalActiveSec : netSec)),
+      escapeCSV(formatDuration(totalActiveSec)),
       escapeCSV(formatDuration(totalIdleSec)),
       escapeCSV(formatDuration(breakSeconds)),
       // General Service (Idle | Active | Breaks)
@@ -606,7 +606,7 @@ export const exportServiceLogsToPDF = (
           ${formatDuration(grossSec)}
         </td>
         <td style="padding: 8px 10px; font-weight: 700; font-size: 11px; color: #16a34a; border-bottom: 1px solid #e2e8f0;">
-          ${formatDuration(totalActiveSec > 0 ? totalActiveSec : netSec)}
+          ${formatDuration(totalActiveSec)}
         </td>
         <td style="padding: 8px 10px; font-weight: 700; font-size: 11px; color: #d97706; border-bottom: 1px solid #e2e8f0;">
           ${formatDuration(totalIdleSec)}

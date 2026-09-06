@@ -39,6 +39,7 @@ export interface StageLog {
   paused_seconds?: number;
   work_started_at?: string | null;
   idle_seconds?: number;
+  break_seconds?: number;
   is_dispatched?: boolean;
   active_seconds?: number;
 }

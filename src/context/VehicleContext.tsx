@@ -7,6 +7,7 @@ import { safeStorage } from '../lib/supabase';
 import { chimeService } from '../lib/chime';
 import { hapticService } from '../lib/haptics';
 import { vehicleService } from '../services/vehicleService';
+import { getBreakOverlap } from '../utils/workshopHoursUtils';
 import { useUI, UrgentModalData } from './UIContext';
 
 // Safe in-app console logger for non-blocking error display
@@ -714,6 +715,22 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
         await toggleTaskCompletion(vehicleId, currentBayTask.id, mover);
       }
 
+      // Calculate complete idle (Queue-In + Queue-Out) for the departing bay
+      const enterMs = lastLog?.entered_at ? new Date(lastLog.entered_at).getTime() : new Date(now).getTime();
+      const exitMs = new Date(now).getTime();
+      const queueIn = lastLog?.work_started_at
+        ? Math.max(0, Math.floor((new Date(lastLog.work_started_at).getTime() - enterMs) / 1000))
+        : Math.max(0, Math.floor((exitMs - enterMs) / 1000));
+
+      const bayTask = targetVehicle.tasks.find(
+        t => APP_TERMINOLOGY.tasks[t.task_type]?.stationId === targetVehicle.current_zone
+      );
+      const taskDoneMs = (currentBayTask ? exitMs : (bayTask?.completed_at ? new Date(bayTask.completed_at).getTime() : NaN));
+      const queueOut = (!isNaN(taskDoneMs) && taskDoneMs >= enterMs && taskDoneMs <= exitMs)
+        ? Math.max(0, Math.floor((exitMs - taskDoneMs) / 1000))
+        : 0;
+      const totalIdleForBay = lastLog?.work_started_at ? (queueIn + queueOut) : queueIn;
+
       // C. Transfer zone — task is already done, service stays clean.
       await vehicleService.transferZone(
         vehicleId,
@@ -724,7 +741,7 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
         lastLog?.id || null,
         lastLog?.entered_at || null,
         lastLog?.work_started_at || null,
-        lastLog?.idle_seconds,
+        totalIdleForBay,
         mover
       );
 
@@ -740,16 +757,32 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
           if (lastIdx >= 0 && !updatedLogs[lastIdx].exited_at) {
             const prevL = updatedLogs[lastIdx];
             const entered = new Date(prevL.entered_at).getTime();
-            const dur = Math.floor((new Date(now).getTime() - entered) / 1000);
-            // work_started_at is guaranteed to be set at this point (step A ran if needed)
-            const idle = prevL.work_started_at
-              ? (prevL.idle_seconds || Math.floor((new Date(prevL.work_started_at).getTime() - entered) / 1000))
+            const exitTime = new Date(now).getTime();
+            const dur = Math.max(0, Math.floor((exitTime - entered) / 1000));
+
+            // Queue-In idle: entered -> work_started (or full duration if work never started)
+            const queueIn = prevL.work_started_at
+              ? Math.max(0, Math.floor((new Date(prevL.work_started_at).getTime() - entered) / 1000))
               : dur;
+
+            // Queue-Out idle: task completed_at -> dispatch exited_at (only if completed during this visit)
+            const bayTask = v.tasks.find(
+              t => APP_TERMINOLOGY.tasks[t.task_type]?.stationId === v.current_zone
+            );
+            const taskCompletedMs = bayTask?.completed_at ? new Date(bayTask.completed_at).getTime() : NaN;
+            const queueOut = (!isNaN(taskCompletedMs) && taskCompletedMs >= entered && taskCompletedMs <= exitTime)
+              ? Math.max(0, Math.floor((exitTime - taskCompletedMs) / 1000))
+              : 0;
+
+            const totalIdle = prevL.work_started_at ? (queueIn + queueOut) : dur;
+            const { breakSeconds } = getBreakOverlap(new Date(entered), new Date(exitTime));
+
             updatedLogs[lastIdx] = {
               ...prevL,
               exited_at: now,
               duration_seconds: dur,
-              idle_seconds: idle,
+              idle_seconds: totalIdle,
+              break_seconds: breakSeconds,
             };
           }
 

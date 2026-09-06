@@ -137,15 +137,11 @@ export const ServiceReportsModal: React.FC = () => {
     return filterVehiclesForReport(reportVehicles, datePreset, statusPreset);
   }, [reportVehicles, datePreset, statusPreset]);
 
-  // Hybrid KPIs: If client vehicles are loaded, client calculation is authoritative and guaranteed to match the displayed table.
-  // Server KPIs are used as a fast-path preview only when vehicles are still loading and serverKPIs has non-zero data.
+  // Server KPIs are authoritative: computed directly in PostgreSQL by get_service_report_kpis.
+  // Falls back to pure client calculation if offline or RPC is unavailable.
   const kpis = useMemo(() => {
-    if (filteredVehicles.length > 0) {
-      return calculateReportKPIs(filteredVehicles);
-    }
     if (
       serverKPIs &&
-      serverKPIs.totalVehicles > 0 &&
       serverKPIs.workshopBay &&
       serverKPIs.alignmentBay &&
       serverKPIs.hoistBay
@@ -482,7 +478,7 @@ export const ServiceReportsModal: React.FC = () => {
                     const grossSec = Math.max(0, Math.floor((end.getTime() - start.getTime()) / 1000));
                     const netSec = getNetWorkingSeconds(start, end);
                     const { totalIdleSec, totalActiveSec } = getVehicleIdleAndActiveTotals(v);
-                    const activeWorkSec = totalActiveSec > 0 ? totalActiveSec : netSec;
+                    const activeWorkSec = totalActiveSec;
                     const { breakSeconds } = getBreakOverlap(start, end);
 
                     const intakeDateStr = !isNaN(start.getTime())
