@@ -53,11 +53,12 @@ export const VehicleDetailsModal: React.FC = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<boolean>(false);
 
   const initialTimers = useMemo(() => {
-    if (!selectedVehicle) return { totalElapsedStr: '0m 00s', grossElapsedStr: '0m 00s', activeStageDuration: '0m 00s' };
+    if (!selectedVehicle) return { totalElapsedStr: '0m 00s', grossElapsedStr: '0m 00s', activeStageDuration: '0m 00s', activeStageDurationRaw: '0m 00s' };
     return calculateTimers(selectedVehicle);
   }, [selectedVehicle?.id]);
 
   const [activeStageDuration, setActiveStageDuration] = useState<string>(initialTimers.activeStageDuration);
+  const [activeStageDurationRaw, setActiveStageDurationRaw] = useState<string>(initialTimers.activeStageDurationRaw);
   const [totalElapsedStr, setTotalElapsedStr] = useState<string>(initialTimers.totalElapsedStr);
   const [grossElapsedStr, setGrossElapsedStr] = useState<string>(initialTimers.grossElapsedStr);
   const [localIsUrgent, setLocalIsUrgent] = useState<boolean>(() => selectedVehicle?.is_urgent || false);
@@ -76,6 +77,7 @@ export const VehicleDetailsModal: React.FC = () => {
 
       const current = calculateTimers(selectedVehicle);
       setActiveStageDuration(current.activeStageDuration);
+      setActiveStageDurationRaw(current.activeStageDurationRaw);
       setTotalElapsedStr(current.totalElapsedStr);
       setGrossElapsedStr(current.grossElapsedStr);
     }
@@ -103,6 +105,7 @@ export const VehicleDetailsModal: React.FC = () => {
       setTotalElapsedStr(timers.totalElapsedStr);
       setGrossElapsedStr(timers.grossElapsedStr);
       setActiveStageDuration(timers.activeStageDuration);
+      setActiveStageDurationRaw(timers.activeStageDurationRaw);
     };
 
     const interval = setInterval(updateTimers, 1000);
@@ -115,8 +118,8 @@ export const VehicleDetailsModal: React.FC = () => {
   // NOTE: must be declared BEFORE the early return to satisfy React Rules of Hooks
   const timelineStagesData = useMemo(() => {
     if (!selectedVehicle) return [];
-    return computeVehicleTimelineStages(selectedVehicle, getStageOrder(colors), activeStageDuration);
-  }, [selectedVehicle, colors, activeStageDuration]);
+    return computeVehicleTimelineStages(selectedVehicle, getStageOrder(colors), activeStageDurationRaw);
+  }, [selectedVehicle, colors, activeStageDurationRaw]);
 
   if (!selectedVehicle) return null;
 
@@ -431,9 +434,13 @@ export const VehicleDetailsModal: React.FC = () => {
                                 <View style={styles.timeTag}>
                                   <Clock size={12} color={isCurrent ? (isStageIdle ? colors.warning : colors.primary) : isCancelled ? colors.danger : colors.textMuted} />
                                   <Text style={[styles.timeTagText, { color: isCurrent ? (isStageIdle ? colors.warningLight : colors.primaryLight) : colors.textSecondary }, isCurrent && { fontWeight: '700' }, isCancelled && { color: colors.danger }]}>
-                                    {isCurrent ? (
-                                      `${isStageIdle ? 'Idle' : 'Active'}: ${spentStr}`
-                                    ) : isCompleted ? `Spent: ${spentStr}` : isCancelled ? 'Skipped' : 'Pending'}
+                                    {isCurrent
+                                      ? `${isStageIdle ? 'Idle: ' : 'Active: '}${spentStr}`
+                                      : isCompleted
+                                      ? `Spent: ${spentStr}`
+                                      : isCancelled
+                                      ? 'Skipped'
+                                      : 'Pending'}
                                   </Text>
                                 </View>
                               </View>

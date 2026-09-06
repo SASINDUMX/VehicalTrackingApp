@@ -82,6 +82,7 @@ export interface VehicleModalTimers {
   totalElapsedStr: string;
   grossElapsedStr: string;
   activeStageDuration: string;
+  activeStageDurationRaw: string;
 }
 
 /**
@@ -98,12 +99,15 @@ export const computeVehicleModalTimers = (vehicle: Vehicle): VehicleModalTimers 
   const grossSec = isNaN(intakeMs) ? 0 : Math.max(0, Math.floor((effectiveEnd.getTime() - intakeMs) / 1000));
 
   let stageDuration = '0m 00s';
+  let stageDurationRaw = '0m 00s';
   const lastLog = vehicle.stage_logs[vehicle.stage_logs.length - 1];
 
   if (vehicle.is_finished) {
     stageDuration = 'COMPLETED';
+    stageDurationRaw = '0m 00s';
   } else if (vehicle.current_zone === 'inspection') {
     stageDuration = 'READY';
+    stageDurationRaw = '0m 00s';
   } else if (lastLog && !lastLog.exited_at) {
     const bayTaskType = getTaskTypeForBay(vehicle.current_zone);
     const currentTask =
@@ -113,11 +117,15 @@ export const computeVehicleModalTimers = (vehicle: Vehicle): VehicleModalTimers 
     if (!lastLog.work_started_at) {
       const enterMs = new Date(lastLog.entered_at).getTime();
       const idleSec = isNaN(enterMs) ? 0 : Math.max(0, Math.floor((now.getTime() - enterMs) / 1000));
-      stageDuration = `IDLE · ${formatDurationString(idleSec, true)}`;
+      const formatted = formatDurationString(idleSec, true);
+      stageDuration = `IDLE · ${formatted}`;
+      stageDurationRaw = formatted;
     } else if (currentTask && currentTask.is_completed && currentTask.completed_at) {
       const completedMs = new Date(currentTask.completed_at).getTime();
       const postIdleSec = isNaN(completedMs) ? 0 : Math.max(0, Math.floor((now.getTime() - completedMs) / 1000));
-      stageDuration = `IDLE · ${formatDurationString(postIdleSec, true)}`;
+      const formatted = formatDurationString(postIdleSec, true);
+      stageDuration = `IDLE · ${formatted}`;
+      stageDurationRaw = formatted;
     } else {
       const workStartMs = new Date(lastLog.work_started_at).getTime();
       const activeSec = isNaN(workStartMs) ? 0 : Math.max(0, Math.floor((now.getTime() - workStartMs) / 1000));
@@ -125,8 +133,10 @@ export const computeVehicleModalTimers = (vehicle: Vehicle): VehicleModalTimers 
       const activeBreak = getCurrentActiveBreak(now);
       if (activeBreak) {
         stageDuration = `⏸ ${timeStr}`;
+        stageDurationRaw = `⏸ ${timeStr}`;
       } else {
         stageDuration = timeStr;
+        stageDurationRaw = timeStr;
       }
     }
   }
@@ -135,6 +145,7 @@ export const computeVehicleModalTimers = (vehicle: Vehicle): VehicleModalTimers 
     totalElapsedStr: formatDurationString(netSec, true),
     grossElapsedStr: formatDurationString(grossSec, true),
     activeStageDuration: stageDuration,
+    activeStageDurationRaw: stageDurationRaw,
   };
 };
 

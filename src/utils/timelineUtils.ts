@@ -86,7 +86,15 @@ export const computeVehicleTimelineStages = (
 
   return orderedTimelineNodes.map((stageDef, idx) => {
     const isCurrent = currentZoneInner === stageDef.zone;
-    const logsForZone = vehicle.stage_logs.filter(l => l.to_zone === stageDef.zone);
+    const rawLogsForZone = vehicle.stage_logs.filter(l => l.to_zone === stageDef.zone);
+    // Deduplicate logs for the same zone by entered_at timestamp or id
+    const seenEntered = new Set<string>();
+    const logsForZone = rawLogsForZone.filter(l => {
+      const key = l.entered_at || l.id;
+      if (seenEntered.has(key)) return false;
+      seenEntered.add(key);
+      return true;
+    });
     const hasVisited = logsForZone.length > 0;
     const hasExitedAll = hasVisited && logsForZone.every(l => Boolean(l.exited_at));
     const isCompleted = hasExitedAll && !isCurrent;

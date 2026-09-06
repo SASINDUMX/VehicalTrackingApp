@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, ReactNode } from 'react';
 import { Vehicle, VehicleTask, StageLog, BayZone, UserRole, NavigationTab, TaskType } from '../types/vehicle';
 import { getRoleBay } from '../constants/bays';
+import { APP_TERMINOLOGY } from '../constants/terminology';
 import { supabase, isSupabaseConnected } from '../lib/supabase';
 import { safeStorage } from '../lib/supabase';
 import { chimeService } from '../lib/chime';
@@ -332,7 +333,25 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
             if (v.id !== logData.vehicle_id) return v;
 
             if (payload.eventType === 'INSERT') {
+              // 1. If log ID already exists, do not duplicate
               if (v.stage_logs.some(l => l.id === logData.id)) return v;
+
+              // 2. Reconcile temporary local optimistic log (`log-xxx`) for the same zone and vehicle
+              const tempLogIndex = v.stage_logs.findIndex(
+                l => l.id.startsWith('log-') && l.to_zone === logData.to_zone
+              );
+
+              if (tempLogIndex !== -1) {
+                const reconciledLogs = [...v.stage_logs];
+                reconciledLogs[tempLogIndex] = logData;
+                return { ...v, stage_logs: reconciledLogs };
+              }
+
+              // 3. Fallback deduplication: do not append if a log with same to_zone and identical entered_at exists
+              if (v.stage_logs.some(l => l.to_zone === logData.to_zone && l.entered_at === logData.entered_at)) {
+                return v;
+              }
+
               return { ...v, stage_logs: [...v.stage_logs, logData] };
             }
 
@@ -616,8 +635,13 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
     if (!targetVehicle) return false;
     const lastLog = targetVehicle.stage_logs[targetVehicle.stage_logs.length - 1] || null;
 
+    // Detect if departing bay has an incomplete required task that should be auto-completed on dispatch
+    const currentBayTask = targetVehicle.tasks.find(
+      t => t.is_required && !t.is_completed && APP_TERMINOLOGY.tasks[t.task_type]?.stationId === targetVehicle.current_zone
+    );
+
     try {
-      // 1. Await backend persistence first
+      // 1. Await backend persistence first (transfers vehicle and auto-completes task if needed)
       await vehicleService.transferZone(
         vehicleId,
         targetZone,
@@ -627,7 +651,9 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
         lastLog?.id || null,
         lastLog?.entered_at || null,
         lastLog?.work_started_at || null,
-        lastLog?.idle_seconds
+        lastLog?.idle_seconds,
+        currentBayTask?.id || null,
+        targetZoneName || 'Staff'
       );
 
       // 2. Only mutate client state after backend confirmation
@@ -643,14 +669,16 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
             const prevL = updatedLogs[lastIdx];
             const entered = new Date(prevL.entered_at).getTime();
             const dur = Math.floor((new Date(now).getTime() - entered) / 1000);
-            const idle = prevL.work_started_at
-              ? (prevL.idle_seconds || Math.floor((new Date(prevL.work_started_at).getTime() - entered) / 1000))
+            const effectiveWorkStarted = prevL.work_started_at || (currentBayTask ? prevL.entered_at : null);
+            const idle = effectiveWorkStarted
+              ? (prevL.idle_seconds || Math.floor((new Date(effectiveWorkStarted).getTime() - entered) / 1000))
               : dur;
             updatedLogs[lastIdx] = {
               ...prevL,
               exited_at: now,
               duration_seconds: dur,
               idle_seconds: idle,
+              work_started_at: prevL.work_started_at || effectiveWorkStarted,
             };
           }
 
@@ -666,9 +694,19 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
             idle_seconds: 0,
           });
 
+          // Also mark the departing bay task as completed in local state
+          const updatedTasks = currentBayTask
+            ? v.tasks.map(t =>
+                t.id === currentBayTask.id
+                  ? { ...t, is_completed: true, completed_at: now, completed_by: targetZoneName || 'Staff' }
+                  : t
+              )
+            : v.tasks;
+
           return {
             ...v,
             current_zone: targetZone,
+            tasks: updatedTasks,
             stage_logs: updatedLogs,
             is_paused: false,
             paused_at: null,
