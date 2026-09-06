@@ -147,7 +147,7 @@ export const LoginScreen: React.FC = () => {
 
         {/* Footer */}
         <Text style={styles.footer}>
-          v1.0
+          v1.1
         </Text>
       </ScrollView>
     </KeyboardAvoidingView>
