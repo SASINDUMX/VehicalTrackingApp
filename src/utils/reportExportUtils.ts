@@ -593,13 +593,13 @@ export const exportServiceLogsToPDF = (
             ${statusLabel}
           </span>
         </td>
-        <td style="padding: 8px 6px; font-size: 11px; font-weight: 600; color: #475569; border-bottom: 1px solid #e2e8f0;">
+        <td style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #475569; border-bottom: 1px solid #e2e8f0;">
           ${intakeDateStr}
         </td>
-        <td style="padding: 8px 8px; font-size: 11px; color: #475569; border-bottom: 1px solid #e2e8f0;">
+        <td style="padding: 8px 8px; font-size: 11px; font-weight: 700; color: #475569; border-bottom: 1px solid #e2e8f0;">
           ${intakeTimeStr}
         </td>
-        <td style="padding: 8px 10px; font-size: 11px; font-weight: ${isEffectiveDone ? '700' : '400'}; color: ${isEffectiveDone ? '#16a34a' : '#d97706'}; border-bottom: 1px solid #e2e8f0;">
+        <td style="padding: 8px 10px; font-size: 11px; font-weight: 700; color: ${isEffectiveDone ? '#16a34a' : '#d97706'}; border-bottom: 1px solid #e2e8f0;">
           ${isEffectiveDone && effectiveCompletionDate ? effectiveCompletionDate.toLocaleTimeString('en-US', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit', hour12: true }) : 'In Progress'}
         </td>
         <td style="padding: 8px 10px; font-weight: 700; font-size: 11px; color: #0284c7; border-bottom: 1px solid #e2e8f0;">
@@ -615,36 +615,36 @@ export const exportServiceLogsToPDF = (
           ${breakSeconds > 0 ? formatDuration(breakSeconds) : '-'}
         </td>
         <!-- General Workshop -->
-        <td style="padding: 8px 6px; font-size: 11px; color: #f59e0b; text-align: center; border-bottom: 1px solid #e2e8f0;">
+        <td style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #f59e0b; text-align: center; border-bottom: 1px solid #e2e8f0;">
           ${workshopTiming.idleSec > 0 ? formatDuration(workshopTiming.idleSec) : '-'}
         </td>
-        <td style="padding: 8px 6px; font-size: 11px; color: #0284c7; font-weight: 700; text-align: center; border-bottom: 1px solid #e2e8f0;">
+        <td style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #0284c7; text-align: center; border-bottom: 1px solid #e2e8f0;">
           ${workshopTiming.activeSec > 0 ? formatDuration(workshopTiming.activeSec) : '-'}
         </td>
-        <td style="padding: 8px 6px; font-size: 11px; color: #fbbf24; text-align: center; border-bottom: 1px solid #e2e8f0;">
+        <td style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #fbbf24; text-align: center; border-bottom: 1px solid #e2e8f0;">
           ${workshopTiming.breakSec > 0 ? formatDuration(workshopTiming.breakSec) : '-'}
         </td>
         <!-- Wheel Alignment -->
-        <td style="padding: 8px 6px; font-size: 11px; color: #f59e0b; text-align: center; border-bottom: 1px solid #e2e8f0;">
+        <td style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #f59e0b; text-align: center; border-bottom: 1px solid #e2e8f0;">
           ${alignmentTiming.idleSec > 0 ? formatDuration(alignmentTiming.idleSec) : '-'}
         </td>
-        <td style="padding: 8px 6px; font-size: 11px; color: #0284c7; font-weight: 700; text-align: center; border-bottom: 1px solid #e2e8f0;">
+        <td style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #0284c7; text-align: center; border-bottom: 1px solid #e2e8f0;">
           ${alignmentTiming.activeSec > 0 ? formatDuration(alignmentTiming.activeSec) : '-'}
         </td>
-        <td style="padding: 8px 6px; font-size: 11px; color: #fbbf24; text-align: center; border-bottom: 1px solid #e2e8f0;">
+        <td style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #fbbf24; text-align: center; border-bottom: 1px solid #e2e8f0;">
           ${alignmentTiming.breakSec > 0 ? formatDuration(alignmentTiming.breakSec) : '-'}
         </td>
         <!-- Hoist Service -->
-        <td style="padding: 8px 6px; font-size: 11px; color: #f59e0b; text-align: center; border-bottom: 1px solid #e2e8f0;">
+        <td style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #f59e0b; text-align: center; border-bottom: 1px solid #e2e8f0;">
           ${hoistTiming.idleSec > 0 ? formatDuration(hoistTiming.idleSec) : '-'}
         </td>
-        <td style="padding: 8px 6px; font-size: 11px; color: #0284c7; font-weight: 700; text-align: center; border-bottom: 1px solid #e2e8f0;">
+        <td style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #0284c7; text-align: center; border-bottom: 1px solid #e2e8f0;">
           ${hoistTiming.activeSec > 0 ? formatDuration(hoistTiming.activeSec) : '-'}
         </td>
-        <td style="padding: 8px 6px; font-size: 11px; color: #fbbf24; text-align: center; border-bottom: 1px solid #e2e8f0;">
+        <td style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #fbbf24; text-align: center; border-bottom: 1px solid #e2e8f0;">
           ${hoistTiming.breakSec > 0 ? formatDuration(hoistTiming.breakSec) : '-'}
         </td>
-        <td style="padding: 8px 10px; font-size: 11px; color: #0f172a; border-bottom: 1px solid #e2e8f0;">
+        <td style="padding: 8px 10px; font-size: 11px; font-weight: 700; color: #0f172a; border-bottom: 1px solid #e2e8f0;">
           ${completedTasksCount}/${totalTasksCount} done
         </td>
       </tr>
@@ -670,6 +670,7 @@ export const exportServiceLogsToPDF = (
           .kpi-label { font-size: 10px; font-weight: 800; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px; }
           .kpi-val { font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 4px; }
           .table-container { width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 10px; }
+          .table-container td { font-weight: 700; }
           .th-top { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
           .th-sub { font-size: 8.5px; font-weight: 700; text-transform: uppercase; }
           .footer-sign { display: flex; justify-content: space-between; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748b; }
