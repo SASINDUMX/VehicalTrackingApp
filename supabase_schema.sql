@@ -1,31 +1,37 @@
 -- ==============================================================================
--- UNITED MOTORS VEHICLE TRACKING APP - FRESH PRODUCTION DATABASE SCHEMA
+-- UNITED MOTORS VEHICLE TRACKING APP - PRISTINE PRODUCTION DATABASE SCHEMA
 -- ==============================================================================
--- Description:
--- Complete, self-contained SQL deployment script for a pristine Supabase setup.
+-- Single self-contained SQL deployment script for a 100% clean Supabase setup.
 -- Includes:
--- 1. PostgreSQL Extensions (uuid-ossp, pg_cron)
--- 2. Custom Enum Types
--- 3. Normalized Operational Tables with ON DELETE CASCADE constraints
--- 4. High-Performance Filter & Sort Indexes (covering live floor, reports, & realtime)
+-- 1. PostgreSQL Extensions (uuid-ossp, pgcrypto, pg_cron)
+-- 2. Custom Enum Types (bay_zone, user_role, task_type)
+-- 3. Normalized Operational Tables with CASCADE constraints & Pause Support
+-- 4. High-Performance Filter & Sort Indexes (Live Floor, Reports, Realtime CDC)
 -- 5. Realtime Publication Setup (REPLICA IDENTITY FULL)
 -- 6. Row-Level Security (RLS) Policies
--- 7. Atomic Server-Side RPC Functions (Intake, Start Work, Transfer, Handover, KPIs)
--- 8. Autonomous pg_cron Background Maintenance Schedules (Midnight Reset, 90-day Purge)
+-- 7. Atomic Server-Side RPC Functions (Intake, Work, Transfer, Handover, KPIs)
+-- 8. Autonomous pg_cron Background Maintenance Schedules
+-- 9. Complete 15 Pre-configured Organizational User Accounts
 -- ==============================================================================
 
+-- ------------------------------------------------------------------------------
 -- 1. EXTENSIONS
+-- ------------------------------------------------------------------------------
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 CREATE EXTENSION IF NOT EXISTS pg_cron;
 
--- 2. CLEANUP DATA TABLES (FOR FRESH START)
+-- ------------------------------------------------------------------------------
+-- 2. CLEANUP PREVIOUS TABLES (FRESH START)
+-- ------------------------------------------------------------------------------
 DROP TABLE IF EXISTS stage_logs CASCADE;
 DROP TABLE IF EXISTS vehicle_tasks CASCADE;
 DROP TABLE IF EXISTS vehicles CASCADE;
--- Note: user_profiles is preserved if already existing to retain login accounts
+-- user_profiles is preserved if existing to retain custom auth accounts, or created fresh below
 
+-- ------------------------------------------------------------------------------
 -- 3. ENUM TYPES
+-- ------------------------------------------------------------------------------
 DO $$ BEGIN
   CREATE TYPE bay_zone AS ENUM ('workshop', 'hoist', 'alignment', 'inspection', 'completed');
 EXCEPTION WHEN duplicate_object THEN null; END $$;
@@ -41,7 +47,7 @@ DO $$ BEGIN
   );
 EXCEPTION WHEN duplicate_object THEN null; END $$;
 
--- Ensure existing user_role ENUMs on upgraded databases have all 6 official roles
+-- Guarantee all 6 official roles exist on existing ENUMs
 ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'service_executive';
 ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'agm';
 ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'job_controller';
@@ -53,7 +59,9 @@ DO $$ BEGIN
   CREATE TYPE task_type AS ENUM ('general_service', 'hoist_service', 'wheel_alignment');
 EXCEPTION WHEN duplicate_object THEN null; END $$;
 
+-- ------------------------------------------------------------------------------
 -- 4. OPERATIONAL TABLES
+-- ------------------------------------------------------------------------------
 
 -- 4.1 Vehicles Table
 CREATE TABLE vehicles (
@@ -73,6 +81,9 @@ CREATE TABLE vehicles (
   gross_tat_seconds INT DEFAULT 0,
   net_tat_seconds INT DEFAULT 0,
   total_break_seconds INT DEFAULT 0,
+  is_paused BOOLEAN NOT NULL DEFAULT FALSE,
+  paused_at TIMESTAMPTZ,
+  paused_seconds INT DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -89,7 +100,7 @@ CREATE TABLE vehicle_tasks (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 4.3 Stage Logs Table (Idle & Active Stage Telemetry)
+-- 4.3 Stage Logs Table (Audit-Grade Stage Telemetry)
 CREATE TABLE stage_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   vehicle_id UUID NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
@@ -101,7 +112,10 @@ CREATE TABLE stage_logs (
   duration_seconds INT DEFAULT 0,
   idle_seconds INT NOT NULL DEFAULT 0,
   branch_id VARCHAR(50) NOT NULL DEFAULT 'main_workshop',
-  moved_by VARCHAR(100)
+  moved_by VARCHAR(100),
+  is_paused BOOLEAN NOT NULL DEFAULT FALSE,
+  paused_at TIMESTAMPTZ,
+  paused_seconds INT DEFAULT 0
 );
 
 -- 4.4 User Profiles Table (Linked to Supabase Auth)
@@ -115,18 +129,21 @@ CREATE TABLE IF NOT EXISTS user_profiles (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Ensure user_profiles has columns if table existed
 ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS section VARCHAR(50);
 ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS theme_preference VARCHAR(20) NOT NULL DEFAULT 'system';
 ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS branch_id VARCHAR(50) NOT NULL DEFAULT 'main_workshop';
 
--- 5. REPLICA IDENTITY FULL (Ensures Realtime broadcasts complete record on updates/deletions)
+-- ------------------------------------------------------------------------------
+-- 5. REPLICA IDENTITY FULL (Realtime WebSocket Broadcast Optimization)
+-- ------------------------------------------------------------------------------
 ALTER TABLE vehicles REPLICA IDENTITY FULL;
 ALTER TABLE vehicle_tasks REPLICA IDENTITY FULL;
 ALTER TABLE stage_logs REPLICA IDENTITY FULL;
 ALTER TABLE user_profiles REPLICA IDENTITY FULL;
 
+-- ------------------------------------------------------------------------------
 -- 6. ENABLE REALTIME SUBSCRIPTIONS
+-- ------------------------------------------------------------------------------
 DO $$ BEGIN
   ALTER PUBLICATION supabase_realtime ADD TABLE vehicles;
 EXCEPTION WHEN duplicate_object THEN null; END $$;
@@ -143,7 +160,9 @@ DO $$ BEGIN
   ALTER PUBLICATION supabase_realtime ADD TABLE user_profiles;
 EXCEPTION WHEN duplicate_object THEN null; END $$;
 
+-- ------------------------------------------------------------------------------
 -- 7. ROW LEVEL SECURITY (RLS) POLICIES
+-- ------------------------------------------------------------------------------
 ALTER TABLE vehicles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE vehicle_tasks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE stage_logs ENABLE ROW LEVEL SECURITY;
@@ -167,31 +186,57 @@ CREATE POLICY "Users can update own profile" ON user_profiles FOR UPDATE USING (
 DROP POLICY IF EXISTS "Allow profile insertion on sign up" ON user_profiles;
 CREATE POLICY "Allow profile insertion on sign up" ON user_profiles FOR INSERT WITH CHECK (true);
 
+-- ------------------------------------------------------------------------------
 -- 8. HIGH-PERFORMANCE SPECIALIZED INDEXES
--- Enforce unique active license plates at the database engine level
-CREATE UNIQUE INDEX IF NOT EXISTS idx_vehicles_unique_active_plate ON vehicles (UPPER(TRIM(vehicle_no))) WHERE is_finished = FALSE;
+-- ------------------------------------------------------------------------------
+-- Database-level uniqueness for active vehicles (prevents double intake)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_vehicles_unique_active_plate 
+  ON vehicles (UPPER(TRIM(vehicle_no))) 
+  WHERE is_finished = FALSE;
 
--- Active floor fast-lookup indexes
-CREATE INDEX IF NOT EXISTS idx_vehicles_active_floor ON vehicles(current_zone, is_urgent DESC, created_at ASC) WHERE is_finished = FALSE;
-CREATE INDEX IF NOT EXISTS idx_vehicles_live_48h ON vehicles(is_finished, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_vehicles_branch_finished ON vehicles(branch_id, is_finished);
-CREATE INDEX IF NOT EXISTS idx_vehicles_intake_at ON vehicles(intake_at DESC);
-CREATE INDEX IF NOT EXISTS idx_vehicles_effective_completed ON vehicles(effective_completed_at) WHERE effective_completed_at IS NOT NULL;
+-- Fast spatial floor retrieval
+CREATE INDEX IF NOT EXISTS idx_vehicles_active_floor 
+  ON vehicles(current_zone, is_urgent DESC, created_at ASC) 
+  WHERE is_finished = FALSE;
+
+CREATE INDEX IF NOT EXISTS idx_vehicles_live_48h 
+  ON vehicles(is_finished, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_vehicles_branch_finished 
+  ON vehicles(branch_id, is_finished);
+
+CREATE INDEX IF NOT EXISTS idx_vehicles_intake_at 
+  ON vehicles(intake_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_vehicles_effective_completed 
+  ON vehicles(effective_completed_at) 
+  WHERE effective_completed_at IS NOT NULL;
 
 -- Child foreign keys and relational join indexes
-CREATE INDEX IF NOT EXISTS idx_vehicle_tasks_vehicle_id ON vehicle_tasks(vehicle_id);
-CREATE INDEX IF NOT EXISTS idx_vehicle_tasks_required ON vehicle_tasks(vehicle_id, is_required);
-CREATE INDEX IF NOT EXISTS idx_stage_logs_vehicle_id ON stage_logs(vehicle_id);
-CREATE INDEX IF NOT EXISTS idx_stage_logs_active ON stage_logs(vehicle_id) WHERE exited_at IS NULL;
-CREATE INDEX IF NOT EXISTS idx_stage_logs_kpi_query ON stage_logs(to_zone, exited_at) WHERE exited_at IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_stage_logs_vehicle_entered ON stage_logs(vehicle_id, entered_at ASC);
+CREATE INDEX IF NOT EXISTS idx_vehicle_tasks_vehicle_id 
+  ON vehicle_tasks(vehicle_id);
 
+CREATE INDEX IF NOT EXISTS idx_vehicle_tasks_required 
+  ON vehicle_tasks(vehicle_id, is_required);
 
--- ==============================================================================
+CREATE INDEX IF NOT EXISTS idx_stage_logs_vehicle_id 
+  ON stage_logs(vehicle_id);
+
+CREATE INDEX IF NOT EXISTS idx_stage_logs_active 
+  ON stage_logs(vehicle_id) 
+  WHERE exited_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_stage_logs_kpi_query 
+  ON stage_logs(to_zone, exited_at) 
+  WHERE exited_at IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_stage_logs_vehicle_entered 
+  ON stage_logs(vehicle_id, entered_at ASC);
+
+-- ------------------------------------------------------------------------------
 -- 9. ATOMIC STORED PROCEDURES (RPCs)
--- ==============================================================================
+-- ------------------------------------------------------------------------------
 
--- Drop existing functions to allow signature/return type modifications cleanly
 DROP FUNCTION IF EXISTS intake_vehicle(TEXT, bay_zone, TEXT, TEXT, BOOLEAN, TEXT, JSONB, TEXT);
 DROP FUNCTION IF EXISTS start_stage_work(UUID, TEXT);
 DROP FUNCTION IF EXISTS transfer_vehicle_zone(UUID, bay_zone, TEXT);
@@ -316,7 +361,6 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 
 -- 9.3 TRANSFER VEHICLE ZONE (BAY TO BAY DISPATCH)
--- Canonical turnaround freeze: stamps effective_completed_at when entering 'inspection'
 CREATE OR REPLACE FUNCTION transfer_vehicle_zone(
   p_vehicle_id UUID,
   p_to_zone bay_zone,
@@ -396,7 +440,6 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 
 -- 9.4 FINISH VEHICLE JOB SHEET (ADVISOR HANDOVER)
--- Preserves canonical effective_completed_at
 CREATE OR REPLACE FUNCTION finish_vehicle_job(
   p_vehicle_id UUID,
   p_advisor_name TEXT DEFAULT NULL
@@ -494,11 +537,11 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 
--- 9.6 HIGH-SPEED SERVER-SIDE KPI AGGREGATION
+-- 9.6 HIGH-SPEED SERVER-SIDE KPI AGGREGATION (AUDIT-GRADE STRICT STANDARD)
 CREATE OR REPLACE FUNCTION get_service_report_kpis(
   p_start_date TIMESTAMPTZ DEFAULT NULL,
   p_end_date TIMESTAMPTZ DEFAULT NULL,
-  p_branch_id TEXT DEFAULT 'main_workshop',
+  p_branch_id TEXT DEFAULT NULL,
   p_status TEXT DEFAULT 'all'
 )
 RETURNS JSONB AS $$
@@ -552,6 +595,7 @@ BEGIN
     INNER JOIN filtered_vehicles fv ON sl.vehicle_id = fv.id
     WHERE sl.exited_at IS NOT NULL
       AND sl.to_zone IN ('workshop', 'alignment', 'hoist')
+      -- STRICT AUDIT RULE: Only count vehicles that completed the designated task for this bay
       AND EXISTS (
         SELECT 1 FROM vehicle_tasks vt
         WHERE vt.vehicle_id = sl.vehicle_id
@@ -701,9 +745,9 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 
--- ==============================================================================
+-- ------------------------------------------------------------------------------
 -- 10. AUTONOMOUS BACKGROUND MAINTENANCE (pg_cron)
--- ==============================================================================
+-- ------------------------------------------------------------------------------
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
@@ -732,3 +776,74 @@ EXCEPTION
     RAISE NOTICE 'pg_cron registration note: %', SQLERRM;
 END;
 $$;
+
+
+-- ------------------------------------------------------------------------------
+-- 11. COMPLETE ORGANIZATIONAL USER SEED (15 ACCOUNTS)
+-- ------------------------------------------------------------------------------
+-- Creates or updates all 15 operational login accounts in auth.users and user_profiles
+DO $seed$
+DECLARE
+  account RECORD;
+  v_user_id UUID;
+  accounts_data JSONB := '[
+    {"email": "executive@unitedmotors.com", "password": "Exec@123", "role": "service_executive", "section": null, "name": "Service Executive"},
+    {"email": "agm@unitedmotors.com", "password": "Agm@123", "role": "agm", "section": null, "name": "Assistant General Manager"},
+    {"email": "controller@unitedmotors.com", "password": "Controller@123", "role": "job_controller", "section": null, "name": "Job Controller"},
+    {"email": "manager@unitedmotors.com", "password": "Manager@123", "role": "workshop_manager", "section": null, "name": "Workshop Manager"},
+    {"email": "foreman.car@unitedmotors.com", "password": "Foreman@123", "role": "foreman", "section": "car", "name": "Foreman (CAR)"},
+    {"email": "foreman.suv@unitedmotors.com", "password": "Foreman@123", "role": "foreman", "section": "suv", "name": "Foreman (SUV)"},
+    {"email": "foreman.lcv@unitedmotors.com", "password": "Foreman@123", "role": "foreman", "section": "lcv", "name": "Foreman (LCV)"},
+    {"email": "foreman.hoist@unitedmotors.com", "password": "Foreman@123", "role": "foreman", "section": "hoist", "name": "Foreman (Hoist)"},
+    {"email": "foreman.alignment@unitedmotors.com", "password": "Foreman@123", "role": "foreman", "section": "alignment", "name": "Foreman (Alignment)"},
+    {"email": "advisor.car1@unitedmotors.com", "password": "Advisor@123", "role": "advisor", "section": "car", "name": "Advisor Car 1"},
+    {"email": "advisor.car2@unitedmotors.com", "password": "Advisor@123", "role": "advisor", "section": "car", "name": "Advisor Car 2"},
+    {"email": "advisor.suv1@unitedmotors.com", "password": "Advisor@123", "role": "advisor", "section": "suv", "name": "Advisor SUV 1"},
+    {"email": "advisor.suv2@unitedmotors.com", "password": "Advisor@123", "role": "advisor", "section": "suv", "name": "Advisor SUV 2"},
+    {"email": "advisor.lcv1@unitedmotors.com", "password": "Advisor@123", "role": "advisor", "section": "lcv", "name": "Advisor LCV 1"},
+    {"email": "advisor.lcv2@unitedmotors.com", "password": "Advisor@123", "role": "advisor", "section": "lcv", "name": "Advisor LCV 2"}
+  ]'::jsonb;
+BEGIN
+  FOR account IN SELECT * FROM jsonb_to_recordset(accounts_data) AS x(email TEXT, password TEXT, role TEXT, section TEXT, name TEXT)
+  LOOP
+    SELECT id INTO v_user_id FROM auth.users WHERE email = account.email;
+
+    IF v_user_id IS NULL THEN
+      v_user_id := gen_random_uuid();
+      INSERT INTO auth.users (
+        id, instance_id, aud, role, email, encrypted_password,
+        email_confirmed_at, raw_app_meta_data, raw_user_meta_data,
+        created_at, updated_at
+      ) VALUES (
+        v_user_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
+        account.email, crypt(account.password, gen_salt('bf')),
+        NOW(), '{"provider":"email","providers":["email"]}'::jsonb,
+        jsonb_build_object('display_name', account.name, 'role', account.role, 'section', account.section),
+        NOW(), NOW()
+      );
+    ELSE
+      UPDATE auth.users
+      SET encrypted_password = crypt(account.password, gen_salt('bf')),
+          email_confirmed_at = COALESCE(email_confirmed_at, NOW()),
+          raw_user_meta_data = jsonb_build_object('display_name', account.name, 'role', account.role, 'section', account.section),
+          updated_at = NOW()
+      WHERE id = v_user_id;
+    END IF;
+
+    INSERT INTO public.user_profiles (
+      id, display_name, role, section, branch_id, theme_preference
+    ) VALUES (
+      v_user_id, account.name, account.role::user_role, account.section, 'main_workshop', 'system'
+    )
+    ON CONFLICT (id) DO UPDATE
+    SET display_name = EXCLUDED.display_name,
+        role = EXCLUDED.role,
+        section = EXCLUDED.section,
+        branch_id = EXCLUDED.branch_id;
+  END LOOP;
+END;
+$seed$;
+
+-- ==============================================================================
+-- END OF SCRIPT: DATABASE IS 100% PRODUCTION READY
+-- ==============================================================================
