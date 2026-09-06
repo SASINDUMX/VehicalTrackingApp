@@ -1,11 +1,13 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, ReactNode } from 'react';
 import { supabase, isSupabaseConnected } from '../lib/supabase';
-import { UserRole } from '../types/vehicle';
+import { UserRole, ForemanSection } from '../types/vehicle';
 
 export interface UserProfile {
   id: string;
   display_name: string;
   role: UserRole;
+  section?: ForemanSection | string | null;
+  branch_id?: string;
   theme_preference?: 'system' | 'dark' | 'light';
 }
 
@@ -20,29 +22,55 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Module-level persistent cache for user profiles (synchronous across renders and callbacks)
+const profileMemoryCache = new Map<string, UserProfile>();
+
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<any | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
 
-  const fetchProfile = useCallback(async (userId: string) => {
-    if (!supabase) return null;
-    try {
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
+  // In-flight request deduplication map to collapse simultaneous calls into 1 network roundtrip
+  const inFlightProfileRef = useRef<Map<string, Promise<UserProfile | null>>>(new Map());
 
-      if (error) {
-        console.warn('Profile fetch error:', error.message);
-        return null;
-      }
-      return data as UserProfile;
-    } catch (err) {
-      console.warn('Profile fetch failed:', err);
-      return null;
+  const fetchProfile = useCallback(async (userId: string): Promise<UserProfile | null> => {
+    if (!supabase || !userId) return null;
+
+    // 1. Fast synchronous cache check: if profile already fetched for this user ID, return immediately
+    if (profileMemoryCache.has(userId)) {
+      return profileMemoryCache.get(userId)!;
     }
+
+    // 2. Coalesce in-flight requests: if another caller is already fetching this user profile, reuse its promise
+    if (inFlightProfileRef.current.has(userId)) {
+      return inFlightProfileRef.current.get(userId)!;
+    }
+
+    const fetchPromise = (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('id', userId)
+          .single();
+
+        if (error) {
+          console.warn('Profile fetch error:', error.message);
+          return null;
+        }
+        const profile = data as UserProfile;
+        profileMemoryCache.set(userId, profile);
+        return profile;
+      } catch (err) {
+        console.warn('Profile fetch failed:', err);
+        return null;
+      } finally {
+        inFlightProfileRef.current.delete(userId);
+      }
+    })();
+
+    inFlightProfileRef.current.set(userId, fetchPromise);
+    return fetchPromise;
   }, []);
 
   useEffect(() => {
@@ -70,6 +98,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
         setUserProfile(null);
+        profileMemoryCache.clear();
       }
     });
 
@@ -109,11 +138,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [fetchProfile]);
 
   const signOut = useCallback(async () => {
-    if (supabase) {
-      await supabase.auth.signOut();
+    try {
+      if (supabase) {
+        // scope: 'local' cleans up local storage immediately without throwing 403 if remote session was deleted
+        await supabase.auth.signOut({ scope: 'local' });
+      }
+    } catch (err) {
+      console.warn('[AuthContext] Remote signOut error (clearing local state):', err);
+    } finally {
+      setUser(null);
+      setUserProfile(null);
+      profileMemoryCache.clear();
+      if (typeof window !== 'undefined' && window.localStorage) {
+        // Purge any lingering supabase auth keys from storage
+        Object.keys(window.localStorage).forEach(key => {
+          if (key.startsWith('sb-') || key.includes('auth-token')) {
+            window.localStorage.removeItem(key);
+          }
+        });
+      }
     }
-    setUser(null);
-    setUserProfile(null);
   }, []);
 
   const value = useMemo(() => ({

@@ -25,7 +25,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#facc15",
     borderRadius: 5,
     borderWidth: 1,
-    borderColor: "#eab308",
+    borderColor: "#000000",
     paddingHorizontal: 8,
     paddingVertical: 3,
     minHeight: 24,
@@ -34,6 +34,8 @@ const styles = StyleSheet.create({
   },
   plateSm: {
     borderRadius: 4,
+    borderWidth: 1,
+    borderColor: "#000000",
     paddingHorizontal: 6,
     paddingVertical: 2,
     minHeight: 20,
@@ -41,6 +43,7 @@ const styles = StyleSheet.create({
   plateLg: {
     borderRadius: 6,
     borderWidth: 1.5,
+    borderColor: "#000000",
     paddingHorizontal: 12,
     paddingVertical: 5,
   },

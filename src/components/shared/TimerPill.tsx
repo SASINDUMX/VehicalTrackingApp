@@ -5,7 +5,7 @@ import { useTheme } from '../../context/ThemeContext';
 
 interface TimerPillProps {
   elapsedText: string;
-  variant?: 'cyan' | 'amber';
+  variant?: 'cyan' | 'amber' | 'green';
   size?: 'sm' | 'md';
   isPaused?: boolean;
 }
@@ -16,10 +16,12 @@ export const TimerPill: React.FC<TimerPillProps> = ({
 }) => {
   const { colors } = useTheme();
   const isAmber = isPaused || variant === 'amber';
+  const isGreen = variant === 'green';
   const isSm = size === 'sm';
-  const color  = isAmber ? colors.warningLight : colors.primaryLight;
-  const bg     = isAmber ? colors.warningDim   : colors.primaryDim;
-  const border = isAmber ? colors.warningBorder : colors.primaryBorder;
+  
+  const color  = isGreen ? colors.successLight  : isAmber ? colors.warningLight  : colors.primaryLight;
+  const bg     = isGreen ? colors.successDim    : isAmber ? colors.warningDim    : colors.primaryDim;
+  const border = isGreen ? colors.successBorder : isAmber ? colors.warningBorder : colors.primaryBorder;
 
   return (
     <View style={[styles.pill, { backgroundColor: bg, borderColor: border }, isSm && styles.pillSm]}>

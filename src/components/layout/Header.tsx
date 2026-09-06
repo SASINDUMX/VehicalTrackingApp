@@ -5,23 +5,23 @@ import { useAuth } from '../../context/AuthContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { chimeService } from '../../lib/chime';
 import { hapticService } from '../../lib/haptics';
-import { Car, Plus, LogOut, User, Volume2, VolumeX, ChevronDown, Shield, Smartphone, Sun, Moon, Monitor, FileText } from 'lucide-react-native';
+import { Car, LogOut, User, Volume2, VolumeX, Shield, Smartphone, Sun, Moon, Monitor, FileText, ChevronLeft } from 'lucide-react-native';
 import { useTheme } from '../../context/ThemeContext';
 
 import { getCurrentActiveBreak } from '../../utils/workshopHoursUtils';
+import { APP_TERMINOLOGY } from '../../constants/terminology';
 
-const ROLE_LABELS: Record<string, string> = {
-  supervisor: 'Supervisor',
-  tech_workshop: 'Tech 1 · Workshop',
-  tech_alignment: 'Tech 2 · Alignment',
-  tech_hoist: 'Tech 3 · Hoist',
-  advisor: 'Advisor',
+const getHeaderRoleBadge = (role: string, section?: string): string => {
+  if (role === 'foreman' && section) {
+    return `Foreman · ${section.toUpperCase()}`;
+  }
+  return (APP_TERMINOLOGY.roles as any)[role]?.badge || role;
 };
 
 export const Header: React.FC = () => {
-  const { setIsAddModalOpen, setIsReportsModalOpen, isRealtimeConnected } = useVehicles();
+  const { isReportsModalOpen, setIsReportsModalOpen, isRealtimeConnected } = useVehicles();
   const { signOut, user } = useAuth();
-  const { canAddVehicle, displayName, currentRole } = usePermissions();
+  const { displayName, currentRole, section } = usePermissions();
   const { themeMode, isDark, colors, setThemeMode, toggleTheme } = useTheme();
   const [timeStr, setTimeStr] = useState<string>('');
   const [activeBreak, setActiveBreak] = useState<{ name: string; endStr: string } | null>(null);
@@ -113,195 +113,221 @@ export const Header: React.FC = () => {
   }, [isMenuOpen]);
 
   return (
-    <View style={[styles.headerContainer, { backgroundColor: colors.surface, borderBottomColor: colors.borderGlass }]}>
-      <View style={styles.brandRow}>
-        <View style={[styles.logoBox, { backgroundColor: colors.primary }]}>
-          <Car size={24} color="#ffffff" />
-        </View>
-        <View style={styles.brandTextContainer}>
-          <View style={styles.titleRow}>
-            <Text style={[styles.brandTitle, { color: colors.textPrimary }]}>UNITED MOTORS</Text>
-            <View style={styles.statusContainer}>
-              {isRealtimeConnected && (
-                <Animated.View 
-                  style={[
-                    styles.dotPulse,
-                    { transform: [{ scale: pulseAnim }], opacity: pulseAnim.interpolate({ inputRange: [1, 1.5], outputRange: [0.8, 0] }) }
-                  ]} 
-                />
-              )}
-              <View style={[styles.statusDot, isRealtimeConnected ? styles.dotOnline : styles.dotOffline]} />
+    <>
+      <View style={[styles.headerContainer, { backgroundColor: colors.surface, borderBottomColor: colors.borderGlass }]}>
+        <View style={styles.brandRow}>
+          <View style={[styles.logoBox, { backgroundColor: colors.primary }]}>
+            <Car size={24} color="#ffffff" />
+          </View>
+          <View style={styles.brandTextContainer}>
+            <View style={styles.titleRow}>
+              <Text style={[styles.brandTitle, { color: colors.textPrimary }]}>UNITED MOTORS</Text>
+              <View style={styles.statusContainer}>
+                {isRealtimeConnected && (
+                  <Animated.View 
+                    style={[
+                      styles.dotPulse,
+                      { transform: [{ scale: pulseAnim }], opacity: pulseAnim.interpolate({ inputRange: [1, 1.5], outputRange: [0.8, 0] }) }
+                    ]} 
+                  />
+                )}
+                <View style={[styles.statusDot, isRealtimeConnected ? styles.dotOnline : styles.dotOffline]} />
+              </View>
+            </View>
+            <View style={styles.brandSubRow}>
+              <Text style={[styles.brandSub, { color: colors.textMuted }]}>{timeStr}</Text>
             </View>
           </View>
-          <Text style={[styles.brandSub, { color: colors.textMuted }]}>
-            {timeStr}
-            {activeBreak && (
-              <Text style={styles.breakPillText}> · ☕ {activeBreak.name} (Until {activeBreak.endStr})</Text>
-            )}
-          </Text>
         </View>
-      </View>
 
-      <View
-        style={styles.rightGroup}
-        {...(Platform.OS === 'web' ? ({ id: 'profile-menu-container' } as any) : {})}
-      >
-        {/* Reports & Telemetry Button */}
-        <TouchableOpacity
-          style={[
-            styles.reportsBtn,
-            { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)', borderColor: colors.borderGlass }
-          ]}
-          onPress={() => setIsReportsModalOpen(true)}
-          activeOpacity={0.8}
+        <View
+          style={styles.rightGroup}
+          {...(Platform.OS === 'web' ? ({ id: 'profile-menu-container' } as any) : {})}
         >
-          <FileText size={15} color={colors.primaryLight} />
-          <Text style={[styles.reportsBtnText, { color: colors.textPrimary }]}>Reports</Text>
-        </TouchableOpacity>
+          {/* Reports / Back Toggle Button */}
+          <TouchableOpacity
+            style={[
+              styles.reportsBtn,
+              { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)', borderColor: colors.borderGlass }
+            ]}
+            onPress={() => setIsReportsModalOpen(!isReportsModalOpen)}
+            activeOpacity={0.8}
+          >
+            {isReportsModalOpen ? (
+              <>
+                <ChevronLeft size={15} color={colors.primaryLight} />
+                <Text style={[styles.reportsBtnText, { color: colors.textPrimary }]}>{APP_TERMINOLOGY.navigation.back}</Text>
+              </>
+            ) : (
+              <>
+                <FileText size={15} color={colors.primaryLight} />
+                <Text style={[styles.reportsBtnText, { color: colors.textPrimary }]}>{APP_TERMINOLOGY.navigation.reports}</Text>
+              </>
+            )}
+          </TouchableOpacity>
 
-        {/* User Profile Avatar Trigger */}
-        <TouchableOpacity
-          style={[
-            styles.avatarCircleBtn,
-            { backgroundColor: colors.primaryDim, borderColor: colors.primaryBorder },
-            isMenuOpen && styles.avatarCircleBtnActive,
-          ]}
-          onPress={() => setIsMenuOpen(!isMenuOpen)}
-          activeOpacity={0.8}
-        >
-          <User size={20} color={colors.primaryLight} />
-        </TouchableOpacity>
+          {/* User Profile Avatar Trigger */}
+          <TouchableOpacity
+            style={[
+              styles.avatarCircleBtn,
+              { backgroundColor: colors.primaryDim, borderColor: colors.primaryBorder },
+              isMenuOpen && styles.avatarCircleBtnActive,
+            ]}
+            onPress={() => setIsMenuOpen(!isMenuOpen)}
+            activeOpacity={0.8}
+          >
+            <User size={20} color={colors.primaryLight} />
+          </TouchableOpacity>
 
-        {/* Profile Dropdown Popover */}
-        {isMenuOpen && (
-          <View style={[styles.dropdownPopover, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderGlassBright }]}>
-            {/* User Identity Info */}
-            <View style={styles.dropdownUserHeader}>
-              <View style={[styles.dropdownAvatarLarge, { backgroundColor: colors.primaryDim, borderColor: colors.primaryBorder }]}>
-                <User size={22} color={colors.primaryLight} />
-              </View>
-              <View style={styles.dropdownTextGroup}>
-                <Text style={[styles.dropdownDisplayName, { color: colors.textPrimary }]}>{displayName}</Text>
-                <Text style={[styles.dropdownEmail, { color: colors.textMuted }]} numberOfLines={1}>{user?.email || 'authenticated user'}</Text>
-                <View style={[styles.dropdownRoleChip, { backgroundColor: colors.primaryDim }]}>
-                  <Shield size={10} color={colors.primaryLight} />
-                  <Text style={[styles.dropdownRoleText, { color: colors.primaryLight }]}>{ROLE_LABELS[currentRole] || currentRole}</Text>
+          {/* Profile Dropdown Popover */}
+          {isMenuOpen && (
+            <View style={[styles.dropdownPopover, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderGlassBright }]}>
+              {/* User Identity Info */}
+              <View style={styles.dropdownUserHeader}>
+                <View style={[styles.dropdownAvatarLarge, { backgroundColor: colors.primaryDim, borderColor: colors.primaryBorder }]}>
+                  <User size={22} color={colors.primaryLight} />
+                </View>
+                <View style={styles.dropdownTextGroup}>
+                  <Text style={[styles.dropdownDisplayName, { color: colors.textPrimary }]}>{displayName}</Text>
+                  <Text style={[styles.dropdownEmail, { color: colors.textMuted }]} numberOfLines={1}>{user?.email || 'authenticated user'}</Text>
+                  <View style={[styles.dropdownRoleChip, { backgroundColor: colors.primaryDim }]}>
+                    <Shield size={10} color={colors.primaryLight} />
+                    <Text style={[styles.dropdownRoleText, { color: colors.primaryLight }]}>{getHeaderRoleBadge(currentRole, section)}</Text>
+                  </View>
                 </View>
               </View>
-            </View>
 
-            <View style={[styles.dropdownDivider, { backgroundColor: colors.borderGlass }]} />
+              <View style={[styles.dropdownDivider, { backgroundColor: colors.borderGlass }]} />
 
-            {/* Theme Toggle Option with tiny Auto button on the right */}
-            <View style={styles.dropdownThemeRow}>
-              <TouchableOpacity
-                style={styles.dropdownThemeLeft}
-                onPress={toggleTheme}
-                activeOpacity={0.7}
-              >
-                {isDark ? (
+              {/* Theme Toggle Option with tiny Auto button on the right */}
+              <View style={styles.dropdownThemeRow}>
+                <TouchableOpacity
+                  style={styles.dropdownThemeLeft}
+                  onPress={toggleTheme}
+                  activeOpacity={0.7}
+                >
+                  {isDark ? (
+                    <>
+                      <Moon size={16} color={colors.purpleLight} />
+                      <Text style={[styles.dropdownItemText, { color: colors.purpleLight }]}>
+                        Theme: Dark
+                      </Text>
+                    </>
+                  ) : (
+                    <>
+                      <Sun size={16} color={colors.warning} />
+                      <Text style={[styles.dropdownItemText, { color: colors.warning }]}>
+                        Theme: Light
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+
+                {/* Tiny Auto Button on Right */}
+                <TouchableOpacity
+                  style={[
+                    styles.tinyAutoBtn,
+                    {
+                      backgroundColor: themeMode === 'system' 
+                        ? colors.primaryDim 
+                        : (isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)'),
+                      borderColor: themeMode === 'system' ? colors.primary : colors.borderGlass,
+                    }
+                  ]}
+                  onPress={() => setThemeMode(themeMode === 'system' ? (isDark ? 'dark' : 'light') : 'system')}
+                  activeOpacity={0.7}
+                >
+                  <Monitor size={11} color={themeMode === 'system' ? colors.primaryLight : colors.textMuted} />
+                  <Text style={[
+                    styles.tinyAutoText,
+                    {
+                      color: themeMode === 'system' ? colors.primaryLight : colors.textMuted,
+                      fontWeight: themeMode === 'system' ? '800' : '600'
+                    }
+                  ]}>
+                    Auto
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Sound & Chime Toggle Option */}
+              <TouchableOpacity style={styles.dropdownItem} onPress={toggleAudio}>
+                {isAudioMuted ? (
                   <>
-                    <Moon size={16} color="#c084fc" />
-                    <Text style={[styles.dropdownItemText, { color: '#c084fc' }]}>
-                      Theme: Dark
-                    </Text>
+                    <VolumeX size={16} color={colors.textMuted} />
+                    <Text style={[styles.dropdownItemText, { color: colors.textMuted }]}>Audio Chimes: Muted</Text>
                   </>
                 ) : (
                   <>
-                    <Sun size={16} color="#d97706" />
-                    <Text style={[styles.dropdownItemText, { color: '#d97706' }]}>
-                      Theme: Light
-                    </Text>
+                    <Volume2 size={16} color={colors.primaryLight} />
+                    <Text style={[styles.dropdownItemText, { color: colors.primaryLight }]}>Audio Chimes: Enabled</Text>
                   </>
                 )}
               </TouchableOpacity>
 
-              {/* Tiny Auto Button on Right */}
+              {/* Haptic Vibration Toggle Option */}
+              <TouchableOpacity style={styles.dropdownItem} onPress={toggleHaptics}>
+                {isHapticsMuted ? (
+                  <>
+                    <Smartphone size={16} color={colors.textMuted} />
+                    <Text style={[styles.dropdownItemText, { color: colors.textMuted }]}>Haptic Feedback: Disabled</Text>
+                  </>
+                ) : (
+                  <>
+                    <Smartphone size={16} color={colors.primaryLight} />
+                    <Text style={[styles.dropdownItemText, { color: colors.primaryLight }]}>Haptic Feedback: Enabled</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              {/* Service Reports Toggle Option */}
               <TouchableOpacity
-                style={[
-                  styles.tinyAutoBtn,
-                  {
-                    backgroundColor: themeMode === 'system' 
-                      ? colors.primaryDim 
-                      : (isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)'),
-                    borderColor: themeMode === 'system' ? colors.primary : colors.borderGlass,
-                  }
-                ]}
-                onPress={() => setThemeMode(themeMode === 'system' ? (isDark ? 'dark' : 'light') : 'system')}
-                activeOpacity={0.7}
+                style={styles.dropdownItem}
+                onPress={() => {
+                  setIsMenuOpen(false);
+                  setIsReportsModalOpen(!isReportsModalOpen);
+                }}
               >
-                <Monitor size={11} color={themeMode === 'system' ? colors.primaryLight : colors.textMuted} />
-                <Text style={[
-                  styles.tinyAutoText,
-                  {
-                    color: themeMode === 'system' ? colors.primaryLight : colors.textMuted,
-                    fontWeight: themeMode === 'system' ? '800' : '600'
-                  }
-                ]}>
-                  Auto
-                </Text>
+                {isReportsModalOpen ? (
+                  <>
+                    <ChevronLeft size={16} color={colors.primaryLight} />
+                    <Text style={[styles.dropdownItemText, { color: colors.textPrimary }]}>Back to Bays</Text>
+                  </>
+                ) : (
+                  <>
+                    <FileText size={16} color={colors.primaryLight} />
+                    <Text style={[styles.dropdownItemText, { color: colors.textPrimary }]}>Service Reports & Exports</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              <View style={[styles.dropdownDivider, { backgroundColor: colors.borderGlass }]} />
+
+              {/* Sign Out Option */}
+              <TouchableOpacity
+                style={[styles.dropdownItem, styles.dropdownSignOutItem]}
+                onPress={() => {
+                  setIsMenuOpen(false);
+                  signOut();
+                }}
+              >
+                <LogOut size={16} color={colors.danger} />
+                <Text style={[styles.dropdownSignOutText, { color: colors.danger }]}>Sign Out</Text>
               </TouchableOpacity>
             </View>
-
-            {/* Sound & Chime Toggle Option */}
-            <TouchableOpacity style={styles.dropdownItem} onPress={toggleAudio}>
-              {isAudioMuted ? (
-                <>
-                  <VolumeX size={16} color={colors.textMuted} />
-                  <Text style={[styles.dropdownItemText, { color: colors.textMuted }]}>Audio Chimes: Muted</Text>
-                </>
-              ) : (
-                <>
-                  <Volume2 size={16} color={colors.primaryLight} />
-                  <Text style={[styles.dropdownItemText, { color: colors.primaryLight }]}>Audio Chimes: Enabled</Text>
-                </>
-              )}
-            </TouchableOpacity>
-
-            {/* Haptic Vibration Toggle Option */}
-            <TouchableOpacity style={styles.dropdownItem} onPress={toggleHaptics}>
-              {isHapticsMuted ? (
-                <>
-                  <Smartphone size={16} color={colors.textMuted} />
-                  <Text style={[styles.dropdownItemText, { color: colors.textMuted }]}>Haptic Feedback: Disabled</Text>
-                </>
-              ) : (
-                <>
-                  <Smartphone size={16} color={colors.primaryLight} />
-                  <Text style={[styles.dropdownItemText, { color: colors.primaryLight }]}>Haptic Feedback: Enabled</Text>
-                </>
-              )}
-            </TouchableOpacity>
-
-            {/* Service Reports Modal Option */}
-            <TouchableOpacity
-              style={styles.dropdownItem}
-              onPress={() => {
-                setIsMenuOpen(false);
-                setIsReportsModalOpen(true);
-              }}
-            >
-              <FileText size={16} color={colors.primaryLight} />
-              <Text style={[styles.dropdownItemText, { color: colors.textPrimary }]}>Service Reports & Exports</Text>
-            </TouchableOpacity>
-
-            <View style={[styles.dropdownDivider, { backgroundColor: colors.borderGlass }]} />
-
-            {/* Sign Out Option */}
-            <TouchableOpacity
-              style={[styles.dropdownItem, styles.dropdownSignOutItem]}
-              onPress={() => {
-                setIsMenuOpen(false);
-                signOut();
-              }}
-            >
-              <LogOut size={16} color="#ef4444" />
-              <Text style={styles.dropdownSignOutText}>Sign Out</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+          )}
+        </View>
       </View>
-    </View>
+
+      {/* Slender Single-Line Shift Break Strip (Directly Beneath Header) */}
+      {activeBreak && (
+        <View style={[styles.breakStrip, { backgroundColor: 'rgba(245, 158, 11, 0.1)', borderBottomWidth: 1, borderBottomColor: '#f59e0b' }]}>
+          <Text style={[styles.breakStripText, { color: '#fbbf24' }]} numberOfLines={1}>
+            {activeBreak.name.toUpperCase()} BREAK: (UNTIL {activeBreak.endStr}) · TIMERS PAUSED
+          </Text>
+        </View>
+      )}
+    </>
   );
 };
 
@@ -377,15 +403,31 @@ const styles = StyleSheet.create({
     borderRadius: 7,
     backgroundColor: '#10b981',
   },
+  brandSubRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
   brandSub: {
     color: '#64748b',
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 0.5,
   },
-  breakPillText: {
-    color: '#fbbf24',
-    fontWeight: '700',
+  breakStrip: {
+    paddingVertical: 5,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    zIndex: 99,
+  },
+  breakStripText: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    textAlign: 'center',
   },
   rightGroup: {
     flexDirection: 'row',
@@ -396,9 +438,9 @@ const styles = StyleSheet.create({
   avatarCircleBtn: {
     alignItems: 'center',
     justifyContent: 'center',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: 'rgba(14, 165, 233, 0.15)',
     borderWidth: 1.5,
     borderColor: 'rgba(14, 165, 233, 0.5)',
@@ -419,7 +461,7 @@ const styles = StyleSheet.create({
   },
   dropdownPopover: {
     position: 'absolute',
-    top: 48,
+    top: 44,
     right: 0,
     width: 260,
     backgroundColor: '#111827',
@@ -532,14 +574,14 @@ const styles = StyleSheet.create({
   reportsBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+    gap: 4,
+    height: 32,
+    paddingHorizontal: 8,
     borderRadius: 8,
     borderWidth: 1,
   },
   reportsBtnText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
   },
   dropdownSignOutItem: {

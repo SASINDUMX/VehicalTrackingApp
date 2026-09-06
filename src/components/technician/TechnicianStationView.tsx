@@ -1,16 +1,17 @@
-import React from 'react';
-import { View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet, Platform, ActivityIndicator, Alert } from 'react-native';
-import { Save, CheckSquare, Square, Pencil, CheckCircle2, Car, ChevronDown, ChevronUp, History, Lock, MessageSquare, Play, Pause, Bookmark, AlertTriangle, AlertOctagon } from 'lucide-react-native';
-import { LicensePlate } from '../shared/LicensePlate';
+import React, { useMemo } from 'react';
+import { View, Text, FlatList, StyleSheet } from 'react-native';
+import { Car, AlertTriangle, CheckCircle2 } from 'lucide-react-native';
 import { EmptyStateCard } from '../shared/EmptyStateCard';
-import { TimerPill } from '../shared/TimerPill';
-import { StatusPill } from '../shared/StatusPill';
-import { calculateJobSheetProgress } from '../../utils/vehicleUtils';
+import { TransferConfirmModal } from '../shared/TransferConfirmModal';
+import { LoadingSpot } from '../shared/LoadingSpot';
+import { sortWorkshopVehicles } from '../../utils/vehicleUtils';
 import { useTechnicianStation } from '../../hooks/useTechnicianStation';
 import { usePinnedVehicles } from '../../hooks/usePinnedVehicles';
-import { Vehicle, VehicleTask } from '../../types/vehicle';
+import { Vehicle } from '../../types/vehicle';
 import { useTheme } from '../../context/ThemeContext';
-import { useVehicles } from '../../context/VehicleContext';
+import { getBayColor } from '../../constants/bays';
+import { APP_TERMINOLOGY } from '../../constants/terminology';
+import { TechnicianVehicleCard } from './TechnicianVehicleCard';
 
 export const TechnicianStationView: React.FC = React.memo(() => {
   const {
@@ -21,15 +22,19 @@ export const TechnicianStationView: React.FC = React.memo(() => {
     elapsedTimes,
     expandedCards,
     pendingTransfer,
+    isDispatching,
     isLoading,
     searchQuery,
+    showMyVehiclesOnly,
     currentRole,
     canMarkTaskDone,
     canTransferVehicle,
     canStartWork,
+    startingWorkVehicleIds,
     toggleExpand,
     toggleTaskCompletion,
     startStageWork,
+    handleStartWork,
     setSelectedVehicle,
     setPendingTransfer,
     handleRequestTransfer,
@@ -37,414 +42,63 @@ export const TechnicianStationView: React.FC = React.memo(() => {
   } = useTechnicianStation();
   const { colors, isDark } = useTheme();
   const { togglePin, isPinned } = usePinnedVehicles();
-  const { showUrgentNote } = useVehicles();
 
-  // Sort: urgent first, then pinned, then by intake time
-  const sortedBayVehicles = [...bayVehicles].sort((a, b) => {
-    if (a.is_urgent && !b.is_urgent) return -1;
-    if (!a.is_urgent && b.is_urgent) return 1;
-    if (isPinned(a.id) && !isPinned(b.id)) return -1;
-    if (!isPinned(a.id) && isPinned(b.id)) return 1;
-    return 0;
-  });
+  // Filter and Sort: filter to pinned if showMyVehiclesOnly is active, then sort urgent first, pinned, then intake time
+  const sortedBayVehicles = useMemo(() => {
+    const filtered = showMyVehiclesOnly ? bayVehicles.filter(v => isPinned(v.id)) : bayVehicles;
+    return sortWorkshopVehicles(filtered, isPinned);
+  }, [bayVehicles, showMyVehiclesOnly, isPinned]);
 
   const renderVehicleItem = ({ item: vehicle }: { item: Vehicle }) => {
-    const { completedCount, totalRequired: totalReq, percent } = calculateJobSheetProgress(vehicle.tasks);
-    const isExpanded = Boolean(expandedCards[vehicle.id]);
-    const lastStageLog = vehicle.stage_logs[vehicle.stage_logs.length - 1];
-    const isStageIdle = Boolean(lastStageLog && !lastStageLog.exited_at && !lastStageLog.work_started_at);
-    const canStart = canStartWork(activeBay);
-    const isUrgent = Boolean(vehicle.is_urgent);
-    const vehiclePinned = isPinned(vehicle.id);
-
-    // Filter ONLY the task assigned to this active bay
-    const bayTask = vehicle.tasks.find(t => t.task_type === activeTaskType && t.is_required) || vehicle.tasks.find(t => t.task_type === activeTaskType);
-    const isCurrentTaskDone = Boolean(bayTask && bayTask.is_completed);
-
-    // Required tasks for this vehicle's job sheet
-    const requiredTaskTypes = vehicle.tasks.filter(t => t.is_required).map(t => t.task_type);
-    const isHoistRequired = requiredTaskTypes.includes('hoist_service');
-    const isAlignmentRequired = requiredTaskTypes.includes('wheel_alignment');
-    const isWorkshopRequired = requiredTaskTypes.includes('general_service');
-
-    // Completed status for each bay task
-    const isWorkshopDone = Boolean(vehicle.tasks.find(t => t.task_type === 'general_service')?.is_completed);
-    const isHoistDone = Boolean(vehicle.tasks.find(t => t.task_type === 'hoist_service')?.is_completed);
-    const isAlignmentDone = Boolean(vehicle.tasks.find(t => t.task_type === 'wheel_alignment')?.is_completed);
-
-    const isCanDispatch = canTransferVehicle && isCurrentTaskDone;
-
-    const canShowAlignmentBtn = activeBay !== 'alignment' && isAlignmentRequired && !isAlignmentDone;
-    const canShowHoistBtn = activeBay !== 'hoist' && isHoistRequired && !isHoistDone;
-    const canShowWorkshopBtn = activeBay !== 'workshop' && isWorkshopRequired && !isWorkshopDone;
-    const canShowAdvisorBtn = activeBay !== 'inspection' && !vehicle.is_finished;
-    const hasAnyDispatchBtn = canShowAlignmentBtn || canShowHoistBtn || canShowWorkshopBtn || canShowAdvisorBtn;
-
     return (
-      <View
+      <TechnicianVehicleCard
         key={vehicle.id}
-        style={[
-          styles.vehicleCardWrapper,
-          {
-            backgroundColor: isUrgent
-              ? (isDark ? 'rgba(239, 68, 68, 0.07)' : 'rgba(239, 68, 68, 0.04)')
-              : isCurrentTaskDone
-              ? (isDark ? 'rgba(16, 185, 129, 0.05)' : 'rgba(16, 185, 129, 0.03)')
-              : isStageIdle
-              ? (isDark ? 'rgba(245, 158, 11, 0.05)' : 'rgba(245, 158, 11, 0.03)')
-              : colors.surface,
-            borderColor: isUrgent
-              ? 'rgba(239, 68, 68, 0.4)'
-              : isCurrentTaskDone
-              ? colors.successBorder
-              : isStageIdle
-              ? colors.warningBorder
-              : colors.borderGlass,
-            borderLeftWidth: 4,
-            borderLeftColor: isUrgent
-              ? '#ef4444'
-              : isCurrentTaskDone
-              ? colors.success
-              : isStageIdle
-              ? colors.warning
-              : colors.primary,
-          }
-        ]}
-      >
-        {/* Header Card Area (Clickable to Expand / Collapse Card) */}
-        <TouchableOpacity
-          style={styles.cardHeaderArea}
-          onPress={() => toggleExpand(vehicle.id)}
-          activeOpacity={0.8}
-        >
-          <View style={styles.cardTopRow}>
-            {/* Sri Lankan License Plate Badge */}
-            <View style={styles.plateWithStatusGroup}>
-              <LicensePlate number={vehicle.vehicle_no} size="md" />
-              {isCurrentTaskDone && (
-                <StatusPill variant="success" label="TASK DONE" IconComponent={CheckCircle2} size="md" />
-              )}
-              {isUrgent && (
-                <TouchableOpacity
-                  onPress={() => showUrgentNote(vehicle.vehicle_no, vehicle.urgent_note)}
-                  hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-                >
-                  <StatusPill variant="danger" label="⚡ URGENT" size="md" />
-                </TouchableOpacity>
-              )}
-            </View>
-
-            <View style={styles.headerRightGroup}>
-              {/* Live Station Timer Pill (Amber if Idle, Cyan if Active) */}
-              <TimerPill
-                elapsedText={elapsedTimes[vehicle.id] || '0m 00s'}
-                variant={isStageIdle ? 'amber' : 'cyan'}
-                isPaused={isStageIdle}
-                size="md"
-              />
-
-              {/* Start Work Action Button — Arrowhead only to fit compactly */}
-              {isStageIdle && (
-                <TouchableOpacity
-                  style={[
-                    styles.startWorkBtn,
-                    !canStart && { opacity: 0.4 }
-                  ]}
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    if (canStart) {
-                      startStageWork(vehicle.id, techName);
-                    }
-                  }}
-                  activeOpacity={0.7}
-                  disabled={!canStart}
-                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                >
-                  <Play size={12} color="#ffffff" fill="#ffffff" style={{ marginLeft: 2 }} />
-                </TouchableOpacity>
-              )}
-
-              {/* Pin Toggle Button */}
-              <TouchableOpacity
-                style={styles.pinBtn}
-                onPress={() => togglePin(vehicle.id)}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Bookmark
-                  size={16}
-                  color={vehiclePinned ? '#f59e0b' : colors.textMuted}
-                  fill={vehiclePinned ? '#f59e0b' : 'transparent'}
-                />
-              </TouchableOpacity>
-
-              {/* Expand / Collapse Chevron Icon */}
-              <View style={[styles.chevronWrapper, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)', borderColor: colors.borderGlass }]}>
-                {isExpanded ? <ChevronUp size={20} color={colors.textSecondary} /> : <ChevronDown size={20} color={colors.textSecondary} />}
-              </View>
-            </View>
-          </View>
-
-          {/* Task Progress Bar */}
-          <View style={styles.progressContainer}>
-            <View style={styles.progressLabelRow}>
-              <Text style={[styles.progressLabelText, { color: colors.textMuted }]}>JOB SHEET PROGRESS</Text>
-              <View style={styles.progressPercentGroup}>
-                <Text style={[styles.progressPercentText, { color: isCurrentTaskDone ? colors.success : colors.primaryLight }]}>
-                  {completedCount}/{totalReq} Tasks ({percent}%)
-                </Text>
-                {isCurrentTaskDone && (
-                  <StatusPill variant="success" label="✓" size="sm" />
-                )}
-              </View>
-            </View>
-            <View style={[styles.progressBarBg, { backgroundColor: colors.progressBg }]}>
-              <View style={[styles.progressBarFill, { width: `${percent}%`, backgroundColor: isCurrentTaskDone ? colors.success : colors.primary }]} />
-            </View>
-          </View>
-        </TouchableOpacity>
-
-                  {/* EXPANDED CONTENT AREA */}
-                  {isExpanded && (
-                    <>
-                      {/* Priority Alert Callout Banner if Urgent */}
-                      {isUrgent && (
-                        <View style={styles.urgentCalloutBox}>
-                          <View style={styles.urgentCalloutHeader}>
-                            <AlertOctagon size={14} color="#ef4444" />
-                            <Text style={styles.urgentCalloutTitle}>PRIORITY / URGENT VEHICLE</Text>
-                          </View>
-                          {Boolean(vehicle.urgent_note) && (
-                            <Text style={styles.urgentCalloutText}>{vehicle.urgent_note}</Text>
-                          )}
-                        </View>
-                      )}
-
-                      {/* Vehicle Remarks / Special Instructions Box (Before Job Sheet Tasks) */}
-                      {Boolean(vehicle.remarks && vehicle.remarks.trim()) && (
-                        <View style={styles.remarksSection}>
-                          <View style={styles.remarksHeaderRow}>
-                            <MessageSquare size={14} color="#f59e0b" />
-                            <Text style={styles.remarksSectionLabel}>REMARKS / SPECIAL INSTRUCTIONS:</Text>
-                          </View>
-                          <Text style={[styles.remarksBodyText, { color: colors.textPrimary }]}>{vehicle.remarks}</Text>
-                        </View>
-                      )}
-
-                      {/* Station Assigned Task Checklist */}
-                      <View style={[styles.tasksSection, { borderTopColor: colors.borderGlass }]}>
-                        <View style={styles.tasksSectionHeaderRow}>
-                          <Text style={[styles.sectionHeaderLabel, { color: colors.textMuted }]}>
-                            JOB SHEET TASKS ({vehicle.tasks.filter(t => t.is_required).length}):
-                          </Text>
-                          {isStageIdle && (
-                            <View style={styles.idleNoticeBadge}>
-                              <Lock size={10} color="#f59e0b" />
-                              <Text style={styles.idleNoticeText}>LOCKED · START WORK TO EDIT</Text>
-                            </View>
-                          )}
-                        </View>
-                        {vehicle.tasks.filter(t => t.is_required).map(task => {
-                          const isVehicleInInspectionOrFinished = vehicle.current_zone === 'inspection' || vehicle.is_finished;
-                          const isMyBayTask = task.task_type === activeTaskType;
-                          const isEditable = isMyBayTask && canMarkTaskDone(activeBay) && !isVehicleInInspectionOrFinished && !isStageIdle;
-
-                          return (
-                            <TouchableOpacity
-                              key={task.id}
-                              style={[
-                                styles.taskRow,
-                                {
-                                  backgroundColor: isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)',
-                                  borderColor: colors.borderGlass
-                                },
-                                (!isMyBayTask || isVehicleInInspectionOrFinished) && styles.otherBayTaskRow,
-                                !isEditable && styles.disabledTaskRow,
-                                Platform.OS === 'web' && !isEditable && ({ cursor: 'not-allowed' } as any),
-                              ]}
-                              activeOpacity={isEditable ? 0.7 : 1}
-                              onPress={() => {
-                                if (isEditable) {
-                                  toggleTaskCompletion(vehicle.id, task.id, techName);
-                                }
-                              }}
-                            >
-                              <View style={styles.taskLeft}>
-                                {task.is_completed ? (
-                                  <CheckSquare size={18} color="#10b981" />
-                                ) : (
-                                  <Square size={18} color={isEditable ? colors.textSecondary : colors.textMuted} />
-                                )}
-                                <Text style={[
-                                  styles.taskName,
-                                  { color: colors.textPrimary },
-                                  task.is_completed && styles.completedTaskName,
-                                  (!isMyBayTask || isVehicleInInspectionOrFinished) && { color: colors.textMuted }
-                                ]}>
-                                  {task.task_name}
-                                </Text>
-                              </View>
-
-                              {isEditable ? (
-                                <View
-                                  style={[
-                                    styles.taskDoneBtn,
-                                    task.is_completed && styles.taskRestoreBtn,
-                                  ]}
-                                >
-                                  <Text style={[styles.taskDoneBtnText, task.is_completed && styles.taskRestoreBtnText]}>
-                                    {task.is_completed ? 'Restore (Undo)' : 'Done ✓'}
-                                  </Text>
-                                </View>
-                              ) : (
-                                 <View style={[
-                                   styles.lockedTaskBadge,
-                                   (isStageIdle && isMyBayTask) && styles.idleLockedBadge,
-                                   currentRole === 'supervisor' && styles.supervisorLockedBadge
-                                 ]}>
-                                   <Lock
-                                     size={12}
-                                     color={
-                                       task.is_completed
-                                         ? "#10b981"
-                                         : (isStageIdle && isMyBayTask)
-                                         ? "#f59e0b"
-                                         : currentRole === 'supervisor'
-                                         ? "#38bdf8"
-                                         : "#64748b"
-                                     }
-                                   />
-                                   <Text style={[
-                                     styles.lockedTaskBadgeText,
-                                     task.is_completed && styles.lockedTaskDoneText,
-                                     (isStageIdle && isMyBayTask && !task.is_completed) && styles.idleLockedText,
-                                     currentRole === 'supervisor' && styles.supervisorLockedText
-                                   ]}>
-                                     {task.is_completed
-                                       ? 'DONE ✓'
-                                       : isVehicleInInspectionOrFinished
-                                       ? 'LOCKED'
-                                       : (isStageIdle && isMyBayTask)
-                                       ? 'START WORK FIRST'
-                                       : currentRole === 'supervisor'
-                                       ? 'READ-ONLY'
-                                       : task.task_type === 'general_service'
-                                       ? 'TECH 1 ONLY'
-                                       : task.task_type === 'wheel_alignment'
-                                       ? 'TECH 2 ONLY'
-                                       : task.task_type === 'hoist_service'
-                                       ? 'TECH 3 ONLY'
-                                       : 'OTHER TECH'}
-                                   </Text>
-                                 </View>
-                              )}
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </View>
-
-                      {/* Dispatch Transfer Bar & Timeline Audit Link */}
-                      <View style={styles.dispatchRow}>
-                        <View style={styles.dispatchHeaderRow}>
-                          {hasAnyDispatchBtn ? (
-                            <Text style={styles.dispatchLabel}>DISPATCH TO:</Text>
-                          ) : (
-                            <View />
-                          )}
-                          <TouchableOpacity
-                            style={styles.auditLogLink}
-                            onPress={() => setSelectedVehicle(vehicle)}
-                          >
-                            <History size={12} color="#38bdf8" />
-                            <Text style={styles.auditLogLinkText}>Stage Timeline Audit Log</Text>
-                          </TouchableOpacity>
-                        </View>
-
-                        {hasAnyDispatchBtn && (
-                          <View style={styles.dispatchBtnGroup}>
-                            {canShowAlignmentBtn && (
-                              <TouchableOpacity
-                                style={[
-                                  styles.dispatchBtn,
-                                  { backgroundColor: colors.successDim, borderColor: colors.successBorder },
-                                  !isCanDispatch && { opacity: 0.35, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }
-                                ]}
-                                onPress={() => {
-                                  if (isCanDispatch) handleRequestTransfer(vehicle.id, vehicle.vehicle_no, 'alignment', 'Wheel Alignment Bay');
-                                }}
-                                activeOpacity={isCanDispatch ? 0.7 : 1}
-                              >
-                                <Text style={[styles.dispatchBtnText, { color: colors.successLight }]}>Alignment</Text>
-                              </TouchableOpacity>
-                            )}
-
-                            {canShowHoistBtn && (
-                              <TouchableOpacity
-                                style={[
-                                  styles.dispatchBtn,
-                                  { backgroundColor: colors.warningDim, borderColor: colors.warningBorder },
-                                  !isCanDispatch && { opacity: 0.35, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }
-                                ]}
-                                onPress={() => {
-                                  if (isCanDispatch) handleRequestTransfer(vehicle.id, vehicle.vehicle_no, 'hoist', 'Hoist Service Bay');
-                                }}
-                                activeOpacity={isCanDispatch ? 0.7 : 1}
-                              >
-                                <Text style={[styles.dispatchBtnText, { color: colors.warningLight }]}>Hoist</Text>
-                              </TouchableOpacity>
-                            )}
-
-                            {canShowWorkshopBtn && (
-                              <TouchableOpacity
-                                style={[
-                                  styles.dispatchBtn,
-                                  { backgroundColor: colors.primaryDim, borderColor: colors.primaryBorder },
-                                  !isCanDispatch && { opacity: 0.35, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }
-                                ]}
-                                onPress={() => {
-                                  if (isCanDispatch) handleRequestTransfer(vehicle.id, vehicle.vehicle_no, 'workshop', 'General Workshop Bay');
-                                }}
-                                activeOpacity={isCanDispatch ? 0.7 : 1}
-                              >
-                                <Text style={[styles.dispatchBtnText, { color: colors.primaryLight }]}>Workshop</Text>
-                              </TouchableOpacity>
-                            )}
-
-                            {canShowAdvisorBtn && (
-                              <TouchableOpacity
-                                style={[
-                                  styles.dispatchBtn,
-                                  { backgroundColor: colors.purpleDim, borderColor: colors.purpleBorder, marginLeft: 'auto' },
-                                  !isCanDispatch && { opacity: 0.35, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) }
-                                ]}
-                                onPress={() => {
-                                  if (isCanDispatch) handleRequestTransfer(vehicle.id, vehicle.vehicle_no, 'inspection', 'Advisor Inspection Zone');
-                                }}
-                                activeOpacity={isCanDispatch ? 0.7 : 1}
-                              >
-                                <Text style={[styles.dispatchBtnText, { color: colors.purpleLight }]}>Final Inspection →</Text>
-                              </TouchableOpacity>
-                            )}
-                          </View>
-                        )}
-                      </View>
-                    </>
-                  )}
-                </View>
+        vehicle={vehicle}
+        isExpanded={Boolean(expandedCards[vehicle.id])}
+        isPinned={isPinned(vehicle.id)}
+        elapsedText={elapsedTimes[vehicle.id] || '0m 00s'}
+        activeBay={activeBay}
+        activeTaskType={activeTaskType}
+        currentRole={currentRole}
+        techName={techName}
+        canStartWork={canStartWork(activeBay)}
+        isStartingWork={Boolean(startingWorkVehicleIds[vehicle.id])}
+        canTransferVehicle={canTransferVehicle}
+        canMarkTaskDone={canMarkTaskDone(activeBay)}
+        isDispatching={isDispatching}
+        colors={colors}
+        isDark={isDark}
+        onToggleExpand={() => toggleExpand(vehicle.id)}
+        onTogglePin={() => togglePin(vehicle.id)}
+        onStartWork={() => handleStartWork(vehicle.id)}
+        onToggleTask={(taskId: string) => toggleTaskCompletion(vehicle.id, taskId, techName)}
+        onRequestTransfer={(targetZone, targetZoneName, autoCompleteTaskName) => handleRequestTransfer(vehicle.id, vehicle.vehicle_no, targetZone, targetZoneName, autoCompleteTaskName)}
+        onSelectAuditLog={() => setSelectedVehicle(vehicle)}
+      />
     );
   };
 
   return (
     <View style={styles.rootView}>
       {isLoading ? (
-        <View style={[styles.emptyCard, { backgroundColor: colors.surface, borderColor: colors.borderGlass }]}>
-          <ActivityIndicator size="small" color={colors.primary} />
-          <Text style={[styles.emptyTitle, { color: colors.textPrimary, marginTop: 8 }]}>Syncing Workshop Telemetry...</Text>
-        </View>
-      ) : bayVehicles.length === 0 ? (
+        <LoadingSpot color={getBayColor(activeBay, colors)} />
+      ) : sortedBayVehicles.length === 0 ? (
         <EmptyStateCard
           icon={Car}
-          title={searchQuery.trim() ? `No matching vehicles for "${searchQuery}"` : 'Bay Currently Clear'}
-          subtitle={searchQuery.trim() ? 'Try searching another license plate number.' : 'No vehicles currently assigned to this station.'}
+          title={
+            showMyVehiclesOnly
+              ? APP_TERMINOLOGY.emptyStates.noPinnedTitle
+              : searchQuery.trim()
+              ? APP_TERMINOLOGY.emptyStates.noSearchMatchTitle(searchQuery.trim())
+              : APP_TERMINOLOGY.emptyStates.bayClearTitle
+          }
+          subtitle={
+            showMyVehiclesOnly
+              ? APP_TERMINOLOGY.emptyStates.noPinnedSubtitle
+              : searchQuery.trim()
+              ? APP_TERMINOLOGY.emptyStates.noSearchMatchSubtitle
+              : APP_TERMINOLOGY.emptyStates.bayClearSubtitle
+          }
         />
       ) : (
         <FlatList
@@ -454,173 +108,64 @@ export const TechnicianStationView: React.FC = React.memo(() => {
           initialNumToRender={8}
           maxToRenderPerBatch={10}
           windowSize={5}
-          contentContainerStyle={[styles.content, { gap: 16 }]}
+          contentContainerStyle={[styles.content, { gap: 12 }]}
           showsVerticalScrollIndicator={false}
         />
       )}
 
       {/* CONFIRMATION MODAL BEFORE DISPATCHING (Viewport Centered) */}
-      {pendingTransfer && (
-        <View style={styles.confirmOverlay}>
-          <TouchableOpacity
-            style={[styles.confirmBackdrop, { backgroundColor: colors.backdrop }]}
-            activeOpacity={1}
-            onPress={() => setPendingTransfer(null)}
-          />
-          <View style={[styles.confirmCard, { backgroundColor: colors.surface, borderColor: colors.borderGlassBright }]}>
-            <View style={styles.confirmHeader}>
-              <AlertTriangle size={24} color={colors.warning} />
-              <Text style={[styles.confirmTitle, { color: colors.textPrimary }]}>Confirm Station Dispatch</Text>
+      <TransferConfirmModal
+        visible={Boolean(pendingTransfer)}
+        title={APP_TERMINOLOGY.actions.confirmDispatch}
+        icon={<AlertTriangle size={24} color={colors.warning} />}
+        bodyContent={
+          pendingTransfer ? (
+            <View style={{ gap: 8 }}>
+              <Text style={[styles.confirmBodyText, { color: colors.textSecondary }]}>
+                Are you sure you want to dispatch vehicle <Text style={[styles.confirmBoldPlate, { color: colors.warning }]}>{pendingTransfer.vehicleNo}</Text> to <Text style={[styles.confirmBoldZone, { color: colors.primaryLight }]}>{pendingTransfer.targetZoneName}</Text>?
+              </Text>
+              {Boolean(pendingTransfer.autoCompleteTaskName) && (
+                <View style={[styles.autoCompleteBadge, { backgroundColor: colors.successDim, borderColor: colors.successBorder }]}>
+                  <CheckCircle2 size={13} color={colors.success} />
+                  <Text style={[styles.autoCompleteText, { color: colors.successLight }]}>
+                    Will automatically mark <Text style={{ fontWeight: '800', color: colors.success }}>{pendingTransfer.autoCompleteTaskName}</Text> as DONE
+                  </Text>
+                </View>
+              )}
             </View>
-            <Text style={[styles.confirmBodyText, { color: colors.textSecondary }]}>
-              Are you sure you want to dispatch vehicle <Text style={styles.confirmBoldPlate}>{pendingTransfer.vehicleNo}</Text> to <Text style={[styles.confirmBoldZone, { color: colors.primaryLight }]}>{pendingTransfer.targetZoneName}</Text>?
-            </Text>
-
-            <View style={styles.confirmBtnRow}>
-              <TouchableOpacity
-                style={[styles.cancelBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)', borderColor: colors.borderGlass }]}
-                onPress={() => setPendingTransfer(null)}
-              >
-                <Text style={[styles.cancelBtnText, { color: colors.textSecondary }]}>Cancel</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.confirmDispatchBtn, { backgroundColor: colors.primary }]}
-                onPress={handleConfirmTransfer}
-              >
-                <Text style={styles.confirmDispatchBtnText}>Confirm Dispatch ✓</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      )}
+          ) : null
+        }
+        confirmLabel={`${APP_TERMINOLOGY.actions.confirmDispatch} ✓`}
+        cancelLabel="Cancel"
+        isProcessing={isDispatching}
+        processingLabel={APP_TERMINOLOGY.actions.dispatching}
+        confirmButtonColor={colors.primary}
+        onConfirm={handleConfirmTransfer}
+        onCancel={() => {
+          if (!isDispatching) setPendingTransfer(null);
+        }}
+      />
     </View>
   );
 });
 
 const styles = StyleSheet.create({
   rootView: { flex: 1, position: 'relative' },
-  container: { flex: 1 },
   content: { paddingBottom: 24, gap: 16 },
-  stationHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 4 },
-  stationTitleText: { color: '#ffffff', fontSize: 16, fontWeight: '800', letterSpacing: 0.5 },
-  stationBadge: { backgroundColor: 'rgba(14, 165, 233, 0.15)', borderWidth: 1, borderColor: 'rgba(14, 165, 233, 0.3)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  stationBadgeText: { color: '#38bdf8', fontSize: 12, fontWeight: '800' },
-  emptyCard: { backgroundColor: '#111827', borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.08)', padding: 40, alignItems: 'center', justifyContent: 'center', gap: 10 },
-  emptyTitle: { color: '#ffffff', fontWeight: '700', fontSize: 16 },
-  emptySub: { color: '#64748b', fontSize: 13, textAlign: 'center' },
-  cardsGrid: { gap: 16 },
-  vehicleCardWrapper: { backgroundColor: '#111827', borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)', padding: 16, gap: 14, ...(Platform.OS === 'web' ? ({ boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)' } as any) : { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 }) },
-  cardHeaderArea: { gap: 12 },
-  cardTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  plateWithStatusGroup: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  plateWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#facc15', borderRadius: 6, borderWidth: 1, borderColor: '#eab308', overflow: 'hidden' },
-  plateLeftBar: { backgroundColor: '#000000', paddingHorizontal: 6, paddingVertical: 4, alignItems: 'center', justifyContent: 'center' },
-  plateFlag: { fontSize: 10 },
-  plateCountryCode: { color: '#ffffff', fontSize: 8, fontWeight: '800' },
-  plateRightArea: { paddingHorizontal: 10, paddingVertical: 4 },
-  plateText: { color: '#000000', fontWeight: '800', fontSize: 14, letterSpacing: 0.5 },
-  headerRightGroup: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  chevronWrapper: { width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(255, 255, 255, 0.05)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.08)' },
-  sectionHeaderLabel: { color: '#64748b', fontSize: 10, fontWeight: '800', letterSpacing: 0.5, marginBottom: 2 },
-  taskRestoreBtn: { backgroundColor: 'rgba(16, 185, 129, 0.15)', borderWidth: 1, borderColor: 'rgba(16, 185, 129, 0.4)' },
-  taskRestoreBtnText: { color: '#10b981' },
-  dispatchHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  auditLogLink: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 6, paddingVertical: 2 },
-  auditLogLinkText: { color: '#38bdf8', fontSize: 11, fontWeight: '600', textDecorationLine: 'underline' },
-  startWorkBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#059669',
-    backgroundColor: '#10b981',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  progressContainer: { gap: 4 },
-  progressLabelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  progressLabelText: { color: '#64748b', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
-  progressPercentGroup: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  progressPercentText: { color: '#38bdf8', fontSize: 11, fontWeight: '700' },
-  progressBarBg: { height: 6, backgroundColor: 'rgba(255, 255, 255, 0.08)', borderRadius: 3, overflow: 'hidden' },
-  progressBarFill: { height: '100%', backgroundColor: '#0ea5e9', borderRadius: 3 },
-  remarksSection: { backgroundColor: 'rgba(245, 158, 11, 0.08)', borderWidth: 1, borderColor: 'rgba(245, 158, 11, 0.25)', borderRadius: 10, padding: 12, gap: 6, borderTopWidth: 1, borderTopColor: 'rgba(255, 255, 255, 0.05)', marginTop: 4 },
-  remarksHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  remarksSectionLabel: { color: '#fbbf24', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
-  remarksBodyText: { color: '#e2e8f0', fontSize: 13, lineHeight: 18, fontStyle: 'italic' },
-  tasksSection: { gap: 8, borderTopWidth: 1, borderTopColor: 'rgba(255, 255, 255, 0.05)', paddingTop: 12 },
-  taskRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'rgba(255, 255, 255, 0.02)', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.06)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 },
-  otherBayTaskRow: { backgroundColor: 'rgba(255, 255, 255, 0.01)', borderColor: 'rgba(255, 255, 255, 0.04)' },
-  disabledTaskRow: { opacity: 0.5, backgroundColor: 'rgba(0, 0, 0, 0.2)' },
-  taskLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  taskName: { color: '#f8fafc', fontSize: 13, fontWeight: '600' },
-  otherBayTaskName: { color: '#94a3b8' },
-  completedTaskName: { color: '#94a3b8', textDecorationLine: 'line-through' },
-  taskDoneBtn: { backgroundColor: '#0ea5e9', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
-  taskDoneBtnText: { color: '#ffffff', fontSize: 11, fontWeight: '700' },
-  lockedTaskBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255, 255, 255, 0.03)', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.08)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  supervisorLockedBadge: { backgroundColor: 'rgba(14, 165, 233, 0.12)', borderColor: 'rgba(14, 165, 233, 0.3)' },
-  lockedTaskBadgeText: { color: '#64748b', fontSize: 10, fontWeight: '800' },
-  supervisorLockedText: { color: '#38bdf8' },
-  lockedTaskDoneText: { color: '#10b981' },
-  taskFinishedBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(16, 185, 129, 0.15)', borderWidth: 1, borderColor: 'rgba(16, 185, 129, 0.3)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  taskFinishedText: { color: '#10b981', fontSize: 10, fontWeight: '800' },
-  dispatchRow: { gap: 8, borderTopWidth: 1, borderTopColor: 'rgba(255, 255, 255, 0.05)', paddingTop: 12 },
-  dispatchLabel: { color: '#64748b', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
-  dispatchBtnGroup: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  dispatchBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  dispatchBtnAlignment: { backgroundColor: 'rgba(16, 185, 129, 0.12)', borderColor: 'rgba(16, 185, 129, 0.3)' },
-  dispatchBtnHoist: { backgroundColor: 'rgba(245, 158, 11, 0.12)', borderColor: 'rgba(245, 158, 11, 0.3)' },
-  dispatchBtnWorkshop: { backgroundColor: 'rgba(14, 165, 233, 0.12)', borderColor: 'rgba(14, 165, 233, 0.3)' },
-  dispatchBtnAdvisor: { backgroundColor: 'rgba(168, 85, 247, 0.15)', borderColor: 'rgba(168, 85, 247, 0.4)', marginLeft: 'auto' },
-  dispatchBtnText: { color: '#ffffff', fontSize: 11, fontWeight: '700' },
-
-  // Confirmation Modal Styles
-  confirmOverlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, justifyContent: 'center', alignItems: 'center', zIndex: 999 },
-  confirmBackdrop: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0, 0, 0, 0.75)', ...(Platform.OS === 'web' ? { position: 'fixed' as any } : {}) },
-  confirmCard: { width: '90%', maxWidth: 400, backgroundColor: '#0f172a', borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)', padding: 20, gap: 16, zIndex: 1000, ...(Platform.OS === 'web' ? ({ boxShadow: '0px 10px 20px rgba(0, 0, 0, 0.5)' } as any) : { shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.5, shadowRadius: 20, elevation: 12 }) },
-  confirmHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  confirmTitle: { color: '#ffffff', fontSize: 16, fontWeight: '800' },
-  confirmBodyText: { color: '#cbd5e1', fontSize: 13, lineHeight: 20 },
-  confirmBoldPlate: { color: '#facc15', fontWeight: '800' },
-  confirmBoldZone: { color: '#38bdf8', fontWeight: '800' },
-  confirmBtnRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 12, marginTop: 4 },
-  cancelBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)', backgroundColor: 'rgba(255, 255, 255, 0.05)' },
-  cancelBtnText: { color: '#94a3b8', fontSize: 13, fontWeight: '700' },
-  confirmDispatchBtn: { paddingHorizontal: 18, paddingVertical: 10, borderRadius: 8, backgroundColor: '#0ea5e9' },
-  confirmDispatchBtnText: { color: '#ffffff', fontSize: 13, fontWeight: '800' },
-  urgentBadge: { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderColor: 'rgba(239, 68, 68, 0.4)', borderWidth: 1, borderRadius: 20, paddingHorizontal: 7, paddingVertical: 2 },
-  urgentBadgeText: { color: '#ef4444', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
-  pinBtn: { width: 28, height: 28, borderRadius: 6, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.08)', alignItems: 'center', justifyContent: 'center' },
-  tasksSectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
-  idleNoticeBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(245, 158, 11, 0.12)', borderWidth: 1, borderColor: 'rgba(245, 158, 11, 0.3)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
-  idleNoticeText: { color: '#fbbf24', fontSize: 9.5, fontWeight: '800', letterSpacing: 0.5 },
-  idleLockedBadge: { backgroundColor: 'rgba(245, 158, 11, 0.1)', borderColor: 'rgba(245, 158, 11, 0.3)' },
-  idleLockedText: { color: '#fbbf24' },
-  urgentCalloutBox: {
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.35)',
-    borderRadius: 10,
-    padding: 12,
-    gap: 6,
-  },
-  urgentCalloutHeader: {
+  confirmBodyText: { fontSize: 13, lineHeight: 20 },
+  confirmBoldPlate: { fontWeight: '800' },
+  confirmBoldZone: { fontWeight: '800' },
+  autoCompleteBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
   },
-  urgentCalloutTitle: {
-    color: '#ef4444',
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-  },
-  urgentCalloutText: {
-    color: '#fca5a5',
-    fontSize: 12.5,
-    fontWeight: '600',
-    lineHeight: 18,
+  autoCompleteText: {
+    fontSize: 12,
+    fontWeight: '500',
   },
 });

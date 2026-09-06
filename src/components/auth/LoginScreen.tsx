@@ -12,7 +12,11 @@ import {
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
-import { Car, LogIn, AlertCircle, Shield, Wrench, Headphones, UserCheck } from 'lucide-react-native';
+import {
+  Car,
+  LogIn,
+  AlertCircle,
+} from 'lucide-react-native';
 
 export const LoginScreen: React.FC = () => {
   const { signIn } = useAuth();
@@ -41,32 +45,6 @@ export const LoginScreen: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const fillQuickAccount = (role: 'supervisor' | 'tech1' | 'tech2' | 'tech3' | 'advisor') => {
-    switch (role) {
-      case 'supervisor':
-        setEmail('supervisor@unitedmotors.com');
-        setPassword('Super@123');
-        break;
-      case 'tech1':
-        setEmail('tech1@unitedmotors.com');
-        setPassword('Tech1@123');
-        break;
-      case 'tech2':
-        setEmail('tech2@unitedmotors.com');
-        setPassword('Tech2@123');
-        break;
-      case 'tech3':
-        setEmail('tech3@unitedmotors.com');
-        setPassword('Tech3@123');
-        break;
-      case 'advisor':
-        setEmail('advisor@unitedmotors.com');
-        setPassword('Advisor@123');
-        break;
-    }
-    setError(null);
   };
 
   return (
@@ -165,63 +143,11 @@ export const LoginScreen: React.FC = () => {
               </>
             )}
           </TouchableOpacity>
-
-          {/* Quick Test Accounts */}
-          <View style={styles.quickAccountsSection}>
-            <View style={styles.dividerRow}>
-              <View style={[styles.dividerLine, { backgroundColor: colors.borderGlass }]} />
-              <Text style={[styles.dividerText, { color: colors.textMuted }]}>Quick Demo Accounts</Text>
-              <View style={[styles.dividerLine, { backgroundColor: colors.borderGlass }]} />
-            </View>
-            
-            <View style={styles.pillsContainer}>
-              <TouchableOpacity
-                style={[styles.pill, { backgroundColor: colors.primaryDim, borderColor: colors.primaryBorder }]}
-                onPress={() => { if (!isLoading) fillQuickAccount('supervisor'); }}
-                activeOpacity={isLoading ? 1 : 0.7}
-              >
-                <Shield size={13} color={colors.primaryLight} />
-                <Text style={[styles.pillText, { color: colors.primaryLight }]}>Supervisor</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.pill, { backgroundColor: colors.primaryDim, borderColor: colors.primaryBorder }]}
-                onPress={() => { if (!isLoading) fillQuickAccount('tech1'); }}
-                activeOpacity={isLoading ? 1 : 0.7}
-              >
-                <Wrench size={13} color={colors.primaryLight} />
-                <Text style={[styles.pillText, { color: colors.primaryLight }]}>Tech 1 (General)</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.pill, { backgroundColor: colors.successDim, borderColor: colors.successBorder }]}
-                onPress={() => { if (!isLoading) fillQuickAccount('tech2'); }}
-                activeOpacity={isLoading ? 1 : 0.7}
-              >
-                <UserCheck size={13} color={colors.success} />
-                <Text style={[styles.pillText, { color: colors.success }]}>Tech 2 (Alignment)</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.pill, { backgroundColor: colors.warningDim, borderColor: colors.warningBorder }]}
-                onPress={() => { if (!isLoading) fillQuickAccount('tech3'); }}
-                activeOpacity={isLoading ? 1 : 0.7}
-              >
-                <Shield size={13} color={colors.warning} />
-                <Text style={[styles.pillText, { color: colors.warning }]}>Tech 3 (Hoist)</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.pill, { backgroundColor: colors.purpleDim, borderColor: colors.purpleBorder }]}
-                onPress={() => { if (!isLoading) fillQuickAccount('advisor'); }}
-                activeOpacity={isLoading ? 1 : 0.7}
-              >
-                <Headphones size={13} color={colors.purple} />
-                <Text style={[styles.pillText, { color: colors.purple }]}>Advisor</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
         </View>
 
         {/* Footer */}
         <Text style={styles.footer}>
-          v1.0
+          v1.1
         </Text>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -378,49 +304,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontSize: 16,
     letterSpacing: 0.5,
-  },
-  quickAccountsSection: {
-    marginTop: 28,
-  },
-  dividerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  dividerText: {
-    color: '#64748b',
-    fontSize: 12,
-    fontWeight: '600',
-    paddingHorizontal: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  pillsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    justifyContent: 'center',
-  },
-  pill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(56, 189, 248, 0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(56, 189, 248, 0.2)',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  pillText: {
-    color: '#e0f2fe',
-    fontSize: 13,
-    fontWeight: '600',
   },
   footer: {
     color: '#475569',

@@ -2,10 +2,15 @@ import React, { useState } from 'react';
 import { Modal, View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Platform } from 'react-native';
 import { useVehicles } from '../../context/VehicleContext';
 import { BayZone, TaskType } from '../../types/vehicle';
-import { X, Car, Wrench, Shield, Navigation, Send, CheckSquare, Square, AlertTriangle } from 'lucide-react-native';
+import { X, Car, Wrench, Shield, Navigation, Send, CheckSquare, Square, AlertTriangle, Droplets } from 'lucide-react-native';
 
 import { formatVehicleNoInput, isValidVehicleNo } from '../../utils/vehicleNumberUtils';
+import { computeRecommendedStation } from '../../utils/bayLogicUtils';
 import { useTheme } from '../../context/ThemeContext';
+import { BaseModal } from '../shared/BaseModal';
+import { TaskSelectorChips } from '../shared/TaskSelectorChips';
+import { UrgentToggleInput } from '../shared/UrgentToggleInput';
+import { APP_TERMINOLOGY } from '../../constants/terminology';
 
 export const AddVehicleModal: React.FC = () => {
   const { isAddModalOpen, setIsAddModalOpen, addVehicle, vehicles } = useVehicles();
@@ -18,7 +23,7 @@ export const AddVehicleModal: React.FC = () => {
     'hoist_service'
   ]);
   const [targetZone, setTargetZone] = useState<BayZone>('workshop');
-  const [assignedTech, setAssignedTech] = useState<string>('Technician 1 (General Workshop)');
+  const [assignedTech, setAssignedTech] = useState<string>(APP_TERMINOLOGY.stations.workshop.name);
   const [remarks, setRemarks] = useState<string>('');
   const [isUrgent, setIsUrgent] = useState<boolean>(false);
   const [urgentNote, setUrgentNote] = useState<string>('');
@@ -26,25 +31,11 @@ export const AddVehicleModal: React.FC = () => {
 
   if (!isAddModalOpen) return null;
 
-  const isDuplicate = vehicles.some(
+  const isDuplicate = !isSubmitting && vehicles.some(
     v => !v.is_finished && v.vehicle_no.trim().toUpperCase() === vehicleNo.trim().toUpperCase()
   );
   const isNoValid = isValidVehicleNo(vehicleNo) && !isDuplicate;
   const isNoTouched = vehicleNo.length > 0;
-
-  // Auto-determine recommended starting station based on shop flow (Workshop -> Alignment -> Hoist)
-  const computeRecommendedStation = (tasks: TaskType[]): { zone: BayZone; tech: string } => {
-    if (tasks.includes('general_service')) {
-      return { zone: 'workshop', tech: 'Technician 1 (General Workshop)' };
-    }
-    if (tasks.includes('wheel_alignment')) {
-      return { zone: 'alignment', tech: 'Technician 3 (Wheel Alignment)' };
-    }
-    if (tasks.includes('hoist_service')) {
-      return { zone: 'hoist', tech: 'Technician 2 (Hoist Bay)' };
-    }
-    return { zone: 'workshop', tech: 'Technician 1 (General Workshop)' };
-  };
 
   const toggleTask = (type: TaskType) => {
     let nextTasks: TaskType[];
@@ -91,22 +82,43 @@ export const AddVehicleModal: React.FC = () => {
   };
 
   return (
-    <Modal visible={isAddModalOpen} animationType="fade" transparent>
-      <View style={[styles.backdrop, { backgroundColor: colors.backdrop }]}>
-        <View style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.borderGlass }]}>
-          <View style={[styles.header, { borderBottomColor: colors.borderGlass }]}>
-            <View style={styles.headerTitleRow}>
-              <View style={[styles.iconWrapper, { backgroundColor: colors.primaryDim }]}>
-                <Car size={20} color={colors.primaryLight} />
-              </View>
-              <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Add Vehicle & Job Order</Text>
-            </View>
-            <TouchableOpacity style={styles.closeBtn} onPress={() => setIsAddModalOpen(false)}>
-              <X size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
+    <BaseModal
+      visible={isAddModalOpen}
+      onClose={() => setIsAddModalOpen(false)}
+      title="Add Vehicle & Job Order"
+      icon={
+        <View style={[styles.iconWrapper, { backgroundColor: colors.primaryDim }]}>
+          <Car size={20} color={colors.primaryLight} />
+        </View>
+      }
+      maxWidth={620}
+      scrollable={true}
+      footer={
+        <View style={styles.footerRow}>
+          <TouchableOpacity
+            style={[styles.backBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)' }]}
+            onPress={() => setIsAddModalOpen(false)}
+          >
+            <Text style={[styles.backBtnText, { color: colors.textSecondary }]}>Cancel</Text>
+          </TouchableOpacity>
 
-          <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent}>
+          <TouchableOpacity
+            style={[
+              styles.submitBtn,
+              { backgroundColor: colors.primary },
+              (!isNoValid || isSubmitting) && styles.disabledBtn,
+              (!isNoValid || isSubmitting) && (Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {})
+            ]}
+            onPress={() => { if (isNoValid && !isSubmitting) handleSubmit(); }}
+            activeOpacity={(!isNoValid || isSubmitting) ? 1 : 0.7}
+          >
+            <Send size={16} color="#ffffff" />
+            <Text style={styles.submitBtnText}>{isSubmitting ? 'Creating...' : 'Create & Send'}</Text>
+          </TouchableOpacity>
+        </View>
+      }
+    >
+      <View style={styles.bodyContent}>
             <View style={styles.formGroup}>
               <Text style={[styles.label, { color: colors.textSecondary }]}>VEHICLE NUMBER / REGISTRATION NO:</Text>
               <TextInput
@@ -142,68 +154,11 @@ export const AddVehicleModal: React.FC = () => {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={[styles.label, { color: colors.textSecondary }]}>REQUIRED WORKSHOP TASKS:</Text>
-              <View style={styles.tasksRow}>
-                <TouchableOpacity
-                  style={[
-                    styles.taskChip,
-                    {
-                      backgroundColor: selectedTasks.includes('general_service') ? colors.primaryDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
-                      borderColor: selectedTasks.includes('general_service') ? colors.primary : colors.borderGlass,
-                    }
-                  ]}
-                  onPress={() => toggleTask('general_service')}
-                >
-                  {selectedTasks.includes('general_service') ? (
-                    <CheckSquare size={16} color={colors.primaryLight} />
-                  ) : (
-                    <Square size={16} color={colors.textMuted} />
-                  )}
-                  <Text style={[styles.chipText, { color: selectedTasks.includes('general_service') ? (isDark ? '#ffffff' : colors.primary) : colors.textSecondary }]}>
-                    General Service
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.taskChip,
-                    {
-                      backgroundColor: selectedTasks.includes('wheel_alignment') ? colors.successDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
-                      borderColor: selectedTasks.includes('wheel_alignment') ? colors.success : colors.borderGlass,
-                    }
-                  ]}
-                  onPress={() => toggleTask('wheel_alignment')}
-                >
-                  {selectedTasks.includes('wheel_alignment') ? (
-                    <CheckSquare size={16} color={colors.successLight} />
-                  ) : (
-                    <Square size={16} color={colors.textMuted} />
-                  )}
-                  <Text style={[styles.chipText, { color: selectedTasks.includes('wheel_alignment') ? (isDark ? '#ffffff' : colors.success) : colors.textSecondary }]}>
-                    Wheel Alignment
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.taskChip,
-                    {
-                      backgroundColor: selectedTasks.includes('hoist_service') ? colors.warningDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
-                      borderColor: selectedTasks.includes('hoist_service') ? colors.warning : colors.borderGlass,
-                    }
-                  ]}
-                  onPress={() => toggleTask('hoist_service')}
-                >
-                  {selectedTasks.includes('hoist_service') ? (
-                    <CheckSquare size={16} color={colors.warningLight} />
-                  ) : (
-                    <Square size={16} color={colors.textMuted} />
-                  )}
-                  <Text style={[styles.chipText, { color: selectedTasks.includes('hoist_service') ? (isDark ? '#ffffff' : colors.warning) : colors.textSecondary }]}>
-                    Hoist Service
-                  </Text>
-                </TouchableOpacity>
-              </View>
+              <TaskSelectorChips
+                selectedTasks={selectedTasks}
+                onToggleTask={toggleTask}
+                title="REQUIRED WORKSHOP TASKS:"
+              />
             </View>
 
             <View style={styles.formGroup}>
@@ -215,18 +170,18 @@ export const AddVehicleModal: React.FC = () => {
                     style={[
                       styles.dispatchBtn,
                       {
-                        backgroundColor: targetZone === 'workshop' ? colors.primaryDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
-                        borderColor: targetZone === 'workshop' ? colors.primary : colors.borderGlass,
+                        backgroundColor: targetZone === 'workshop' ? colors.bayWorkshopDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
+                        borderColor: targetZone === 'workshop' ? colors.bayWorkshop : colors.borderGlass,
                       }
                     ]}
                     onPress={() => {
                       setTargetZone('workshop');
-                      setAssignedTech('Technician 1 (General Workshop)');
+                      setAssignedTech(APP_TERMINOLOGY.stations.workshop.name);
                     }}
                   >
-                    <Wrench size={16} color={targetZone === 'workshop' ? colors.primaryLight : colors.textMuted} />
-                    <Text style={[styles.dispatchText, { color: targetZone === 'workshop' ? colors.primaryLight : colors.textSecondary }]}>
-                      TO Workshop
+                    <Wrench size={16} color={targetZone === 'workshop' ? colors.bayWorkshopLight : colors.textMuted} />
+                    <Text style={[styles.dispatchText, { color: targetZone === 'workshop' ? colors.textPrimary : colors.textSecondary }]}>
+                      TO {APP_TERMINOLOGY.stations.workshop.shortName}
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -237,18 +192,18 @@ export const AddVehicleModal: React.FC = () => {
                     style={[
                       styles.dispatchBtn,
                       {
-                        backgroundColor: targetZone === 'alignment' ? colors.successDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
-                        borderColor: targetZone === 'alignment' ? colors.success : colors.borderGlass,
+                        backgroundColor: targetZone === 'alignment' ? colors.bayAlignmentDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
+                        borderColor: targetZone === 'alignment' ? colors.bayAlignment : colors.borderGlass,
                       }
                     ]}
                     onPress={() => {
                       setTargetZone('alignment');
-                      setAssignedTech('Technician 3 (Wheel Alignment)');
+                      setAssignedTech(APP_TERMINOLOGY.stations.alignment.name);
                     }}
                   >
-                    <Navigation size={16} color={targetZone === 'alignment' ? colors.successLight : colors.textMuted} />
-                    <Text style={[styles.dispatchText, { color: targetZone === 'alignment' ? colors.successLight : colors.textSecondary }]}>
-                      TO Alignment
+                    <Navigation size={16} color={targetZone === 'alignment' ? colors.bayAlignmentLight : colors.textMuted} />
+                    <Text style={[styles.dispatchText, { color: targetZone === 'alignment' ? colors.textPrimary : colors.textSecondary }]}>
+                      TO {APP_TERMINOLOGY.stations.alignment.shortName}
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -259,18 +214,18 @@ export const AddVehicleModal: React.FC = () => {
                     style={[
                       styles.dispatchBtn,
                       {
-                        backgroundColor: targetZone === 'hoist' ? colors.warningDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
-                        borderColor: targetZone === 'hoist' ? colors.warning : colors.borderGlass,
+                        backgroundColor: targetZone === 'hoist' ? colors.bayHoistDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
+                        borderColor: targetZone === 'hoist' ? colors.bayHoist : colors.borderGlass,
                       }
                     ]}
                     onPress={() => {
                       setTargetZone('hoist');
-                      setAssignedTech('Technician 2 (Hoist Bay)');
+                      setAssignedTech(APP_TERMINOLOGY.stations.hoist.name);
                     }}
                   >
-                    <Shield size={16} color={targetZone === 'hoist' ? colors.warningLight : colors.textMuted} />
-                    <Text style={[styles.dispatchText, { color: targetZone === 'hoist' ? colors.warningLight : colors.textSecondary }]}>
-                      TO Hoist
+                    <Droplets size={16} color={targetZone === 'hoist' ? colors.bayHoistLight : colors.textMuted} />
+                    <Text style={[styles.dispatchText, { color: targetZone === 'hoist' ? colors.textPrimary : colors.textSecondary }]}>
+                      TO {APP_TERMINOLOGY.stations.hoist.shortName}
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -294,87 +249,34 @@ export const AddVehicleModal: React.FC = () => {
                 value={remarks}
                 onChangeText={setRemarks}
                 multiline
-                numberOfLines={3}
+                numberOfLines={2}
               />
             </View>
 
             {/* Urgent Toggle */}
             <View style={[styles.formGroup, { marginTop: 4 }]}>
-              <TouchableOpacity
-                style={[
-                  styles.urgentToggleRow,
-                  {
-                    backgroundColor: isUrgent
-                      ? 'rgba(239, 68, 68, 0.08)'
-                      : (isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)'),
-                    borderColor: isUrgent ? 'rgba(239, 68, 68, 0.4)' : colors.borderGlass,
-                  }
-                ]}
-                onPress={() => setIsUrgent(p => !p)}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.urgentIconWrap, { backgroundColor: isUrgent ? 'rgba(239,68,68,0.15)' : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)') }]}>
-                  <AlertTriangle size={16} color={isUrgent ? '#ef4444' : colors.textMuted} />
-                </View>
-                <Text style={[styles.urgentLabel, { color: isUrgent ? '#ef4444' : colors.textSecondary }]}>
-                  Mark as URGENT
-                </Text>
-                <View style={[styles.urgentCheckbox, { borderColor: isUrgent ? '#ef4444' : colors.borderGlass, backgroundColor: isUrgent ? '#ef4444' : 'transparent' }]}>
-                  {isUrgent && <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>✓</Text>}
-                </View>
-              </TouchableOpacity>
-              {isUrgent && (
-                <TextInput
-                  style={[
-                    styles.input,
-                    styles.textArea,
-                    {
-                      backgroundColor: 'rgba(239, 68, 68, 0.05)',
-                      borderColor: 'rgba(239, 68, 68, 0.3)',
-                      color: colors.textPrimary,
-                      marginTop: 8,
-                    }
-                  ]}
-                  placeholder="Urgency reason (e.g. VIP customer, fleet vehicle, warranty recall)"
-                  placeholderTextColor={colors.textMuted}
-                  value={urgentNote}
-                  onChangeText={setUrgentNote}
-                  multiline
-                  numberOfLines={2}
-                />
-              )}
+              <UrgentToggleInput
+                isUrgent={isUrgent}
+                onToggleUrgent={setIsUrgent}
+                urgentNote={urgentNote}
+                onChangeUrgentNote={setUrgentNote}
+                title="VEHICLE PRIORITY / URGENCY:"
+                placeholder="Urgency reason (e.g. VIP customer, fleet vehicle, warranty recall)..."
+              />
             </View>
-          </ScrollView>
-
-          <View style={[styles.footer, { borderTopColor: colors.borderGlass }]}>
-            <TouchableOpacity
-              style={[styles.backBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)' }]}
-              onPress={() => setIsAddModalOpen(false)}
-            >
-              <Text style={[styles.backBtnText, { color: colors.textSecondary }]}>Cancel</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.submitBtn,
-                { backgroundColor: colors.primary },
-                (!isNoValid || isSubmitting) && styles.disabledBtn,
-                (!isNoValid || isSubmitting) && (Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {})
-              ]}
-              onPress={() => { if (isNoValid && !isSubmitting) handleSubmit(); }}
-              activeOpacity={(!isNoValid || isSubmitting) ? 1 : 0.7}
-            >
-              <Send size={16} color="#ffffff" />
-              <Text style={styles.submitBtnText}>{isSubmitting ? 'Creating...' : 'Create & Send'}</Text>
-            </TouchableOpacity>
           </View>
-        </View>
-      </View>
-    </Modal>
+        </BaseModal>
   );
 };
 
 const styles = StyleSheet.create({
+  footerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 12,
+    width: '100%',
+  },
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.75)',
@@ -479,36 +381,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   textArea: {
-    height: 80,
+    height: 64,
+    minHeight: 64,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 13,
+    fontWeight: '500',
+    lineHeight: 18,
     textAlignVertical: 'top',
     letterSpacing: 0,
     fontFamily: undefined,
-  },
-  tasksRow: {
-    gap: 10,
-  },
-  taskChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.02)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    padding: 12,
-    borderRadius: 12,
-  },
-  activeTaskChip: {
-    borderColor: '#0ea5e9',
-    backgroundColor: 'rgba(14, 165, 233, 0.1)',
-  },
-  chipText: {
-    color: '#94a3b8',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  activeChipText: {
-    color: '#f8fafc',
-    fontWeight: '600',
   },
   dispatchGrid: {
     flexDirection: 'row',
@@ -517,9 +399,11 @@ const styles = StyleSheet.create({
   dispatchBtn: {
     flex: 1,
     alignItems: 'center',
-    gap: 8,
-    padding: 14,
-    borderRadius: 12,
+    justifyContent: 'center',
+    gap: 5,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
     backgroundColor: 'rgba(255, 255, 255, 0.02)',
@@ -547,8 +431,9 @@ const styles = StyleSheet.create({
   },
   dispatchText: {
     color: '#94a3b8',
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11.5,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   footer: {
     flexDirection: 'row',
@@ -595,32 +480,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontSize: 14,
     letterSpacing: 0.5,
-  },
-  urgentToggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    borderWidth: 1,
-    padding: 12,
-    borderRadius: 12,
-  },
-  urgentIconWrap: {
-    padding: 6,
-    borderRadius: 8,
-  },
-  urgentLabel: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  urgentCheckbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-    borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });
 

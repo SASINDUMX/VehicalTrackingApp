@@ -1,8 +1,19 @@
 import React from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
+import { AppStatusKey, getStatusStyle } from '../../constants/status';
 
-export type StatusPillVariant = 'success' | 'danger' | 'warning' | 'timer' | 'neutral';
+export type StatusPillVariant =
+  | 'success'
+  | 'danger'
+  | 'warning'
+  | 'timer'
+  | 'neutral'
+  | 'active'
+  | 'idle'
+  | 'cancelled'
+  | 'remarks'
+  | AppStatusKey;
 
 interface StatusPillProps {
   label: string;
@@ -16,15 +27,40 @@ export const StatusPill: React.FC<StatusPillProps> = ({ label, variant, size = '
   const isSm = size === 'sm';
   const iconSize = isSm ? 10 : 12;
 
-  const configs: Record<StatusPillVariant, { color: string; bg: string; border: string }> = {
-    success: { color: colors.success,       bg: colors.successDim,      border: colors.successBorder },
-    danger:  { color: '#ef4444',            bg: 'rgba(239,68,68,0.12)', border: 'rgba(239,68,68,0.35)' },
-    warning: { color: colors.warningLight,  bg: colors.warningDim,      border: colors.warningBorder },
-    timer:   { color: colors.primaryLight,  bg: colors.primaryDim,      border: colors.primaryBorder },
-    neutral: { color: colors.textSecondary, bg: colors.surfaceElevated, border: colors.borderGlass },
+  // Map variant to style cleanly via centralized status definition or fallback
+  const getPillStyle = () => {
+    switch (variant) {
+      case 'DONE':
+      case 'success':
+        return getStatusStyle('DONE', colors);
+      case 'READY':
+        return getStatusStyle('READY', colors);
+      case 'SKIPPED':
+      case 'cancelled':
+        return getStatusStyle('SKIPPED', colors);
+      case 'IDLE':
+      case 'idle':
+      case 'warning':
+        return getStatusStyle('IDLE', colors);
+      case 'ACTIVE':
+      case 'active':
+      case 'timer':
+        return getStatusStyle('ACTIVE', colors);
+      case 'PENDING':
+      case 'neutral':
+        return getStatusStyle('PENDING', colors);
+      case 'URGENT':
+      case 'danger':
+        return getStatusStyle('URGENT', colors);
+      case 'REMARKS':
+      case 'remarks':
+        return getStatusStyle('REMARKS', colors);
+      default:
+        return getStatusStyle('PENDING', colors);
+    }
   };
 
-  const { color, bg, border } = configs[variant];
+  const { color, bg, border } = getPillStyle();
 
   return (
     <View style={[styles.pill, { backgroundColor: bg, borderColor: border }, isSm && styles.pillSm]}>

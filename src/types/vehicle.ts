@@ -1,11 +1,16 @@
 export type BayZone = 'workshop' | 'hoist' | 'alignment' | 'inspection' | 'completed';
 
 export type UserRole = 
-  | 'supervisor'       // Job Supervisor (Intake & Add Vehicle)
-  | 'tech_workshop'    // Technician 1 (General Workshop)
-  | 'tech_hoist'       // Technician 2 (Hoist Bay)
-  | 'tech_alignment'   // Technician 3 (Wheel Alignment Bay)
-  | 'advisor';         // Service Advisor (Final inspection & finish)
+  | 'service_executive'
+  | 'agm'
+  | 'job_controller'
+  | 'workshop_manager'
+  | 'foreman'
+  | 'advisor';
+
+export type ForemanSection = 'car' | 'suv' | 'lcv' | 'hoist' | 'alignment';
+
+export type NavigationTab = 'overview' | 'workshop' | 'alignment' | 'hoist' | 'inspection';
 
 export type TaskType = 'general_service' | 'hoist_service' | 'wheel_alignment';
 
@@ -34,6 +39,9 @@ export interface StageLog {
   paused_seconds?: number;
   work_started_at?: string | null;
   idle_seconds?: number;
+  break_seconds?: number;
+  is_dispatched?: boolean;
+  active_seconds?: number;
 }
 
 export interface Vehicle {
@@ -54,6 +62,10 @@ export interface Vehicle {
   is_paused?: boolean;
   paused_at?: string | null;
   paused_seconds?: number;
+  effective_completed_at?: string | null;
+  gross_tat_seconds?: number;
+  net_tat_seconds?: number;
+  total_break_seconds?: number;
   // 2D animation coordinates (x %, y %)
   position?: { x: number; y: number };
 }

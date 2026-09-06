@@ -32,6 +32,7 @@ export interface ThemeColors {
   purpleDim: string;
   purpleBorder: string;
   danger: string;
+  dangerLight: string;
   dangerDim: string;
   dangerBorder: string;
   plateYellow: string;
@@ -44,6 +45,46 @@ export interface ThemeColors {
   surfaceFaint: string;
   backdrop: string;
   progressBg: string;
+
+  // Spatial Bays (Independent of Statuses)
+  bayWorkshop: string;
+  bayWorkshopLight: string;
+  bayWorkshopDim: string;
+  bayWorkshopBorder: string;
+  bayAlignment: string;
+  bayAlignmentLight: string;
+  bayAlignmentDim: string;
+  bayAlignmentBorder: string;
+  bayHoist: string;
+  bayHoistLight: string;
+  bayHoistDim: string;
+  bayHoistBorder: string;
+  bayInspection: string;
+  bayInspectionLight: string;
+  bayInspectionDim: string;
+  bayInspectionBorder: string;
+
+  // Whole Card States (High Visibility & Contrast)
+  cardActiveBg: string;
+  cardActiveBorder: string;
+  cardIdleBg: string;
+  cardIdleBorder: string;
+  cardDoneBg: string;
+  cardDoneBorder: string;
+  cardUrgentBg: string;
+  cardUrgentBorder: string;
+
+  // Annotations & Auxiliary Statuses
+  remarks: string;
+  remarksLight: string;
+  remarksDim: string;
+  remarksBorder: string;
+  cancelled: string;
+  cancelledDim: string;
+  cancelledBorder: string;
+  queueOut: string;
+  queueOutDim: string;
+  queueOutBorder: string;
 }
 
 export const DarkColors: ThemeColors = {
@@ -88,6 +129,7 @@ export const DarkColors: ThemeColors = {
   purpleBorder: 'rgba(192, 132, 252, 0.3)',
 
   danger: '#ef4444',
+  dangerLight: '#f87171',
   dangerDim: 'rgba(239, 68, 68, 0.12)',
   dangerBorder: 'rgba(248, 113, 113, 0.3)',
 
@@ -104,6 +146,46 @@ export const DarkColors: ThemeColors = {
   surfaceFaint: 'rgba(255, 255, 255, 0.02)',
   backdrop: 'rgba(3, 7, 18, 0.85)',
   progressBg: 'rgba(255, 255, 255, 0.08)',
+
+  // Spatial Bays (Independent of Statuses)
+  bayWorkshop: '#3b82f6',
+  bayWorkshopLight: '#60a5fa',
+  bayWorkshopDim: 'rgba(59, 130, 246, 0.14)',
+  bayWorkshopBorder: 'rgba(96, 165, 250, 0.35)',
+  bayAlignment: '#14b8a6',
+  bayAlignmentLight: '#2dd4bf',
+  bayAlignmentDim: 'rgba(20, 184, 166, 0.14)',
+  bayAlignmentBorder: 'rgba(45, 212, 191, 0.35)',
+  bayHoist: '#6366f1',
+  bayHoistLight: '#818cf8',
+  bayHoistDim: 'rgba(99, 102, 241, 0.14)',
+  bayHoistBorder: 'rgba(129, 140, 248, 0.35)',
+  bayInspection: '#a855f7',
+  bayInspectionLight: '#c084fc',
+  bayInspectionDim: 'rgba(168, 85, 247, 0.14)',
+  bayInspectionBorder: 'rgba(192, 132, 252, 0.35)',
+
+  // Whole Card States (Transparent Glassmorphic + State Glow)
+  cardActiveBg: 'rgba(14, 165, 233, 0.04)',
+  cardActiveBorder: 'rgba(56, 189, 248, 0.22)',
+  cardIdleBg: 'rgba(245, 158, 11, 0.05)',
+  cardIdleBorder: 'rgba(251, 191, 36, 0.25)',
+  cardDoneBg: 'rgba(16, 185, 129, 0.05)',
+  cardDoneBorder: 'rgba(52, 211, 153, 0.25)',
+  cardUrgentBg: 'rgba(239, 68, 68, 0.08)',
+  cardUrgentBorder: 'rgba(248, 113, 113, 0.35)',
+
+  // Annotations & Auxiliary Statuses
+  remarks: '#818cf8',
+  remarksLight: '#a5b4fc',
+  remarksDim: 'rgba(99, 102, 241, 0.12)',
+  remarksBorder: 'rgba(129, 140, 248, 0.3)',
+  cancelled: '#94a3b8',
+  cancelledDim: 'rgba(148, 163, 184, 0.12)',
+  cancelledBorder: 'rgba(148, 163, 184, 0.3)',
+  queueOut: '#fb923c',
+  queueOutDim: 'rgba(251, 146, 60, 0.12)',
+  queueOutBorder: 'rgba(251, 146, 60, 0.35)',
 };
 
 export const LightColors: ThemeColors = {
@@ -148,6 +230,7 @@ export const LightColors: ThemeColors = {
   purpleBorder: 'rgba(124, 58, 237, 0.25)',
 
   danger: '#dc2626',
+  dangerLight: '#ef4444',
   dangerDim: 'rgba(220, 38, 38, 0.08)',
   dangerBorder: 'rgba(220, 38, 38, 0.25)',
 
@@ -164,6 +247,46 @@ export const LightColors: ThemeColors = {
   surfaceFaint: 'rgba(0, 0, 0, 0.015)',
   backdrop: 'rgba(15, 23, 42, 0.6)',
   progressBg: 'rgba(0, 0, 0, 0.06)',
+
+  // Spatial Bays (Independent of Statuses)
+  bayWorkshop: '#2563eb',
+  bayWorkshopLight: '#3b82f6',
+  bayWorkshopDim: 'rgba(37, 99, 235, 0.08)',
+  bayWorkshopBorder: 'rgba(37, 99, 235, 0.25)',
+  bayAlignment: '#0d9488',
+  bayAlignmentLight: '#14b8a6',
+  bayAlignmentDim: 'rgba(13, 148, 136, 0.08)',
+  bayAlignmentBorder: 'rgba(13, 148, 136, 0.25)',
+  bayHoist: '#4f46e5',
+  bayHoistLight: '#6366f1',
+  bayHoistDim: 'rgba(79, 70, 229, 0.08)',
+  bayHoistBorder: 'rgba(79, 70, 229, 0.25)',
+  bayInspection: '#7c3aed',
+  bayInspectionLight: '#9333ea',
+  bayInspectionDim: 'rgba(124, 58, 237, 0.08)',
+  bayInspectionBorder: 'rgba(124, 58, 237, 0.25)',
+
+  // Whole Card States (Transparent Glassmorphic + State Glow)
+  cardActiveBg: 'rgba(2, 132, 199, 0.03)',
+  cardActiveBorder: 'rgba(2, 132, 199, 0.18)',
+  cardIdleBg: 'rgba(217, 119, 6, 0.04)',
+  cardIdleBorder: 'rgba(217, 119, 6, 0.22)',
+  cardDoneBg: 'rgba(5, 150, 105, 0.04)',
+  cardDoneBorder: 'rgba(5, 150, 105, 0.22)',
+  cardUrgentBg: 'rgba(220, 38, 38, 0.05)',
+  cardUrgentBorder: 'rgba(220, 38, 38, 0.25)',
+
+  // Annotations & Auxiliary Statuses
+  remarks: '#4f46e5',
+  remarksLight: '#6366f1',
+  remarksDim: 'rgba(79, 70, 229, 0.08)',
+  remarksBorder: 'rgba(79, 70, 229, 0.25)',
+  cancelled: '#64748b',
+  cancelledDim: 'rgba(100, 116, 139, 0.08)',
+  cancelledBorder: 'rgba(100, 116, 139, 0.25)',
+  queueOut: '#ea580c',
+  queueOutDim: 'rgba(234, 88, 12, 0.08)',
+  queueOutBorder: 'rgba(234, 88, 12, 0.25)',
 };
 
 // Default export is DarkColors to preserve existing dark design

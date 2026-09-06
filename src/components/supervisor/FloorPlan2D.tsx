@@ -1,15 +1,16 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform, ActivityIndicator, Alert } from 'react-native';
-import { Car, FileCheck, CheckCircle, Bookmark } from 'lucide-react-native';
-import { LicensePlate } from '../shared/LicensePlate';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { Car, FileCheck, Bookmark } from 'lucide-react-native';
 import { EmptyStateCard } from '../shared/EmptyStateCard';
-import { TimerPill } from '../shared/TimerPill';
-import { StatusPill } from '../shared/StatusPill';
-import { calculateJobSheetProgress, getTaskTypeForBay } from '../../utils/vehicleUtils';
+import { VehicleCardHeader } from '../shared/VehicleCardHeader';
+import { VehicleProgressBar } from '../shared/VehicleProgressBar';
+import { LoadingSpot } from '../shared/LoadingSpot';
+import { computeSpatialVehicleStatus } from '../../utils/bayLogicUtils';
+import { sortWorkshopVehicles } from '../../utils/vehicleUtils';
 import { useFloorPlan } from '../../hooks/useFloorPlan';
 import { usePinnedVehicles } from '../../hooks/usePinnedVehicles';
 import { useTheme } from '../../context/ThemeContext';
-import { useVehicles } from '../../context/VehicleContext';
+import { APP_TERMINOLOGY } from '../../constants/terminology';
 
 export const FloorPlan2D: React.FC = React.memo(() => {
   const {
@@ -17,6 +18,7 @@ export const FloorPlan2D: React.FC = React.memo(() => {
     elapsedTimes,
     isLoading,
     searchQuery,
+    showMyVehiclesOnly,
     isSearchActive,
     totalMatchingVehicles,
     setSelectedVehicle,
@@ -24,14 +26,33 @@ export const FloorPlan2D: React.FC = React.memo(() => {
   } = useFloorPlan();
   const { colors, isDark } = useTheme();
   const { togglePin, isPinned } = usePinnedVehicles();
-  const { showUrgentNote } = useVehicles();
+
+  // Calculate total visible vehicles in bays for My Vehicles filter (Must be before conditional returns to satisfy React Rules of Hooks)
+  const totalVisibleBays = React.useMemo(() => {
+    if (!showMyVehiclesOnly) return 1; // Not filtering by pinned, no need to compute
+    return bays.reduce((acc, bay) => {
+      const rawVehicles = getVehiclesInZone(bay.id);
+      const bayVehicles = rawVehicles.filter(v => isPinned(v.id));
+      return acc + bayVehicles.length;
+    }, 0);
+  }, [bays, getVehiclesInZone, showMyVehiclesOnly, isPinned]);
 
   if (isSearchActive && totalMatchingVehicles === 0) {
     return (
       <EmptyStateCard
         icon={FileCheck}
-        title={`No matching vehicles for "${searchQuery}"`}
-        subtitle="Try searching another license plate number."
+        title={APP_TERMINOLOGY.emptyStates.noSearchMatchTitle(searchQuery)}
+        subtitle={APP_TERMINOLOGY.emptyStates.noSearchMatchSubtitle}
+      />
+    );
+  }
+
+  if (showMyVehiclesOnly && totalVisibleBays === 0) {
+    return (
+      <EmptyStateCard
+        icon={Bookmark}
+        title={APP_TERMINOLOGY.emptyStates.noPinnedTitle}
+        subtitle={APP_TERMINOLOGY.emptyStates.noPinnedSubtitle}
       />
     );
   }
@@ -47,10 +68,11 @@ export const FloorPlan2D: React.FC = React.memo(() => {
         <View style={styles.spatialGrid}>
           {bays.map((bay) => {
                 const IconComp = bay.icon;
-                const bayVehicles = getVehiclesInZone(bay.id);
+                const rawVehicles = getVehiclesInZone(bay.id, isPinned);
+                const bayVehicles = showMyVehiclesOnly ? rawVehicles.filter(v => isPinned(v.id)) : rawVehicles;
 
-                // If searching, hide bays that have 0 matching vehicles!
-                if (searchQuery.trim() !== '' && bayVehicles.length === 0) {
+                // If searching or filtering My Vehicles, hide bays that have 0 matching vehicles!
+                if ((searchQuery.trim() !== '' || showMyVehiclesOnly) && bayVehicles.length === 0) {
                   return null;
                 }
 
@@ -67,32 +89,18 @@ export const FloorPlan2D: React.FC = React.memo(() => {
                       </View>
                     </View>
 
-                    <View style={[styles.spatialBayFloor, { backgroundColor: isDark ? '#0b1220' : colors.surfaceElevated }]}>
+                    <View style={[styles.spatialBayFloor, { backgroundColor: isDark ? colors.surface : colors.surfaceElevated }]}>
                       {isLoading ? (
-                        <View style={[styles.bayEmptySpot, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)' }]}>
-                          <ActivityIndicator size="small" color={bay.color} />
-                          <Text style={[styles.bayEmptyText, { color: colors.textMuted }]}>SYNCING TELEMETRY...</Text>
-                        </View>
+                        <LoadingSpot color={bay.color} compact />
                       ) : bayVehicles.length === 0 ? (
                         <View style={[styles.bayEmptySpot, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)' }]}>
-                          <Car size={28} color={isDark ? '#334155' : '#cbd5e1'} />
-                          <Text style={[styles.bayEmptyText, { color: colors.textMuted }]}>BAY CLEAR</Text>
+                          <Car size={28} color={colors.textMuted} />
+                          <Text style={[styles.bayEmptyText, { color: colors.textMuted }]}>{APP_TERMINOLOGY.emptyStates.bayClearTitle.toUpperCase()}</Text>
                         </View>
                       ) : (
                         <View style={styles.bayVehicleContainer}>
-                          {[...bayVehicles].sort((a, b) => {
-                            if (a.is_urgent && !b.is_urgent) return -1;
-                            if (!a.is_urgent && b.is_urgent) return 1;
-                            if (isPinned(a.id) && !isPinned(b.id)) return -1;
-                            if (!isPinned(a.id) && isPinned(b.id)) return 1;
-                            return 0;
-                          }).map((vehicle) => {
-                            const { completedCount, totalRequired: totalReq, percent } = calculateJobSheetProgress(vehicle.tasks);
-                            const currentBayTaskType = getTaskTypeForBay(vehicle.current_zone);
-                            const currentTask = vehicle.tasks.find(t => t.task_type === currentBayTaskType);
-                            const isCurrentTaskDone = Boolean(currentTask && currentTask.is_completed);
-                            const lastStageLog = vehicle.stage_logs[vehicle.stage_logs.length - 1];
-                            const isStageIdle = Boolean(lastStageLog && !lastStageLog.exited_at && !lastStageLog.work_started_at);
+                          {bayVehicles.map((vehicle) => {
+                            const { isCurrentTaskDone, isStageIdle, progressPercent, completedCount, totalRequired } = computeSpatialVehicleStatus(vehicle);
                             const isUrgent = Boolean(vehicle.is_urgent);
                             const vehiclePinned = isPinned(vehicle.id);
 
@@ -103,85 +111,52 @@ export const FloorPlan2D: React.FC = React.memo(() => {
                                   styles.spatialVehicleCard,
                                   {
                                     backgroundColor: isUrgent
-                                      ? (isDark ? 'rgba(239, 68, 68, 0.07)' : 'rgba(239, 68, 68, 0.04)')
+                                      ? colors.cardUrgentBg
                                       : isCurrentTaskDone
-                                      ? (isDark ? 'rgba(16, 185, 129, 0.08)' : 'rgba(16, 185, 129, 0.04)')
+                                      ? colors.cardDoneBg
                                       : isStageIdle
-                                      ? (isDark ? 'rgba(245, 158, 11, 0.08)' : 'rgba(245, 158, 11, 0.04)')
-                                      : colors.surface,
+                                      ? colors.cardIdleBg
+                                      : colors.cardActiveBg,
                                     borderColor: isUrgent
-                                      ? 'rgba(239, 68, 68, 0.4)'
+                                      ? colors.cardUrgentBorder
                                       : isCurrentTaskDone
-                                      ? colors.successBorder
+                                      ? colors.cardDoneBorder
                                       : isStageIdle
-                                      ? colors.warningBorder
-                                      : colors.borderGlass,
+                                      ? colors.cardIdleBorder
+                                      : colors.cardActiveBorder,
                                     borderLeftWidth: 3,
                                     borderLeftColor: isUrgent
-                                      ? '#ef4444'
+                                      ? colors.danger
                                       : isCurrentTaskDone
                                       ? colors.success
                                       : isStageIdle
                                       ? colors.warning
-                                      : bay.color,
+                                      : colors.primary,
                                   }
                                 ]}
                                 onPress={() => setSelectedVehicle(vehicle)}
                                 activeOpacity={0.8}
                               >
-                              <View style={styles.cardHeaderTopRow}>
-                                <View style={styles.plateWithStatusGroup}>
-                                  <LicensePlate number={vehicle.vehicle_no} size="sm" />
-                                  {isCurrentTaskDone && (
-                                    <StatusPill variant="success" label="TASK DONE" IconComponent={CheckCircle} size="sm" />
-                                  )}
-                                  {isUrgent && (
-                                    <TouchableOpacity
-                                      onPress={() => showUrgentNote(vehicle.vehicle_no, vehicle.urgent_note)}
-                                      hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-                                    >
-                                      <StatusPill variant="danger" label="⚡ URGENT" size="sm" />
-                                    </TouchableOpacity>
-                                  )}
-                                </View>
-                                <View style={styles.headerRightGroup}>
-                                  <TimerPill
-                                    elapsedText={elapsedTimes[vehicle.id] || '0m 00s'}
-                                    variant={isStageIdle ? 'amber' : 'cyan'}
-                                    isPaused={isStageIdle}
-                                    size="sm"
-                                  />
-                                  <TouchableOpacity
-                                    style={styles.pinBtn}
-                                    onPress={() => togglePin(vehicle.id)}
-                                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                                  >
-                                    <Bookmark
-                                      size={14}
-                                      color={vehiclePinned ? '#f59e0b' : colors.textMuted}
-                                      fill={vehiclePinned ? '#f59e0b' : 'transparent'}
-                                    />
-                                  </TouchableOpacity>
-                                </View>
-                              </View>
+                              <VehicleCardHeader
+                                vehicle={vehicle}
+                                size="sm"
+                                elapsedText={elapsedTimes[vehicle.id] || '0m 00s'}
+                                isStageIdle={isStageIdle}
+                                isTaskDone={isCurrentTaskDone}
+                                isPinned={vehiclePinned}
+                                onTogglePin={() => togglePin(vehicle.id)}
+                                showChevron={false}
+                                style={styles.cardHeaderTopRow}
+                              />
 
-                              <View style={[styles.spatialProgressBar, { backgroundColor: colors.progressBg }]}>
-                                <View
-                                  style={[
-                                    styles.spatialProgressFill,
-                                    { width: `${percent}%`, backgroundColor: isCurrentTaskDone ? colors.success : bay.color },
-                                  ]}
-                                />
-                              </View>
-                              
-                              <View style={styles.spatialProgressRow}>
-                                <Text style={[styles.spatialProgressText, { color: colors.textSecondary }]}>
-                                  {completedCount}/{totalReq} Tasks Done ({percent}%)
-                                </Text>
-                                {isCurrentTaskDone && (
-                                  <StatusPill variant="success" label="✓" size="sm" />
-                                )}
-                              </View>
+                              <VehicleProgressBar
+                                compact
+                                completedCount={completedCount}
+                                totalRequired={totalRequired}
+                                percent={progressPercent}
+                                isCurrentTaskDone={isCurrentTaskDone}
+                                isStageIdle={isStageIdle}
+                              />
                             </TouchableOpacity>
                           );
                         })}
@@ -207,36 +182,6 @@ const styles = StyleSheet.create({
   canvasContent: {
     paddingVertical: 4,
     gap: 16,
-  },
-  topHeaderRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  entranceBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(6, 182, 212, 0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(6, 182, 212, 0.3)',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  entranceText: {
-    color: '#38bdf8',
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1,
-  },
-  controlsGroup: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: 8,
   },
   spatialGrid: {
     flexDirection: 'row',
@@ -296,22 +241,19 @@ const styles = StyleSheet.create({
     paddingVertical: 24,
   },
   bayEmptyText: {
-    color: '#475569',
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.5,
   },
   bayVehicleContainer: {
-    gap: 10,
+    gap: 8,
   },
   spatialVehicleCard: {
     position: 'relative',
-    backgroundColor: '#182234',
-    borderRadius: 10,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-    padding: 10,
-    gap: 6,
+    padding: 8,
+    gap: 4,
     ...(Platform.OS === 'web' ? { transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)' } as any : {}),
   },
   cardHeaderTopRow: {
@@ -319,177 +261,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     width: '100%',
-    gap: 6,
-  },
-  plateWithStatusGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  headerRightGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  spatialProgressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 2,
-  },
-  plateWrapper: {
-    flexDirection: 'row',
-    backgroundColor: '#facc15',
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: '#eab308',
-    overflow: 'hidden',
-    alignSelf: 'flex-start',
-  },
-  plateLeftBar: {
-    backgroundColor: '#1d4ed8',
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  plateFlag: {
-    fontSize: 9,
-    lineHeight: 9,
-  },
-  plateCountryCode: {
-    color: '#ffffff',
-    fontSize: 7,
-    fontWeight: '700',
-  },
-  plateRightArea: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    justifyContent: 'center',
-  },
-  plateText: {
-    color: '#000000',
-    fontWeight: '800',
-    fontSize: 12,
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-    letterSpacing: 0.5,
-  },
-  spatialTimerPill: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(6, 182, 212, 0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(6, 182, 212, 0.4)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    flexWrap: 'wrap',
   },
-  spatialTimerText: {
-    color: '#22d3ee',
-    fontSize: 10,
-    fontWeight: '700',
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-  },
-  spatialTechText: {
-    color: '#94a3b8',
-    fontSize: 11,
-    marginTop: 2,
-  },
-  spatialProgressBar: {
-    height: 5,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 3,
-    overflow: 'hidden',
-    marginTop: 2,
-  },
-  spatialProgressFill: {
-    height: '100%',
-    borderRadius: 3,
-  },
-  spatialProgressText: {
-    color: '#cbd5e1',
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  searchBoxContainer: {
-    flex: 1,
-    minWidth: 260,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(14, 165, 233, 0.3)',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  searchInput: {
-    flex: 1,
-    color: '#ffffff',
-    fontSize: 13,
-    padding: 0,
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-  },
-  clearSearchBtn: {
-    padding: 2,
-  },
-  radarBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  radarBtnText: {
-    color: '#ffffff',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  addVehicleBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#0ea5e9',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  addVehicleBtnText: {
-    color: '#ffffff',
-    fontSize: 11,
-    fontWeight: 'bold',
-  },
-  noSearchMatchCard: {
-    width: '100%',
-    padding: 40,
-    backgroundColor: '#121a2b',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-  },
-  noSearchMatchTitle: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  noSearchMatchSub: {
-    color: '#64748b',
-    fontSize: 13,
-    textAlign: 'center',
-  },
-  pinBtn: { width: 20, height: 20, borderRadius: 4, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.08)', alignItems: 'center', justifyContent: 'center' },
 });
 
 

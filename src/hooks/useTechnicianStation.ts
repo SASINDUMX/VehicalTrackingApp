@@ -4,101 +4,78 @@ import { usePermissions } from "./usePermissions";
 import { getRoleBay, getTechName } from "../constants/bays";
 import { BayZone, TaskType } from "../types/vehicle";
 import { matchesVehicleSearch } from "../utils/searchUtils";
-import { getTaskTypeForBay, getActiveStageNetSeconds } from "../utils/vehicleUtils";
-import { getCurrentActiveBreak } from "../utils/workshopHoursUtils";
+import { getTaskTypeForBay, getActiveStageNetSeconds, computeVehicleTimersMap, sortWorkshopVehicles } from "../utils/vehicleUtils";
 
 export interface PendingTransfer {
   vehicleId: string;
   vehicleNo: string;
   targetZone: BayZone;
   targetZoneName: string;
+  autoCompleteTaskName?: string | null;
 }
 
-const computeVehicleTimersMap = (vehicleList: any[]) => {
-  const updated: Record<string, string> = {};
-  const now = new Date();
-  const activeBreak = getCurrentActiveBreak(now);
-
-  vehicleList.forEach((v) => {
-    const lastLog = v.stage_logs[v.stage_logs.length - 1];
-    const isPaused = Boolean(v.is_paused || (lastLog && lastLog.is_paused));
-    const pausedAt = v.paused_at || (lastLog && lastLog.paused_at);
-    const pausedSeconds = v.paused_seconds || (lastLog && lastLog.paused_seconds) || 0;
-
-    if (lastLog && !lastLog.exited_at) {
-      if (!lastLog.work_started_at) {
-        // IDLE state: waiting for technician to start work
-        const enterMs = new Date(lastLog.entered_at).getTime();
-        const idleSec = Math.max(0, Math.floor((now.getTime() - enterMs) / 1000));
-        const hours = Math.floor(idleSec / 3600);
-        const mins = Math.floor((idleSec % 3600) / 60);
-        const secs = idleSec % 60;
-        const padSec = secs < 10 ? `0${secs}` : `${secs}`;
-        const timeStr = hours > 0 ? `${hours}h ${mins}m ${padSec}s` : `${mins}m ${padSec}s`;
-        updated[v.id] = `IDLE · ${timeStr}`;
-      } else {
-        // ACTIVE state: technician work in progress
-        const workStartMs = new Date(lastLog.work_started_at).getTime();
-        const activeSec = Math.max(0, Math.floor((now.getTime() - workStartMs) / 1000));
-        const hours = Math.floor(activeSec / 3600);
-        const mins = Math.floor((activeSec % 3600) / 60);
-        const secs = activeSec % 60;
-        const padSec = secs < 10 ? `0${secs}` : `${secs}`;
-        const timeStr = hours > 0 ? `${hours}h ${mins}m ${padSec}s` : `${mins}m ${padSec}s`;
-
-        if (activeBreak) {
-          updated[v.id] = `⏸ ${timeStr} (${activeBreak.name})`;
-        } else {
-          updated[v.id] = timeStr;
-        }
-      }
-    } else {
-      updated[v.id] = "0m 00s";
-    }
-  });
-
-  return updated;
-};
-
 export const useTechnicianStation = () => {
-  const { vehicles, currentRole, toggleTaskCompletion, transferVehicleZone, toggleStageTimer, startStageWork, isLoading, searchQuery, setSelectedVehicle } = useVehicles();
-  const { canMarkTaskDone, canTransferVehicle, canControlTimer, canStartWork } = usePermissions();
+  const { vehicles, activeTab, toggleTaskCompletion, transferVehicleZone, startStageWork, isLoading, searchQuery, showMyVehiclesOnly, setSelectedVehicle } = useVehicles();
+  const { canMarkTaskDone, canTransferVehicle, canStartWork, currentRole, displayName } = usePermissions();
 
-  const activeBay = getRoleBay(currentRole);
-  const techName = getTechName(currentRole);
+  const activeBay: BayZone = (activeTab === 'hoist' || activeTab === 'alignment') ? activeTab : 'workshop';
+  const techName = displayName;
   const activeTaskType: TaskType = getTaskTypeForBay(activeBay);
 
   const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
   const [pendingTransfer, setPendingTransfer] = useState<PendingTransfer | null>(null);
+  const [isDispatching, setIsDispatching] = useState<boolean>(false);
+  const [startingWorkVehicleIds, setStartingWorkVehicleIds] = useState<Record<string, boolean>>({});
 
   const toggleExpand = (id: string) => {
     setExpandedCards(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const handleRequestTransfer = (vehicleId: string, vehicleNo: string, targetZone: BayZone, targetZoneName: string) => {
-    setPendingTransfer({ vehicleId, vehicleNo, targetZone, targetZoneName });
+  const handleStartWork = async (vehicleId: string) => {
+    if (startingWorkVehicleIds[vehicleId]) return;
+    setStartingWorkVehicleIds(prev => ({ ...prev, [vehicleId]: true }));
+    try {
+      await startStageWork(vehicleId, techName);
+    } finally {
+      setStartingWorkVehicleIds(prev => {
+        const next = { ...prev };
+        delete next[vehicleId];
+        return next;
+      });
+    }
   };
 
-  const handleConfirmTransfer = () => {
-    if (pendingTransfer) {
-      transferVehicleZone(pendingTransfer.vehicleId, pendingTransfer.targetZone, techName);
-      setPendingTransfer(null);
+  const handleRequestTransfer = (
+    vehicleId: string,
+    vehicleNo: string,
+    targetZone: BayZone,
+    targetZoneName: string,
+    autoCompleteTaskName?: string | null
+  ) => {
+    if (isDispatching) return;
+    setPendingTransfer({ vehicleId, vehicleNo, targetZone, targetZoneName, autoCompleteTaskName });
+  };
+
+  const handleConfirmTransfer = async () => {
+    if (pendingTransfer && !isDispatching) {
+      setIsDispatching(true);
+      try {
+        const success = await transferVehicleZone(pendingTransfer.vehicleId, pendingTransfer.targetZone, pendingTransfer.targetZoneName, techName);
+        if (success) {
+          setPendingTransfer(null);
+        }
+      } finally {
+        setIsDispatching(false);
+      }
     }
   };
 
   const bayVehicles = useMemo(() => {
-    return vehicles
-      .filter(v => {
-        const matchesBay = v.current_zone === activeBay && !v.is_finished;
-        return matchesBay && matchesVehicleSearch(v.vehicle_no, searchQuery);
-      })
-      .sort((a, b) => {
-        const lastLogA = a.stage_logs[a.stage_logs.length - 1];
-        const lastLogB = b.stage_logs[b.stage_logs.length - 1];
-        const timeA = lastLogA?.entered_at ? new Date(lastLogA.entered_at).getTime() : new Date(a.intake_at).getTime();
-        const timeB = lastLogB?.entered_at ? new Date(lastLogB.entered_at).getTime() : new Date(b.intake_at).getTime();
-        return timeA - timeB;
-      });
+    const list = vehicles.filter(v => {
+      const matchesBay = v.current_zone === activeBay && !v.is_finished;
+      return matchesBay && matchesVehicleSearch(v.vehicle_no, searchQuery);
+    });
+    return sortWorkshopVehicles(list);
   }, [vehicles, activeBay, searchQuery]);
 
   const [elapsedTimes, setElapsedTimes] = useState<Record<string, string>>(() => computeVehicleTimersMap(bayVehicles));
@@ -122,17 +99,19 @@ export const useTechnicianStation = () => {
     elapsedTimes,
     expandedCards,
     pendingTransfer,
+    isDispatching,
     isLoading,
     searchQuery,
+    showMyVehiclesOnly,
     currentRole,
     canMarkTaskDone,
     canTransferVehicle,
-    canControlTimer,
     canStartWork,
+    startingWorkVehicleIds,
     toggleExpand,
     toggleTaskCompletion,
-    toggleStageTimer,
     startStageWork,
+    handleStartWork,
     setSelectedVehicle,
     setPendingTransfer,
     handleRequestTransfer,
