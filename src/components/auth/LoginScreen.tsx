@@ -9,14 +9,16 @@ import {
   Platform,
   ActivityIndicator,
   ScrollView,
+  Image,
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import {
-  Car,
   LogIn,
   AlertCircle,
 } from 'lucide-react-native';
+
+const appLogo = require('../../../assets/icon.png');
 
 export const LoginScreen: React.FC = () => {
   const { signIn } = useAuth();
@@ -56,8 +58,12 @@ export const LoginScreen: React.FC = () => {
         {/* Logo */}
         <View style={styles.logoSection}>
           <View style={[styles.logoCircleOuter, { backgroundColor: colors.primaryDim }]}>
-            <View style={[styles.logoCircleInner, { backgroundColor: colors.primary }]}>
-              <Car size={40} color="#ffffff" />
+            <View style={[styles.logoCircleInner, { backgroundColor: '#0b0f19', borderColor: colors.primaryBorder, borderWidth: 1 }]}>
+              <Image
+                source={appLogo}
+                style={styles.logoImage}
+                resizeMode="cover"
+              />
             </View>
           </View>
           <Text style={[styles.appTitle, { color: colors.textPrimary }]}>UNITED MOTORS</Text>
@@ -188,12 +194,18 @@ const styles = StyleSheet.create({
         }),
   },
   logoCircleInner: {
-    width: 64,
-    height: 64,
-    borderRadius: 18,
-    backgroundColor: '#06b6d4',
+    width: 68,
+    height: 68,
+    borderRadius: 20,
+    backgroundColor: '#0b0f19',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  logoImage: {
+    width: 68,
+    height: 68,
+    borderRadius: 20,
   },
   appTitle: {
     color: '#ffffff',
