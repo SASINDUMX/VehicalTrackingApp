@@ -37,6 +37,12 @@ export const formatVehicleNoInput = (raw: string, prev: string = ''): string => 
       const parts = clean.split('-');
       const prefix = parts[0].replace(/\D/g, '').slice(0, 3);
       const suffix = parts.slice(1).join('').replace(/\D/g, '').slice(0, 4);
+
+      // Require minimum 2 digits before allowing hyphen (e.g. 14-, 300-)
+      if (prefix.length < 2) {
+        return prefix;
+      }
+
       if (clean.endsWith('-') && suffix.length === 0) {
         return `${prefix}-`;
       }
