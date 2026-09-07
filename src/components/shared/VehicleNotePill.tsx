@@ -45,8 +45,8 @@ export const VehicleNotePill: React.FC<VehicleNotePillProps> = ({
     });
   };
 
-  const urgentLabel = compact ? '⚡' : '⚡ URGENT';
-  const remarksLabel = compact ? '📝' : '📝 REMARKS';
+  const urgentLabel = '⚡ URGENT';
+  const remarksLabel = compact ? '📝 NOTE' : '📝 REMARKS';
 
   // If urgent (even if remarks also exist), prioritize urgent badge
   if (isUrgent) {

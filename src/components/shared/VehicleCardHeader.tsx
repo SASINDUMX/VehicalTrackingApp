@@ -49,7 +49,7 @@ export const VehicleCardHeader: React.FC<VehicleCardHeaderProps> = ({
       {/* Left: License Plate & Vehicle Urgent/Service Note Pill */}
       <View style={styles.plateGroup}>
         <LicensePlate number={vehicle.vehicle_no} size={size} />
-        <VehicleNotePill vehicle={vehicle} size={size === 'sm' ? 'sm' : 'md'} compact />
+        <VehicleNotePill vehicle={vehicle} size={size === 'sm' ? 'sm' : 'md'} />
       </View>
 
       {/* Right: Timer, Start Work Arrow, Pin Bookmark, Optional Accessory, and Chevron */}

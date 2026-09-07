@@ -87,7 +87,7 @@ export const VehicleDetailsModal: React.FC = () => {
   const formatSLSTime = (dateStr?: string | null) => {
     if (!dateStr) return '--:--';
     const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return '--:--';
+    if (Number.isNaN(d.getTime())) return '--:--';
     return d.toLocaleTimeString('en-US', {
       timeZone: 'Asia/Colombo',
       hour: '2-digit',

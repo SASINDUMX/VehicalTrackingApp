@@ -73,7 +73,7 @@ export const getBreakOverlap = (
   const start = typeof startTime === 'string' ? new Date(startTime) : startTime;
   const end = typeof endTime === 'string' ? new Date(endTime) : endTime;
 
-  if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) {
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
     return { breakSeconds: 0, breakNames: [] };
   }
 
@@ -125,7 +125,7 @@ export const getNetWorkingSeconds = (
   const start = typeof startTime === 'string' ? new Date(startTime) : startTime;
   const end = typeof endTime === 'string' ? new Date(endTime) : endTime;
 
-  if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) {
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
     return 0;
   }
 

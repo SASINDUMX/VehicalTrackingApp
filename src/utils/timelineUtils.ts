@@ -140,11 +140,11 @@ export const computeVehicleTimelineStages = (
     const rawCompletedAt = isTaskActuallyDone ? currentTask?.completed_at : null;
 
     const isExited = Boolean(log.exited_at);
-    const completedTimeMs = rawCompletedAt ? new Date(rawCompletedAt).getTime() : NaN;
+    const completedTimeMs = rawCompletedAt ? new Date(rawCompletedAt).getTime() : Number.NaN;
     const exitTimeMs = log.exited_at ? new Date(log.exited_at).getTime() : Infinity;
 
     // Resilient re-visit check: task was only done in this visit if completed on or before this visit exited
-    const wasCompletedInThisVisit = !isNaN(completedTimeMs) && completedTimeMs <= exitTimeMs;
+    const wasCompletedInThisVisit = !Number.isNaN(completedTimeMs) && completedTimeMs <= exitTimeMs;
     const workCompletedAt = wasCompletedInThisVisit ? rawCompletedAt : null;
 
     const isCompleted = isExited && !isCurrent && wasCompletedInThisVisit;

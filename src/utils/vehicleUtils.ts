@@ -38,12 +38,12 @@ export const getVehicleEffectiveEndDate = (vehicle: Vehicle): Date => {
   const inspLog = vehicle.stage_logs.find(l => l.to_zone === 'inspection');
   if (inspLog?.entered_at) {
     const d = new Date(inspLog.entered_at);
-    if (!isNaN(d.getTime())) return d;
+    if (!Number.isNaN(d.getTime())) return d;
   }
 
   if (vehicle.completed_at) {
     const d = new Date(vehicle.completed_at);
-    if (!isNaN(d.getTime())) return d;
+    if (!Number.isNaN(d.getTime())) return d;
   }
 
   return new Date();
@@ -52,7 +52,7 @@ export const getVehicleEffectiveEndDate = (vehicle: Vehicle): Date => {
 export const calculateTotalGrossIntakeSec = (vehicle: Vehicle): number => {
   if (!vehicle || !vehicle.intake_at) return 0;
   const start = new Date(vehicle.intake_at).getTime();
-  if (isNaN(start)) return 0;
+  if (Number.isNaN(start)) return 0;
 
   const end = getVehicleEffectiveEndDate(vehicle).getTime();
   return Math.max(0, Math.floor((end - start) / 1000));
@@ -105,7 +105,7 @@ export const computeVehicleModalTimers = (vehicle: Vehicle): VehicleModalTimers 
   // Net & Gross Elapsed Time since Intake (stops when entering inspection zone or finished)
   const netSec = getNetWorkingSeconds(vehicle.intake_at, effectiveEnd);
   const intakeMs = new Date(vehicle.intake_at).getTime();
-  const grossSec = isNaN(intakeMs) ? 0 : Math.max(0, Math.floor((effectiveEnd.getTime() - intakeMs) / 1000));
+  const grossSec = Number.isNaN(intakeMs) ? 0 : Math.max(0, Math.floor((effectiveEnd.getTime() - intakeMs) / 1000));
 
   let stageDuration = '0m 00s';
   let stageDurationRaw = '0m 00s';
@@ -125,19 +125,19 @@ export const computeVehicleModalTimers = (vehicle: Vehicle): VehicleModalTimers 
 
     if (!lastLog.work_started_at) {
       const enterMs = new Date(lastLog.entered_at).getTime();
-      const idleSec = isNaN(enterMs) ? 0 : Math.max(0, Math.floor((now.getTime() - enterMs) / 1000));
+      const idleSec = Number.isNaN(enterMs) ? 0 : Math.max(0, Math.floor((now.getTime() - enterMs) / 1000));
       const formatted = formatDurationString(idleSec, true);
       stageDuration = `IDLE · ${formatted}`;
       stageDurationRaw = formatted;
     } else if (currentTask && currentTask.is_completed && currentTask.completed_at) {
       const completedMs = new Date(currentTask.completed_at).getTime();
-      const postIdleSec = isNaN(completedMs) ? 0 : Math.max(0, Math.floor((now.getTime() - completedMs) / 1000));
+      const postIdleSec = Number.isNaN(completedMs) ? 0 : Math.max(0, Math.floor((now.getTime() - completedMs) / 1000));
       const formatted = formatDurationString(postIdleSec, true);
       stageDuration = `IDLE · ${formatted}`;
       stageDurationRaw = formatted;
     } else {
       const workStartMs = new Date(lastLog.work_started_at).getTime();
-      const activeSec = isNaN(workStartMs) ? 0 : Math.max(0, Math.floor((now.getTime() - workStartMs) / 1000));
+      const activeSec = Number.isNaN(workStartMs) ? 0 : Math.max(0, Math.floor((now.getTime() - workStartMs) / 1000));
       const timeStr = formatDurationString(activeSec, true);
       const activeBreak = getCurrentActiveBreak(now);
       if (activeBreak) {
@@ -247,8 +247,8 @@ export const getStageTiming = (
   const queueInSec = Math.max(0, Math.floor((workStartedMs - enteredMs) / 1000));
 
   // Case 2: Work has completed during this stage (Task marked Done on or before exit)
-  const completedMs = workCompletedAt ? new Date(workCompletedAt).getTime() : NaN;
-  const isDoneInThisStage = !isNaN(completedMs) && completedMs <= endMs;
+  const completedMs = workCompletedAt ? new Date(workCompletedAt).getTime() : Number.NaN;
+  const isDoneInThisStage = !Number.isNaN(completedMs) && completedMs <= endMs;
 
   if (isDoneInThisStage) {
     // Clamp completedMs between workStartedMs and endMs
@@ -299,7 +299,7 @@ export const getActiveStageNetSeconds = (
   if (!enteredAt) return 0;
   const start = new Date(enteredAt);
   const end = exitedAt ? new Date(exitedAt) : new Date();
-  if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) return 0;
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) return 0;
 
   return getNetWorkingSeconds(start, end);
 };
@@ -333,7 +333,7 @@ export const getStageDurationBreakdown = (
   const start = new Date(enteredAt);
   const end = exitedAt ? new Date(exitedAt) : new Date();
 
-  if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) {
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
     return {
       netSec: 0,
       grossSec: 0,
@@ -422,12 +422,12 @@ export const computeVehicleTimersMap = (vehicleList: Vehicle[]): Record<string, 
       if (!lastLog.work_started_at) {
         // IDLE state: waiting for technician to start work
         const enterMs = new Date(lastLog.entered_at).getTime();
-        const idleSec = isNaN(enterMs) ? 0 : Math.max(0, Math.floor((now.getTime() - enterMs) / 1000));
+        const idleSec = Number.isNaN(enterMs) ? 0 : Math.max(0, Math.floor((now.getTime() - enterMs) / 1000));
         updated[v.id] = formatDurationString(idleSec, true);
       } else {
         // ACTIVE state: technician work in progress
         const workStartMs = new Date(lastLog.work_started_at).getTime();
-        const activeSec = isNaN(workStartMs) ? 0 : Math.max(0, Math.floor((now.getTime() - workStartMs) / 1000));
+        const activeSec = Number.isNaN(workStartMs) ? 0 : Math.max(0, Math.floor((now.getTime() - workStartMs) / 1000));
         const timeStr = formatDurationString(activeSec, true);
 
         // Check if task for current bay is already marked completed (Queue Out state)
@@ -436,7 +436,7 @@ export const computeVehicleTimersMap = (vehicleList: Vehicle[]): Record<string, 
 
         if (currentTask && currentTask.is_completed && currentTask.completed_at) {
           const completedMs = new Date(currentTask.completed_at).getTime();
-          const queueOutSec = isNaN(completedMs) ? 0 : Math.max(0, Math.floor((now.getTime() - completedMs) / 1000));
+          const queueOutSec = Number.isNaN(completedMs) ? 0 : Math.max(0, Math.floor((now.getTime() - completedMs) / 1000));
           updated[v.id] = formatDurationString(queueOutSec, true);
         } else if (activeBreak) {
           updated[v.id] = `⏸ ${timeStr}`;
@@ -477,8 +477,8 @@ export const sortWorkshopVehicles = (
     const lastLogB = b.stage_logs[b.stage_logs.length - 1];
     const timeA = lastLogA?.entered_at ? new Date(lastLogA.entered_at).getTime() : new Date(a.intake_at).getTime();
     const timeB = lastLogB?.entered_at ? new Date(lastLogB.entered_at).getTime() : new Date(b.intake_at).getTime();
-    const safeA = isNaN(timeA) ? 0 : timeA;
-    const safeB = isNaN(timeB) ? 0 : timeB;
+    const safeA = Number.isNaN(timeA) ? 0 : timeA;
+    const safeB = Number.isNaN(timeB) ? 0 : timeB;
     return safeA - safeB;
   });
 };

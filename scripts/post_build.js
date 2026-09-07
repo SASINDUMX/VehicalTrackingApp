@@ -20,11 +20,16 @@ if (fs.existsSync(distHtmlPath)) {
     <link rel="apple-touch-icon" sizes="512x512" href="/icon.png" />
   `;
 
+  if (!html.includes('viewport-fit=cover')) {
+    html = html.replace('shrink-to-fit=no', 'shrink-to-fit=no, viewport-fit=cover');
+  }
+
   if (!html.includes('apple-mobile-web-app-capable')) {
     html = html.replace('</head>', `${pwaTags}</head>`);
-    fs.writeFileSync(distHtmlPath, html);
     console.log('Injected standalone PWA tags into dist/index.html');
   }
+
+  fs.writeFileSync(distHtmlPath, html);
 }
 
 // Copy public/ assets into dist/
