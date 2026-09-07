@@ -162,7 +162,7 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
           const cleaned = prev
             .map(v => {
               const d = new Date(v.intake_at || v.created_at);
-              if (!v.is_finished && !isNaN(d.getTime()) && d < startOfToday) {
+              if (!v.is_finished && !Number.isNaN(d.getTime()) && d < startOfToday) {
                 if (v.current_zone === 'inspection') {
                   return {
                     ...v,
@@ -725,8 +725,8 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
       const bayTask = targetVehicle.tasks.find(
         t => APP_TERMINOLOGY.tasks[t.task_type]?.stationId === targetVehicle.current_zone
       );
-      const taskDoneMs = (currentBayTask ? exitMs : (bayTask?.completed_at ? new Date(bayTask.completed_at).getTime() : NaN));
-      const queueOut = (!isNaN(taskDoneMs) && taskDoneMs >= enterMs && taskDoneMs <= exitMs)
+      const taskDoneMs = (currentBayTask ? exitMs : (bayTask?.completed_at ? new Date(bayTask.completed_at).getTime() : Number.NaN));
+      const queueOut = (!Number.isNaN(taskDoneMs) && taskDoneMs >= enterMs && taskDoneMs <= exitMs)
         ? Math.max(0, Math.floor((exitMs - taskDoneMs) / 1000))
         : 0;
       const totalIdleForBay = lastLog?.work_started_at ? (queueIn + queueOut) : queueIn;
@@ -769,8 +769,8 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
             const bayTask = v.tasks.find(
               t => APP_TERMINOLOGY.tasks[t.task_type]?.stationId === v.current_zone
             );
-            const taskCompletedMs = bayTask?.completed_at ? new Date(bayTask.completed_at).getTime() : NaN;
-            const queueOut = (!isNaN(taskCompletedMs) && taskCompletedMs >= entered && taskCompletedMs <= exitTime)
+            const taskCompletedMs = bayTask?.completed_at ? new Date(bayTask.completed_at).getTime() : Number.NaN;
+            const queueOut = (!Number.isNaN(taskCompletedMs) && taskCompletedMs >= entered && taskCompletedMs <= exitTime)
               ? Math.max(0, Math.floor((exitTime - taskCompletedMs) / 1000))
               : 0;
 

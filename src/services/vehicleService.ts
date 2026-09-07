@@ -49,7 +49,7 @@ export const vehicleService = {
 
       const stale = unfinished.filter(v => {
         const d = new Date(v.intake_at || v.created_at);
-        return !isNaN(d.getTime()) && d < startOfToday;
+        return !Number.isNaN(d.getTime()) && d < startOfToday;
       });
 
       if (stale.length === 0) return { completedCount: 0, deletedCount: 0 };

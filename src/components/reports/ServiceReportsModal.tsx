@@ -480,13 +480,13 @@ export const ServiceReportsModal: React.FC = () => {
                     const activeWorkSec = totalActiveSec;
                     const { breakSeconds } = getBreakOverlap(start, end);
 
-                    const intakeDateStr = !isNaN(start.getTime())
+                    const intakeDateStr = !Number.isNaN(start.getTime())
                       ? start.toLocaleDateString('en-US', { day: '2-digit', month: 'short', timeZone: 'Asia/Colombo' })
                       : '--';
-                    const intakeStr = !isNaN(start.getTime())
+                    const intakeStr = !Number.isNaN(start.getTime())
                       ? start.toLocaleTimeString('en-US', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit', hour12: true })
                       : '--:--';
-                    const finishedStr = isEffectiveDone && effectiveCompletionDate && !isNaN(effectiveCompletionDate.getTime())
+                    const finishedStr = isEffectiveDone && effectiveCompletionDate && !Number.isNaN(effectiveCompletionDate.getTime())
                       ? effectiveCompletionDate.toLocaleTimeString('en-US', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit', hour12: true })
                       : 'In Progress';
 

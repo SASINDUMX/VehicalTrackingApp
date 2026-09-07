@@ -31,40 +31,27 @@ const safeStorage = {
   },
 };
 
-const getStoredCredentials = () => {
-  const localUrl = safeStorage.getItem('um_supabase_url') || '';
-  const localKey = safeStorage.getItem('um_supabase_key') || '';
-
-  return {
-    url: localUrl || SUPABASE_URL,
-    key: localKey || SUPABASE_ANON_KEY,
-  };
+const isValidSupabaseUrl = (url: string): boolean => {
+  try {
+    const parsed = new URL(url);
+    return (
+      (parsed.protocol === 'https:' && parsed.hostname.endsWith('supabase.co')) ||
+      (parsed.protocol === 'http:' && parsed.hostname === '127.0.0.1')
+    );
+  } catch {
+    return false;
+  }
 };
 
-const { url: supabaseUrl, key: supabaseAnonKey } = getStoredCredentials();
-
 export const isSupabaseConnected = Boolean(
-  supabaseUrl && supabaseAnonKey && supabaseUrl.includes('supabase.co')
+  SUPABASE_URL &&
+  SUPABASE_ANON_KEY &&
+  isValidSupabaseUrl(SUPABASE_URL)
 );
 
 export const supabase: SupabaseClient | null = isSupabaseConnected
-  ? createClient(supabaseUrl, supabaseAnonKey)
+  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
   : null;
 
-export const saveSupabaseCredentials = (url: string, key: string) => {
-  safeStorage.setItem('um_supabase_url', url.trim());
-  safeStorage.setItem('um_supabase_key', key.trim());
-  if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    window.location.reload();
-  }
-};
-
-export const clearSupabaseCredentials = () => {
-  safeStorage.removeItem('um_supabase_url');
-  safeStorage.removeItem('um_supabase_key');
-  if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    window.location.reload();
-  }
-};
-
 export { safeStorage };
+

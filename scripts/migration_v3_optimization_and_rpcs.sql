@@ -183,7 +183,7 @@ BEGIN
     WHERE id = v_active_log_id;
   END IF;
 
-  IF p_tech_name IS NOT NULL AND p_tech_name != '' THEN
+  IF nullif(trim(p_tech_name), '') IS NOT NULL THEN
     UPDATE vehicles
     SET assigned_tech = p_tech_name
     WHERE id = p_vehicle_id;

@@ -30,7 +30,7 @@ export type DateFilterPreset = 'today' | 'yesterday' | '7days' | 'month' | '3mon
 export type StatusFilterPreset = 'all' | 'completed' | 'in_progress';
 
 export const formatDuration = (totalSeconds: number): string => {
-  if (isNaN(totalSeconds) || totalSeconds <= 0) return '0m 00s';
+  if (Number.isNaN(totalSeconds) || totalSeconds <= 0) return '0m 00s';
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
@@ -53,7 +53,7 @@ export const getVehicleEffectiveCompletion = (v: Vehicle): { isEffectiveDone: bo
   const inspLog = v.stage_logs.find(l => l.to_zone === 'inspection');
   if (inspLog?.entered_at) {
     const d = new Date(inspLog.entered_at);
-    if (!isNaN(d.getTime())) {
+    if (!Number.isNaN(d.getTime())) {
       return { isEffectiveDone: true, effectiveCompletionDate: d };
     }
   }
@@ -64,7 +64,7 @@ export const getVehicleEffectiveCompletion = (v: Vehicle): { isEffectiveDone: bo
 
   if (v.is_finished && v.completed_at) {
     const d = new Date(v.completed_at);
-    if (!isNaN(d.getTime())) {
+    if (!Number.isNaN(d.getTime())) {
       return { isEffectiveDone: true, effectiveCompletionDate: d };
     }
   }
@@ -87,7 +87,7 @@ export const filterVehiclesForReport = (
   return vehicles.filter(v => {
     // 1. Date Filter
     const intakeDate = new Date(v.intake_at || v.created_at);
-    if (isNaN(intakeDate.getTime())) return true;
+    if (Number.isNaN(intakeDate.getTime())) return true;
 
     if (datePreset === 'today' && intakeDate < startOfToday) return false;
     if (datePreset === 'yesterday' && (intakeDate < startOfYesterday || intakeDate >= startOfToday)) return false;
@@ -486,10 +486,10 @@ export const exportServiceLogsToCSV = (
       .join('; ');
 
     const statusLabel = isEffectiveDone ? 'DONE' : (v.current_zone === 'workshop' ? 'GENERAL' : v.current_zone.toUpperCase());
-    const intakeDateStr = !isNaN(start.getTime())
+    const intakeDateStr = !Number.isNaN(start.getTime())
       ? start.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Colombo' })
       : '--';
-    const intakeTimeStr = !isNaN(start.getTime())
+    const intakeTimeStr = !Number.isNaN(start.getTime())
       ? start.toLocaleTimeString('en-US', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit', hour12: true })
       : '--:--';
 
@@ -576,10 +576,10 @@ export const exportServiceLogsToPDF = (
     const statusBg = isEffectiveDone ? '#dcfce7' : v.current_zone === 'workshop' ? '#e0f2fe' : v.current_zone === 'alignment' ? '#ecfdf5' : '#fef3c7';
     const statusColor = isEffectiveDone ? '#15803d' : v.current_zone === 'workshop' ? '#0369a1' : v.current_zone === 'alignment' ? '#047857' : '#b45309';
 
-    const intakeDateStr = !isNaN(start.getTime())
+    const intakeDateStr = !Number.isNaN(start.getTime())
       ? start.toLocaleDateString('en-US', { day: '2-digit', month: 'short', timeZone: 'Asia/Colombo' })
       : '--';
-    const intakeTimeStr = !isNaN(start.getTime())
+    const intakeTimeStr = !Number.isNaN(start.getTime())
       ? start.toLocaleTimeString('en-US', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit', hour12: true })
       : '--:--';
 
@@ -673,8 +673,8 @@ export const exportServiceLogsToPDF = (
           .table-container td { font-weight: 700; }
           .th-top { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
           .th-sub { font-size: 8.5px; font-weight: 700; text-transform: uppercase; }
-          .footer-sign { display: flex; justify-content: space-between; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748b; }
-          .sign-line { width: 180px; border-top: 1px dashed #94a3b8; margin-top: 30px; text-align: center; padding-top: 4px; }
+          .footer-sign { display: flex; justify-content: flex-end; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748b; }
+          .sign-line { width: 220px; border-top: 1px dashed #94a3b8; margin-top: 35px; text-align: center; padding-top: 6px; font-weight: 600; }
         </style>
       </head>
       <body>
@@ -794,12 +794,6 @@ export const exportServiceLogsToPDF = (
         </div>
 
         <div class="footer-sign">
-          <div>
-            <div class="sign-line">Prepared by (Supervisor)</div>
-          </div>
-          <div>
-            <div class="sign-line">Verified by (Service Advisor)</div>
-          </div>
           <div>
             <div class="sign-line">Workshop General Manager</div>
           </div>

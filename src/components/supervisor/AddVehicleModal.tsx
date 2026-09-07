@@ -131,7 +131,7 @@ export const AddVehicleModal: React.FC = () => {
                   },
                   isNoValid && styles.inputValid
                 ]}
-                placeholder="e.g. CAB-7712, WP-1234, or 14-1234"
+                placeholder="e.g. CAB-7712, 300-4234, or WP-1234"
                 placeholderTextColor={colors.textMuted}
                 value={vehicleNo}
                 onChangeText={handleVehicleNoChange}
@@ -149,7 +149,7 @@ export const AddVehicleModal: React.FC = () => {
                   ? '✓ Valid registration format'
                   : isNoTouched
                   ? '✕ Invalid registration format'
-                  : 'Format: CAB-1234, WP-1234, or 14-1234'}
+                  : 'Format: CAB-1234, 300-4234, or 14-1234'}
               </Text>
             </View>
 
