@@ -312,7 +312,9 @@ const targets512 = [
   'assets/splash-icon.png',
   'assets/adaptive-icon.png',
   'public/icon.png',
-  'public/favicon.png'
+  'public/favicon.png',
+  'public/adaptive-icon.png',
+  'public/splash-icon.png'
 ];
 
 targets512.forEach(t => {

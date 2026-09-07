@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Animated, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Animated, Platform, Image } from 'react-native';
 import { useVehicles } from '../../context/VehicleContext';
 import { useAuth } from '../../context/AuthContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { chimeService } from '../../lib/chime';
 import { hapticService } from '../../lib/haptics';
-import { Car, LogOut, User, Volume2, VolumeX, Shield, Smartphone, Sun, Moon, Monitor, FileText, ChevronLeft } from 'lucide-react-native';
+import { LogOut, User, Volume2, VolumeX, Shield, Smartphone, Sun, Moon, Monitor, FileText, ChevronLeft } from 'lucide-react-native';
 import { useTheme } from '../../context/ThemeContext';
+
+const appLogo = require('../../../assets/icon.png');
 
 import { getCurrentActiveBreak } from '../../utils/workshopHoursUtils';
 import { APP_TERMINOLOGY } from '../../constants/terminology';
@@ -116,8 +118,12 @@ export const Header: React.FC = () => {
     <>
       <View style={[styles.headerContainer, { backgroundColor: colors.surface, borderBottomColor: colors.borderGlass }]}>
         <View style={styles.brandRow}>
-          <View style={[styles.logoBox, { backgroundColor: colors.primary }]}>
-            <Car size={24} color="#ffffff" />
+          <View style={[styles.logoBox, { borderColor: colors.borderGlass }]}>
+            <Image
+              source={appLogo}
+              style={styles.logoImage}
+              resizeMode="cover"
+            />
           </View>
           <View style={styles.brandTextContainer}>
             <View style={styles.titleRow}>
@@ -349,21 +355,29 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   logoBox: {
-    width: 40,
-    height: 40,
+    width: 38,
+    height: 38,
     borderRadius: 10,
-    backgroundColor: '#0ea5e9',
+    backgroundColor: '#0b0f19',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.25)',
     ...(Platform.OS === 'web'
-      ? ({ boxShadow: '0px 2px 6px rgba(14, 165, 233, 0.3)' } as any)
+      ? ({ boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.35)' } as any)
       : {
-          shadowColor: '#0ea5e9',
+          shadowColor: '#000',
           shadowOffset: { width: 0, height: 2 },
           shadowOpacity: 0.3,
           shadowRadius: 6,
           elevation: 4,
         }),
+  },
+  logoImage: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
   },
   brandTextContainer: {
     gap: 2,

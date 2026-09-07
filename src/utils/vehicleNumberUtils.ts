@@ -22,8 +22,11 @@ export const formatVehicleNoInput = (raw: string, prev: string = ''): string => 
     return raw;
   }
 
+  // Convert space(s) to hyphen so typing space on keypad acts as typing hyphen seamlessly
+  const withHyphen = raw.replace(/\s+/g, '-').replace(/-+/g, '-');
+
   // Strip all invalid characters
-  const clean = raw.toUpperCase().replace(/[^A-Z0-9-]/g, '');
+  const clean = withHyphen.toUpperCase().replace(/[^A-Z0-9-]/g, '');
   if (!clean) return '';
 
   const startsWithDigit = /^\d/.test(clean);
@@ -34,6 +37,12 @@ export const formatVehicleNoInput = (raw: string, prev: string = ''): string => 
       const parts = clean.split('-');
       const prefix = parts[0].replace(/\D/g, '').slice(0, 3);
       const suffix = parts.slice(1).join('').replace(/\D/g, '').slice(0, 4);
+
+      // Require minimum 2 digits before allowing hyphen (e.g. 14-, 300-)
+      if (prefix.length < 2) {
+        return prefix;
+      }
+
       if (clean.endsWith('-') && suffix.length === 0) {
         return `${prefix}-`;
       }
@@ -85,7 +94,7 @@ export const formatVehicleNoInput = (raw: string, prev: string = ''): string => 
 
 export const isValidVehicleNo = (no: string): boolean => {
   if (!no) return false;
-  const trimmed = no.trim().toUpperCase();
+  const trimmed = no.trim().toUpperCase().replace(/\s+/g, '-');
 
   // Pattern 1: 2 or 3 digits - 4 digits (e.g. 14-1234, 300-4234, 301-1234)
   const isNumericFormat = /^\d{2,3}-\d{4}$/.test(trimmed);
