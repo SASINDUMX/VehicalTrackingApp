@@ -56,7 +56,6 @@ export const TechnicianStationView: React.FC = React.memo(() => {
         vehicle={vehicle}
         isExpanded={Boolean(expandedCards[vehicle.id])}
         isPinned={isPinned(vehicle.id)}
-        elapsedText={elapsedTimes[vehicle.id] || '0m 00s'}
         activeBay={activeBay}
         activeTaskType={activeTaskType}
         currentRole={currentRole}

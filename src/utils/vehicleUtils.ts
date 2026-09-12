@@ -102,10 +102,17 @@ export const computeVehicleModalTimers = (vehicle: Vehicle): VehicleModalTimers 
   const now = new Date();
   const effectiveEnd = getVehicleEffectiveEndDate(vehicle);
 
-  // Net & Gross Elapsed Time since Intake (stops when entering inspection zone or finished)
-  const netSec = getNetWorkingSeconds(vehicle.intake_at, effectiveEnd);
+  // Net & Gross Elapsed Time since Intake (authoritatively uses server-frozen metrics if completed)
+  const frozenNet = Number(vehicle.net_tat_seconds);
+  const netSec: number = vehicle.is_finished && !Number.isNaN(frozenNet) && frozenNet > 0
+    ? frozenNet
+    : getNetWorkingSeconds(vehicle.intake_at, effectiveEnd);
+
   const intakeMs = new Date(vehicle.intake_at).getTime();
-  const grossSec = Number.isNaN(intakeMs) ? 0 : Math.max(0, Math.floor((effectiveEnd.getTime() - intakeMs) / 1000));
+  const frozenGross = Number(vehicle.gross_tat_seconds);
+  const grossSec: number = vehicle.is_finished && !Number.isNaN(frozenGross) && frozenGross > 0
+    ? frozenGross
+    : (Number.isNaN(intakeMs) ? 0 : Math.max(0, Math.floor((effectiveEnd.getTime() - intakeMs) / 1000)));
 
   let stageDuration = '0m 00s';
   let stageDurationRaw = '0m 00s';

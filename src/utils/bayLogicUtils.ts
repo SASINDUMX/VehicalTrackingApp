@@ -44,9 +44,11 @@ export const computeVehicleBayStatus = (
   // Dispatch is unlocked after START WORK, or immediately if this bay has no required task (orphan/bypassed bay)
   const isCanDispatch = canTransferVehicle && (!isTaskRequiredForBay || !isStageIdle) && !isDispatching;
 
-  const canShowAlignmentBtn = activeBay !== 'alignment' && isAlignmentRequired && !isAlignmentDone;
-  const canShowHoistBtn = activeBay !== 'hoist' && isHoistRequired && !isHoistDone;
-  const canShowWorkshopBtn = activeBay !== 'workshop' && isWorkshopRequired && !isWorkshopDone;
+  // Multi-Pass Routing: Hoist and Workshop should ALWAYS remain available for time-sharing transfers
+  // even if their initial checklist item was marked completed in pass 1.
+  const canShowAlignmentBtn = activeBay !== 'alignment' && (!isAlignmentDone || isAlignmentRequired);
+  const canShowHoistBtn = activeBay !== 'hoist';
+  const canShowWorkshopBtn = activeBay !== 'workshop';
   const canShowAdvisorBtn = activeBay !== 'inspection' && !vehicle.is_finished;
   const hasAnyDispatchBtn = canShowAlignmentBtn || canShowHoistBtn || canShowWorkshopBtn || canShowAdvisorBtn;
 

@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
@@ -16,6 +17,7 @@ import {
   Download,
   Printer,
   X,
+  ArrowLeft,
   Calendar,
   CheckCircle2,
   Clock,
@@ -30,11 +32,14 @@ import {
   Coffee,
   Database,
   Zap,
+  Shield,
+  ClipboardList,
 } from 'lucide-react-native';
 import {
   DateFilterPreset,
   StatusFilterPreset,
   ReportKPIs,
+  ServerReportRecord,
   filterVehiclesForReport,
   getDatePresetRangeDescription,
   calculateReportKPIs,
@@ -54,16 +59,23 @@ import { LoadingSpot } from '../shared/LoadingSpot';
 import { EmptyStateCard } from '../shared/EmptyStateCard';
 import { Vehicle } from '../../types/vehicle';
 import { APP_TERMINOLOGY } from '../../constants/terminology';
+import { usePermissions } from '../../hooks/usePermissions';
+import { AuditTrailView } from './AuditTrailView';
 
 export const ServiceReportsModal: React.FC = () => {
-  const { vehicles, fetchHistoricalVehicles } = useVehicles();
+  const { vehicles, fetchHistoricalVehicles, setIsReportsModalOpen } = useVehicles();
   const { colors, isDark } = useTheme();
+  const { isSuperAdmin } = usePermissions();
 
+  const [activeReportTab, setActiveReportTab] = useState<'kpi' | 'audit'>('kpi');
   const [datePreset, setDatePreset] = useState<DateFilterPreset>('today');
   const [statusPreset, setStatusPreset] = useState<StatusFilterPreset>('all');
   const [reportVehicles, setReportVehicles] = useState<Vehicle[]>(vehicles);
   const [isLoadingReport, setIsLoadingReport] = useState<boolean>(false);
   const [isAuditModalOpen, setIsAuditModalOpen] = useState<boolean>(false);
+
+  const [customDate, setCustomDate] = useState<string>('');
+  const [customEndDate, setCustomEndDate] = useState<string>('');
 
   const DATE_PRESETS: { id: DateFilterPreset; label: string }[] = [
     { id: 'today', label: 'Today' },
@@ -71,6 +83,7 @@ export const ServiceReportsModal: React.FC = () => {
     { id: '7days', label: 'Last 7 Days' },
     { id: 'month', label: 'This Month' },
     { id: '3months', label: 'Last 3 Months' },
+    { id: 'custom', label: 'Custom Date / Range' },
   ];
 
   const STATUS_PRESETS: { id: StatusFilterPreset; label: string }[] = [
@@ -80,13 +93,14 @@ export const ServiceReportsModal: React.FC = () => {
   ];
 
   const [serverKPIs, setServerKPIs] = useState<ReportKPIs | null>(null);
+  const [serverRecords, setServerRecords] = useState<ServerReportRecord[] | null>(null);
 
   // Fetch historical data whenever preset changes
   useEffect(() => {
     let isCancelled = false;
     setServerKPIs(null);
+    setServerRecords(null);
 
-    // Fast-path: Prefetch server-side aggregated KPIs for the preset
     const now = new Date();
     let startDate: string | null = null;
     let endDate: string | null = null;
@@ -103,41 +117,109 @@ export const ServiceReportsModal: React.FC = () => {
       startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
     } else if (datePreset === '3months') {
       startDate = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate()).toISOString();
+    } else if (datePreset === 'custom') {
+      const startStr = customDate.trim();
+      const endStr = customEndDate.trim();
+
+      if (startStr) {
+        const parsedStart = new Date(startStr);
+        if (!Number.isNaN(parsedStart.getTime())) {
+          startDate = new Date(parsedStart.getFullYear(), parsedStart.getMonth(), parsedStart.getDate()).toISOString();
+        }
+      }
+
+      if (endStr) {
+        const parsedEnd = new Date(endStr);
+        if (!Number.isNaN(parsedEnd.getTime())) {
+          endDate = new Date(parsedEnd.getFullYear(), parsedEnd.getMonth(), parsedEnd.getDate(), 23, 59, 59, 999).toISOString();
+        }
+      } else if (startDate) {
+        // Single-day custom filter: End date defaults to 23:59:59 of the start day
+        const parsedStart = new Date(startStr);
+        endDate = new Date(parsedStart.getFullYear(), parsedStart.getMonth(), parsedStart.getDate(), 23, 59, 59, 999).toISOString();
+      }
     }
 
-    vehicleService.fetchReportKPIs({
+    setIsLoadingReport(true);
+
+    // Primary: Call the hardened PostgreSQL get_service_report_data RPC
+    vehicleService.fetchReportData({
       startDate,
       endDate,
       status: statusPreset,
     }).then(res => {
       if (!isCancelled && res) {
-        setServerKPIs(res as ReportKPIs);
+        if (res.kpis) setServerKPIs(res.kpis as ReportKPIs);
+        if (res.records && res.records.length > 0) {
+          setServerRecords(res.records as ServerReportRecord[]);
+          setIsLoadingReport(false);
+          return;
+        }
       }
-    }).catch(() => { /* ignore */ });
-
-    if (datePreset === 'today') {
-      setReportVehicles(vehicles);
-      setIsLoadingReport(false);
-    } else {
-      setIsLoadingReport(true);
-      fetchHistoricalVehicles(datePreset)
-        .then(data => {
-          if (!isCancelled) setReportVehicles(data);
-        })
-        .finally(() => {
-          if (!isCancelled) setIsLoadingReport(false);
-        });
-    }
+      
+      // Fallback: If RPC not yet applied, fallback to raw vehicles fetch
+      if (datePreset === 'today') {
+        setReportVehicles(vehicles);
+        setIsLoadingReport(false);
+      } else {
+        fetchHistoricalVehicles(datePreset, startDate || undefined, endDate || undefined)
+          .then(data => {
+            if (!isCancelled) setReportVehicles(data);
+          })
+          .finally(() => {
+            if (!isCancelled) setIsLoadingReport(false);
+          });
+      }
+    }).catch(() => {
+      if (datePreset === 'today') {
+        setReportVehicles(vehicles);
+        setIsLoadingReport(false);
+      } else {
+        fetchHistoricalVehicles(datePreset, startDate || undefined, endDate || undefined)
+          .then(data => {
+            if (!isCancelled) setReportVehicles(data);
+          })
+          .finally(() => {
+            if (!isCancelled) setIsLoadingReport(false);
+          });
+      }
+    });
 
     return () => { isCancelled = true; };
-  }, [datePreset, statusPreset, vehicles, fetchHistoricalVehicles]);
+  }, [datePreset, statusPreset, customDate, customEndDate, vehicles, fetchHistoricalVehicles]);
 
   const filteredVehicles = useMemo(() => {
-    return filterVehiclesForReport(reportVehicles, datePreset, statusPreset);
-  }, [reportVehicles, datePreset, statusPreset]);
+    // If server returned pre-computed records, use them directly with zero client loops
+    if (serverRecords) {
+      return serverRecords;
+    }
 
-  // Server KPIs are authoritative: computed directly in PostgreSQL by get_service_report_kpis.
-  // Falls back to pure client calculation if offline or RPC is unavailable.
+    let customRange: { start: string; end?: string } | undefined = undefined;
+    if (datePreset === 'custom') {
+      const startStr = customDate.trim();
+      const endStr = customEndDate.trim();
+      if (startStr) {
+        const parsedStart = new Date(startStr);
+        if (!Number.isNaN(parsedStart.getTime())) {
+          const startIso = new Date(parsedStart.getFullYear(), parsedStart.getMonth(), parsedStart.getDate()).toISOString();
+          let endIso: string;
+          if (endStr) {
+            const parsedEnd = new Date(endStr);
+            endIso = !Number.isNaN(parsedEnd.getTime())
+              ? new Date(parsedEnd.getFullYear(), parsedEnd.getMonth(), parsedEnd.getDate(), 23, 59, 59, 999).toISOString()
+              : new Date(parsedStart.getFullYear(), parsedStart.getMonth(), parsedStart.getDate(), 23, 59, 59, 999).toISOString();
+          } else {
+            endIso = new Date(parsedStart.getFullYear(), parsedStart.getMonth(), parsedStart.getDate(), 23, 59, 59, 999).toISOString();
+          }
+          customRange = { start: startIso, end: endIso };
+        }
+      }
+    }
+    return filterVehiclesForReport(reportVehicles, datePreset, statusPreset, customRange);
+  }, [serverRecords, reportVehicles, datePreset, statusPreset, customDate, customEndDate]);
+
+  // Server KPIs are authoritative: computed directly in PostgreSQL.
+  // Falls back to client calculation only if offline or RPC is unavailable.
   const kpis = useMemo(() => {
     if (
       serverKPIs &&
@@ -147,12 +229,12 @@ export const ServiceReportsModal: React.FC = () => {
     ) {
       return serverKPIs;
     }
-    return calculateReportKPIs(filteredVehicles);
+    return calculateReportKPIs(filteredVehicles as any);
   }, [serverKPIs, filteredVehicles]);
 
   const dateRangeInfo = useMemo(() => {
-    return getDatePresetRangeDescription(datePreset);
-  }, [datePreset]);
+    return getDatePresetRangeDescription(datePreset, customDate, customEndDate);
+  }, [datePreset, customDate, customEndDate]);
 
   const isMultiDate = dateRangeInfo.isMultiDate;
   const activeStatusLabel = STATUS_PRESETS.find(s => s.id === statusPreset)?.label || 'All Status';
@@ -185,18 +267,55 @@ export const ServiceReportsModal: React.FC = () => {
             </TouchableOpacity>
           </View>
         </View>
-          {/* Filter Bar */}
-          <View style={[styles.filterSection, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)', borderColor: colors.borderGlass }]}>
-            <View style={styles.filterGroup}>
-              <View style={styles.filterLabelRow}>
-                <Calendar size={13} color={colors.primaryLight} />
-                <Text style={[styles.filterLabel, { color: colors.textSecondary }]}>DATE RANGE PRESET:</Text>
-                <View style={[styles.activeRangeBadge, { backgroundColor: colors.primaryDim, borderColor: colors.primaryBorder }]}>
-                  <Text style={[styles.activeRangeBadgeText, { color: colors.primaryLight }]}>
-                    {dateRangeInfo.rangeStr}
-                  </Text>
+        {/* Super Admin Executive View Switcher */}
+        {isSuperAdmin && (
+          <View style={[styles.tabSwitcherBar, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.03)', borderColor: colors.borderGlass }]}>
+            <TouchableOpacity
+              style={[
+                styles.tabSwitcherBtn,
+                activeReportTab === 'kpi' && { backgroundColor: colors.primary },
+              ]}
+              onPress={() => setActiveReportTab('kpi')}
+              activeOpacity={0.8}
+            >
+              <FileText size={14} color={activeReportTab === 'kpi' ? '#ffffff' : colors.textMuted} />
+              <Text style={[styles.tabSwitcherBtnText, { color: activeReportTab === 'kpi' ? '#ffffff' : colors.textMuted }]}>
+                OPERATIONAL REPORTS & KPIS
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.tabSwitcherBtn,
+                activeReportTab === 'audit' && { backgroundColor: colors.primary },
+              ]}
+              onPress={() => setActiveReportTab('audit')}
+              activeOpacity={0.8}
+            >
+              <ClipboardList size={14} color={activeReportTab === 'audit' ? '#ffffff' : colors.textMuted} />
+              <Text style={[styles.tabSwitcherBtnText, { color: activeReportTab === 'audit' ? '#ffffff' : colors.textMuted }]}>
+                ACTIVITY & AUDIT LOG 📋
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {isSuperAdmin && activeReportTab === 'audit' ? (
+          <AuditTrailView />
+        ) : (
+          <>
+            {/* Filter Bar */}
+            <View style={[styles.filterSection, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)', borderColor: colors.borderGlass }]}>
+              <View style={styles.filterGroup}>
+                <View style={styles.filterLabelRow}>
+                  <Calendar size={13} color={colors.primaryLight} />
+                  <Text style={[styles.filterLabel, { color: colors.textSecondary }]}>DATE RANGE PRESET:</Text>
+                  <View style={[styles.activeRangeBadge, { backgroundColor: colors.primaryDim, borderColor: colors.primaryBorder }]}>
+                    <Text style={[styles.activeRangeBadgeText, { color: colors.primaryLight }]}>
+                      {dateRangeInfo.rangeStr}
+                    </Text>
+                  </View>
                 </View>
-              </View>
               <View style={styles.pillRow}>
                 {DATE_PRESETS.map(p => (
                   <TouchableOpacity
@@ -217,6 +336,131 @@ export const ServiceReportsModal: React.FC = () => {
                   </TouchableOpacity>
                 ))}
               </View>
+
+              {/* Custom Date / Range Input Fields */}
+              {datePreset === 'custom' && (
+                <View style={{ gap: 8, marginTop: 10, paddingVertical: 4 }}>
+                  {/* Quick Preset Chips inside Custom */}
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+                    <Text style={{ fontSize: 10, fontWeight: '800', color: colors.textMuted, marginRight: 2 }}>
+                      QUICK FILL:
+                    </Text>
+                    {[
+                      {
+                        label: 'Today',
+                        action: () => {
+                          const now = new Date();
+                          const dStr = now.toISOString().split('T')[0];
+                          setCustomDate(dStr);
+                          setCustomEndDate('');
+                        },
+                      },
+                      {
+                        label: 'Yesterday',
+                        action: () => {
+                          const y = new Date(Date.now() - 24 * 60 * 60 * 1000);
+                          const dStr = y.toISOString().split('T')[0];
+                          setCustomDate(dStr);
+                          setCustomEndDate('');
+                        },
+                      },
+                      {
+                        label: 'This Week',
+                        action: () => {
+                          const now = new Date();
+                          const past7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+                          setCustomDate(past7.toISOString().split('T')[0]);
+                          setCustomEndDate(now.toISOString().split('T')[0]);
+                        },
+                      },
+                      {
+                        label: 'This Month',
+                        action: () => {
+                          const now = new Date();
+                          const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+                          setCustomDate(firstOfMonth.toISOString().split('T')[0]);
+                          setCustomEndDate(now.toISOString().split('T')[0]);
+                        },
+                      },
+                    ].map((chip) => (
+                      <TouchableOpacity
+                        key={chip.label}
+                        style={{
+                          paddingHorizontal: 8,
+                          paddingVertical: 4,
+                          borderRadius: 6,
+                          backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)',
+                          borderWidth: 1,
+                          borderColor: colors.borderGlass,
+                        }}
+                        onPress={chip.action}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={{ fontSize: 10.5, fontWeight: '600', color: colors.primaryLight }}>
+                          {chip.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  {/* Input Fields Row */}
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 12 }}>
+                    {/* From Date */}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textSecondary }}>
+                        FROM:
+                      </Text>
+                      <TextInput
+                        style={{
+                          borderWidth: 1,
+                          borderColor: colors.borderGlass,
+                          backgroundColor: isDark ? 'rgba(0,0,0,0.3)' : '#ffffff',
+                          color: colors.textPrimary,
+                          paddingHorizontal: 12,
+                          paddingVertical: 7,
+                          borderRadius: 8,
+                          fontSize: 12,
+                          fontWeight: '600',
+                          width: 125,
+                        }}
+                        placeholder="YYYY-MM-DD"
+                        placeholderTextColor={colors.textMuted}
+                        value={customDate}
+                        onChangeText={setCustomDate}
+                      />
+                    </View>
+
+                    {/* To Date */}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textSecondary }}>
+                        TO:
+                      </Text>
+                      <TextInput
+                        style={{
+                          borderWidth: 1,
+                          borderColor: colors.borderGlass,
+                          backgroundColor: isDark ? 'rgba(0,0,0,0.3)' : '#ffffff',
+                          color: colors.textPrimary,
+                          paddingHorizontal: 12,
+                          paddingVertical: 7,
+                          borderRadius: 8,
+                          fontSize: 12,
+                          fontWeight: '600',
+                          width: 125,
+                        }}
+                        placeholder="YYYY-MM-DD"
+                        placeholderTextColor={colors.textMuted}
+                        value={customEndDate}
+                        onChangeText={setCustomEndDate}
+                      />
+                    </View>
+
+                    <Text style={{ fontSize: 11, color: colors.textMuted }}>
+                      (Leave "TO" empty for single-day report)
+                    </Text>
+                  </View>
+                </View>
+              )}
             </View>
 
             <View style={styles.filterGroup}>
@@ -283,6 +527,24 @@ export const ServiceReportsModal: React.FC = () => {
                     <Text style={[styles.kpiBigVal, { color: colors.success }]}>{kpis?.completedCount ?? 0}</Text>
                   </View>
                   <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>COMPLETED</Text>
+                </View>
+
+                {/* Pillar 4: Prior Bookings */}
+                <View style={styles.kpiCol}>
+                  <View style={styles.kpiValRow}>
+                    <Calendar size={16} color="#38bdf8" />
+                    <Text style={[styles.kpiBigVal, { color: '#38bdf8' }]}>{kpis?.bookingCount ?? 0}</Text>
+                  </View>
+                  <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>BOOKINGS</Text>
+                </View>
+
+                {/* Pillar 5: Additional Repairs */}
+                <View style={styles.kpiCol}>
+                  <View style={styles.kpiValRow}>
+                    <Wrench size={16} color="#f59e0b" />
+                    <Text style={[styles.kpiBigVal, { color: '#f59e0b' }]}>{kpis?.additionalRepairsCount ?? 0}</Text>
+                  </View>
+                  <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>EXTRA REPAIRS</Text>
                 </View>
               </View>
             </View>
@@ -470,32 +732,89 @@ export const ServiceReportsModal: React.FC = () => {
                   </View>
 
                   {/* Rows */}
-                  {filteredVehicles.map(v => {
-                    const { isEffectiveDone, effectiveCompletionDate } = getVehicleEffectiveCompletion(v);
-                    const start = new Date(v.intake_at || v.created_at);
-                    const end = effectiveCompletionDate ? effectiveCompletionDate : new Date();
-                    const grossSec = Math.max(0, Math.floor((end.getTime() - start.getTime()) / 1000));
-                    const netSec = getNetWorkingSeconds(start, end);
-                    const { totalIdleSec, totalActiveSec } = getVehicleIdleAndActiveTotals(v);
-                    const activeWorkSec = totalActiveSec;
-                    const { breakSeconds } = getBreakOverlap(start, end);
+                  {filteredVehicles.map((v: any) => {
+                    const isServerRecord = 'total_idle_sec' in v && 'workshop_idle' in v;
 
-                    const intakeDateStr = !Number.isNaN(start.getTime())
-                      ? start.toLocaleDateString('en-US', { day: '2-digit', month: 'short', timeZone: 'Asia/Colombo' })
-                      : '--';
-                    const intakeStr = !Number.isNaN(start.getTime())
-                      ? start.toLocaleTimeString('en-US', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit', hour12: true })
-                      : '--:--';
-                    const finishedStr = isEffectiveDone && effectiveCompletionDate && !Number.isNaN(effectiveCompletionDate.getTime())
-                      ? effectiveCompletionDate.toLocaleTimeString('en-US', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit', hour12: true })
-                      : 'In Progress';
+                    let isEffectiveDone = false;
+                    let intakeDateStr = '--';
+                    let intakeStr = '--:--';
+                    let finishedStr = 'In Progress';
+                    let grossSec = 0;
+                    let activeWorkSec = 0;
+                    let totalIdleSec = 0;
+                    let breakSeconds = 0;
+                    let wsIdle = 0, wsActive = 0, wsBreak = 0;
+                    let alIdle = 0, alActive = 0, alBreak = 0;
+                    let hsIdle = 0, hsActive = 0, hsBreak = 0;
+                    let taskSummaryDisplay = '';
 
-                    const workshopTiming = getStageTimingForZone(v, 'workshop');
-                    const alignmentTiming = getStageTimingForZone(v, 'alignment');
-                    const hoistTiming = getStageTimingForZone(v, 'hoist');
+                    if (isServerRecord) {
+                      const rec = v as ServerReportRecord;
+                      isEffectiveDone = rec.is_effective_done;
+                      const start = new Date(rec.intake_at || rec.created_at);
+                      if (!Number.isNaN(start.getTime())) {
+                        intakeDateStr = start.toLocaleDateString('en-US', { day: '2-digit', month: 'short', timeZone: 'Asia/Colombo' });
+                        intakeStr = start.toLocaleTimeString('en-US', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit', hour12: true });
+                      }
 
-                    const completedTasks = v.tasks.filter(t => t.is_completed).length;
-                    const totalTasks = v.tasks.filter(t => t.is_required).length;
+                      if (rec.effective_completed_at) {
+                        const end = new Date(rec.effective_completed_at);
+                        if (!Number.isNaN(end.getTime())) {
+                          finishedStr = end.toLocaleTimeString('en-US', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit', hour12: true });
+                        }
+                      }
+
+                      grossSec = rec.gross_tat_seconds;
+                      activeWorkSec = rec.total_active_sec;
+                      totalIdleSec = rec.total_idle_sec;
+                      breakSeconds = rec.total_break_seconds;
+                      wsIdle = rec.workshop_idle;
+                      wsActive = rec.workshop_active;
+                      wsBreak = rec.workshop_break;
+                      alIdle = rec.alignment_idle;
+                      alActive = rec.alignment_active;
+                      alBreak = rec.alignment_break;
+                      hsIdle = rec.hoist_idle;
+                      hsActive = rec.hoist_active;
+                      hsBreak = rec.hoist_break;
+                      taskSummaryDisplay = rec.completed_tasks_str !== 'None' ? 'Complete' : 'Standard';
+                    } else {
+                      const eff = getVehicleEffectiveCompletion(v);
+                      isEffectiveDone = eff.isEffectiveDone;
+                      const start = new Date(v.intake_at || v.created_at);
+                      const end = eff.effectiveCompletionDate ? eff.effectiveCompletionDate : new Date();
+                      grossSec = Math.max(0, Math.floor((end.getTime() - start.getTime()) / 1000));
+                      const totals = getVehicleIdleAndActiveTotals(v);
+                      totalIdleSec = totals.totalIdleSec;
+                      activeWorkSec = totals.totalActiveSec;
+                      const breaks = getBreakOverlap(start, end);
+                      breakSeconds = breaks.breakSeconds;
+
+                      if (!Number.isNaN(start.getTime())) {
+                        intakeDateStr = start.toLocaleDateString('en-US', { day: '2-digit', month: 'short', timeZone: 'Asia/Colombo' });
+                        intakeStr = start.toLocaleTimeString('en-US', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit', hour12: true });
+                      }
+                      finishedStr = isEffectiveDone && eff.effectiveCompletionDate && !Number.isNaN(eff.effectiveCompletionDate.getTime())
+                        ? eff.effectiveCompletionDate.toLocaleTimeString('en-US', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit', hour12: true })
+                        : 'In Progress';
+
+                      const workshopTiming = getStageTimingForZone(v, 'workshop');
+                      const alignmentTiming = getStageTimingForZone(v, 'alignment');
+                      const hoistTiming = getStageTimingForZone(v, 'hoist');
+                      wsIdle = workshopTiming.idleSec;
+                      wsActive = workshopTiming.activeSec;
+                      wsBreak = workshopTiming.breakSec;
+                      alIdle = alignmentTiming.idleSec;
+                      alActive = alignmentTiming.activeSec;
+                      alBreak = alignmentTiming.breakSec;
+                      hsIdle = hoistTiming.idleSec;
+                      hsActive = hoistTiming.activeSec;
+                      hsBreak = hoistTiming.breakSec;
+
+                      const completedTasks = (v.tasks || []).filter((t: any) => t.is_completed).length;
+                      const totalTasks = (v.tasks || []).filter((t: any) => t.is_required).length;
+                      taskSummaryDisplay = `${completedTasks}/${totalTasks}`;
+                    }
 
                     return (
                       <View key={v.id} style={[styles.tdRow, { borderBottomColor: colors.borderGlass }]}>
@@ -534,36 +853,56 @@ export const ServiceReportsModal: React.FC = () => {
                         </Text>
                         {/* General Workshop (Idle / Active / Breaks) */}
                         <Text style={[styles.tdText, styles.colSubBay, { color: colors.warning }]}>
-                          {workshopTiming.idleSec > 0 ? formatDuration(workshopTiming.idleSec) : '-'}
+                          {wsIdle > 0 ? formatDuration(wsIdle) : '-'}
                         </Text>
-                        <Text style={[styles.tdText, styles.colSubBay, { color: colors.primaryLight, fontWeight: '700' }]}>
-                          {workshopTiming.activeSec > 0 ? formatDuration(workshopTiming.activeSec) : '-'}
+                        <Text style={[
+                          styles.tdText, 
+                          styles.colSubBay, 
+                          wsActive > 7200 
+                            ? { backgroundColor: '#fee2e2', color: '#b91c1c', fontWeight: '900', borderRadius: 4 } 
+                            : { color: colors.primaryLight, fontWeight: '700' }
+                        ]}>
+                          {wsActive > 7200 ? `🚩 ${formatDuration(wsActive)}` : wsActive > 0 ? formatDuration(wsActive) : '-'}
                         </Text>
-                        <Text style={[styles.tdText, styles.colSubBay, { color: workshopTiming.breakSec > 0 ? '#fbbf24' : colors.textMuted }]}>
-                          {workshopTiming.breakSec > 0 ? formatDuration(workshopTiming.breakSec) : '-'}
+                        <Text style={[styles.tdText, styles.colSubBay, { color: wsBreak > 0 ? '#fbbf24' : colors.textMuted }]}>
+                          {wsBreak > 0 ? formatDuration(wsBreak) : '-'}
                         </Text>
                         {/* Wheel Alignment (Idle / Active / Breaks) */}
                         <Text style={[styles.tdText, styles.colSubBay, { color: colors.warning }]}>
-                          {alignmentTiming.idleSec > 0 ? formatDuration(alignmentTiming.idleSec) : '-'}
+                          {alIdle > 0 ? formatDuration(alIdle) : '-'}
                         </Text>
-                        <Text style={[styles.tdText, styles.colSubBay, { color: colors.primaryLight, fontWeight: '700' }]}>
-                          {alignmentTiming.activeSec > 0 ? formatDuration(alignmentTiming.activeSec) : '-'}
+                        <Text style={[
+                          styles.tdText, 
+                          styles.colSubBay, 
+                          alActive > 7200 
+                            ? { backgroundColor: '#fee2e2', color: '#b91c1c', fontWeight: '900', borderRadius: 4 } 
+                            : { color: colors.primaryLight, fontWeight: '700' }
+                        ]}>
+                          {alActive > 7200 ? `🚩 ${formatDuration(alActive)}` : alActive > 0 ? formatDuration(alActive) : '-'}
                         </Text>
-                        <Text style={[styles.tdText, styles.colSubBay, { color: alignmentTiming.breakSec > 0 ? '#fbbf24' : colors.textMuted }]}>
-                          {alignmentTiming.breakSec > 0 ? formatDuration(alignmentTiming.breakSec) : '-'}
+                        <Text style={[styles.tdText, styles.colSubBay, { color: alBreak > 0 ? '#fbbf24' : colors.textMuted }]}>
+                          {alBreak > 0 ? formatDuration(alBreak) : '-'}
                         </Text>
                         {/* Hoist Service (Idle / Active / Breaks) */}
                         <Text style={[styles.tdText, styles.colSubBay, { color: colors.warning }]}>
-                          {hoistTiming.idleSec > 0 ? formatDuration(hoistTiming.idleSec) : '-'}
+                          {hsIdle > 0 ? formatDuration(hsIdle) : '-'}
                         </Text>
-                        <Text style={[styles.tdText, styles.colSubBay, { color: colors.primaryLight, fontWeight: '700' }]}>
-                          {hoistTiming.activeSec > 0 ? formatDuration(hoistTiming.activeSec) : '-'}
+                        <Text style={[
+                          styles.tdText, 
+                          styles.colSubBay, 
+                          hsActive > 7200 
+                            ? { backgroundColor: '#fee2e2', color: '#b91c1c', fontWeight: '900', borderRadius: 4 } 
+                            : { color: colors.primaryLight, fontWeight: '700' }
+                        ]}>
+                          {hsActive > 7200 ? `🚩 ${formatDuration(hsActive)}` : hsActive > 0 ? formatDuration(hsActive) : '-'}
                         </Text>
-                        <Text style={[styles.tdText, styles.colSubBay, { color: hoistTiming.breakSec > 0 ? '#fbbf24' : colors.textMuted }]}>
-                          {hoistTiming.breakSec > 0 ? formatDuration(hoistTiming.breakSec) : '-'}
+                        <Text style={[styles.tdText, styles.colSubBay, { color: hsBreak > 0 ? '#fbbf24' : colors.textMuted }]}>
+                          {hsBreak > 0 ? formatDuration(hsBreak) : '-'}
                         </Text>
                         <Text style={[styles.tdText, styles.colTasks, { color: colors.textPrimary, fontWeight: '600' }]}>
-                          {completedTasks}/{totalTasks}
+                          {taskSummaryDisplay}
+                          {v.is_booking ? ' · 📅' : ''}
+                          {v.has_additional_repairs ? ' · 🔧' : ''}
                         </Text>
                       </View>
                     );
@@ -572,41 +911,56 @@ export const ServiceReportsModal: React.FC = () => {
               </ScrollView>
             )}
           </View>
+        </>
+      )}
 
       </ScrollView>
 
       {/* Sticky Bottom Action Footer */}
-      <View style={[styles.stickyFooter, { backgroundColor: colors.surface, borderTopColor: colors.borderGlass }]}>
-        <View style={styles.stickyFooterLeft}>
-          <View style={[styles.recordBadge, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', borderColor: colors.borderGlass }]}>
-            <Text style={[styles.recordBadgeText, { color: colors.textSecondary }]}>
-              {filteredVehicles.length} records
-            </Text>
+      {(!isSuperAdmin || activeReportTab === 'kpi') && (
+        <View style={[styles.stickyFooter, { backgroundColor: colors.surface, borderTopColor: colors.borderGlass }]}>
+          <View style={styles.stickyFooterLeft}>
+            {/* Back Button matching right-side action buttons */}
+            <TouchableOpacity
+              style={[
+                styles.exportBtn,
+                {
+                  backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
+                  borderWidth: 1,
+                  borderColor: colors.borderGlass,
+                },
+              ]}
+              onPress={() => setIsReportsModalOpen(false)}
+              activeOpacity={0.8}
+            >
+              <ArrowLeft size={15} color={colors.textPrimary} />
+              <Text style={[styles.exportBtnText, { color: colors.textPrimary }]}>Back</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.stickyFooterRight}>
+            {/* Download Excel */}
+            <TouchableOpacity
+              style={[styles.exportBtn, { backgroundColor: colors.success }]}
+              onPress={() => exportServiceLogsToCSV(filteredVehicles, activeFilterLabel, kpis)}
+              activeOpacity={0.8}
+            >
+              <Download size={15} color="#ffffff" />
+              <Text style={styles.exportBtnText}>Download Excel</Text>
+            </TouchableOpacity>
+
+            {/* Export PDF */}
+            <TouchableOpacity
+              style={[styles.exportBtn, { backgroundColor: colors.primary }]}
+              onPress={() => exportServiceLogsToPDF(filteredVehicles, kpis, activeFilterLabel)}
+              activeOpacity={0.8}
+            >
+              <Printer size={15} color="#ffffff" />
+              <Text style={styles.exportBtnText}>Export PDF</Text>
+            </TouchableOpacity>
           </View>
         </View>
-
-        <View style={styles.stickyFooterRight}>
-          {/* Download Excel */}
-          <TouchableOpacity
-            style={[styles.exportBtn, { backgroundColor: colors.success }]}
-            onPress={() => exportServiceLogsToCSV(filteredVehicles, activeFilterLabel, kpis)}
-            activeOpacity={0.8}
-          >
-            <Download size={15} color="#ffffff" />
-            <Text style={styles.exportBtnText}>Download Excel</Text>
-          </TouchableOpacity>
-
-          {/* Export PDF */}
-          <TouchableOpacity
-            style={[styles.exportBtn, { backgroundColor: colors.primary }]}
-            onPress={() => exportServiceLogsToPDF(filteredVehicles, kpis, activeFilterLabel)}
-            activeOpacity={0.8}
-          >
-            <Printer size={15} color="#ffffff" />
-            <Text style={styles.exportBtnText}>Export PDF</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      )}
 
       {/* Audit & Calculation Standard Modal (Extracted to keep report uncluttered) */}
       <BaseModal
@@ -1169,5 +1523,27 @@ const styles = StyleSheet.create({
   auditNoteText: {
     fontSize: 10.5,
     lineHeight: 15,
+  },
+  tabSwitcherBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    gap: 4,
+  },
+  tabSwitcherBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  tabSwitcherBtnText: {
+    fontSize: 11.5,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
 });

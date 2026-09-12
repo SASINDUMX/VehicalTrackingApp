@@ -20,37 +20,40 @@ export const useFloorPlan = () => {
   const { vehicles, setSelectedVehicle, setIsAddModalOpen, isAddModalOpen, isLoading, searchQuery, showMyVehiclesOnly } = useVehicles();
   const { canAddVehicle } = usePermissions();
   const { colors } = useTheme();
-  const [elapsedTimes, setElapsedTimes] = useState<Record<string, string>>(() => computeVehicleTimersMap(vehicles));
 
-  useEffect(() => {
-    const updateTimers = () => {
-      setElapsedTimes(computeVehicleTimersMap(vehicles));
-    };
-
-    updateTimers();
-    const interval = setInterval(updateTimers, 1000);
-    return () => clearInterval(interval);
-  }, [vehicles]);
-
-  const bays: BayItem[] = [
+  const bays: BayItem[] = useMemo(() => [
     { id: "workshop", name: APP_TERMINOLOGY.stations.workshop.name, code: APP_TERMINOLOGY.stations.workshop.code, icon: Wrench, color: colors.bayWorkshop },
     { id: "alignment", name: APP_TERMINOLOGY.stations.alignment.name, code: APP_TERMINOLOGY.stations.alignment.code, icon: Navigation, color: colors.bayAlignment },
     { id: "hoist", name: APP_TERMINOLOGY.stations.hoist.name, code: APP_TERMINOLOGY.stations.hoist.code, icon: Droplets, color: colors.bayHoist },
     { id: "inspection", name: APP_TERMINOLOGY.stations.inspection.name, code: APP_TERMINOLOGY.stations.inspection.code, icon: CheckCircle, color: colors.bayInspection },
-  ];
+  ], [colors]);
 
-  const getVehiclesInZone = useCallback((zoneId: BayZone, isPinnedFn?: (id: string) => boolean) => {
-    const list = vehicles.filter(v => {
-      const matchesZone = v.current_zone === zoneId && !v.is_finished;
-      if (!searchQuery.trim()) return matchesZone;
+  // Single-pass memoized zone grouping (prevents re-filtering and re-sorting 4x per render)
+  const vehiclesByZone = useMemo(() => {
+    const map = new Map<BayZone, import('../types/vehicle').Vehicle[]>();
+    const q = searchQuery.toLowerCase().trim();
+    const hasSearch = q.length > 0;
+
+    const filtered = vehicles.filter(v => {
+      if (v.is_finished) return false;
+      if (!hasSearch) return true;
       const tech = (v.assigned_tech || '').toLowerCase();
-      const q = searchQuery.toLowerCase().trim();
-      const matchesSearch = matchesVehicleSearch(v.vehicle_no, searchQuery) || tech.includes(q);
-      return matchesZone && matchesSearch;
+      return matchesVehicleSearch(v.vehicle_no, searchQuery) || tech.includes(q);
     });
 
-    return sortWorkshopVehicles(list, isPinnedFn);
+    (['workshop', 'hoist', 'alignment', 'inspection'] as BayZone[]).forEach(z => {
+      const bayList = filtered.filter(v => v.current_zone === z);
+      map.set(z, sortWorkshopVehicles(bayList));
+    });
+
+    return map;
   }, [vehicles, searchQuery]);
+
+  const getVehiclesInZone = useCallback((zoneId: BayZone, isPinnedFn?: (id: string) => boolean) => {
+    const list = vehiclesByZone.get(zoneId) || [];
+    if (!isPinnedFn) return list;
+    return sortWorkshopVehicles(list, isPinnedFn);
+  }, [vehiclesByZone]);
 
   const isSearchActive = searchQuery.trim() !== "";
 
@@ -65,7 +68,7 @@ export const useFloorPlan = () => {
 
   return {
     bays,
-    elapsedTimes,
+    elapsedTimes: {} as Record<string, string>,
     isLoading,
     searchQuery,
     showMyVehiclesOnly,

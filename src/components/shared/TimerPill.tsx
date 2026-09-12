@@ -3,18 +3,29 @@ import { View, Text, StyleSheet, Platform } from 'react-native';
 import { Clock } from 'lucide-react-native';
 import { useTheme } from '../../context/ThemeContext';
 
+import { Vehicle } from '../../types/vehicle';
+import { useVehicleTimer } from '../../hooks/useElapsedTimer';
+
 interface TimerPillProps {
-  elapsedText: string;
+  elapsedText?: string;
+  vehicle?: Vehicle | null;
   variant?: 'cyan' | 'amber' | 'green';
   size?: 'sm' | 'md';
   isPaused?: boolean;
 }
 
 /** TimerPill — live elapsed timer display. Uses the same plate-DNA shape as StatusPill. */
-export const TimerPill: React.FC<TimerPillProps> = ({
-  elapsedText, variant = 'cyan', size = 'md', isPaused = false,
+export const TimerPill: React.FC<TimerPillProps> = React.memo(({
+  elapsedText: explicitText,
+  vehicle,
+  variant = 'cyan',
+  size = 'md',
+  isPaused = false,
 }) => {
   const { colors } = useTheme();
+  const liveVehicleTimer = useVehicleTimer(explicitText ? null : vehicle);
+  const text = explicitText || liveVehicleTimer || '0m 00s';
+
   const isAmber = isPaused || variant === 'amber';
   const isGreen = variant === 'green';
   const isSm = size === 'sm';
@@ -26,21 +37,38 @@ export const TimerPill: React.FC<TimerPillProps> = ({
   return (
     <View style={[styles.pill, { backgroundColor: bg, borderColor: border }, isSm && styles.pillSm]}>
       <Clock size={isSm ? 10 : 12} color={color} />
-      <Text style={[styles.label, { color }, isSm && styles.labelSm]}>{elapsedText}</Text>
+      <Text style={[styles.label, { color }, isSm && styles.labelSm]}>{text}</Text>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   pill: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 4, paddingHorizontal: 8, paddingVertical: 3, minHeight: 24, borderRadius: 5, borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    minHeight: 24,
+    borderRadius: 5,
+    borderWidth: 1,
   },
-  pillSm: { paddingHorizontal: 6, paddingVertical: 2, minHeight: 20, borderRadius: 4, gap: 3 },
+  pillSm: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    minHeight: 20,
+    borderRadius: 4,
+    gap: 3,
+  },
   label: {
-    fontSize: 11, fontWeight: '800',
+    fontSize: 11,
+    fontWeight: '800',
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
     letterSpacing: 0.5,
   },
-  labelSm: { fontSize: 9, letterSpacing: 0.3 },
+  labelSm: {
+    fontSize: 9,
+    letterSpacing: 0.3,
+  },
 });

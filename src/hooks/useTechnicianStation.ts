@@ -78,25 +78,12 @@ export const useTechnicianStation = () => {
     return sortWorkshopVehicles(list);
   }, [vehicles, activeBay, searchQuery]);
 
-  const [elapsedTimes, setElapsedTimes] = useState<Record<string, string>>(() => computeVehicleTimersMap(bayVehicles));
-
-  useEffect(() => {
-    const updateTimers = () => {
-      setElapsedTimes(computeVehicleTimersMap(bayVehicles));
-    };
-
-    updateTimers();
-    const interval = setInterval(updateTimers, 1000);
-
-    return () => clearInterval(interval);
-  }, [bayVehicles]);
-
   return {
     activeBay,
     techName,
     activeTaskType,
     bayVehicles,
-    elapsedTimes,
+    elapsedTimes: {} as Record<string, string>,
     expandedCards,
     pendingTransfer,
     isDispatching,

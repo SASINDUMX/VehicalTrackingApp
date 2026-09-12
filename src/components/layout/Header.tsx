@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Animated, Platform, Image } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Animated, Platform, Image, Easing } from 'react-native';
 import { useVehicles } from '../../context/VehicleContext';
 import { useAuth } from '../../context/AuthContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { chimeService } from '../../lib/chime';
 import { hapticService } from '../../lib/haptics';
-import { LogOut, User, Volume2, VolumeX, Shield, Smartphone, Sun, Moon, Monitor, FileText, ChevronLeft } from 'lucide-react-native';
+import { LogOut, User, Volume2, VolumeX, Shield, Smartphone, Sun, Moon, Monitor, FileText, ChevronLeft, Building2, ChevronDown, MapPin, CloudOff, RefreshCw } from 'lucide-react-native';
 import { useTheme } from '../../context/ThemeContext';
 
 const appLogo = require('../../../assets/icon.png');
@@ -14,6 +14,9 @@ import { getCurrentActiveBreak } from '../../utils/workshopHoursUtils';
 import { APP_TERMINOLOGY } from '../../constants/terminology';
 
 const getHeaderRoleBadge = (role: string, section?: string): string => {
+  if (role === 'super_admin') {
+    return 'Super Admin · HQ';
+  }
   if (role === 'foreman' && section) {
     return `Foreman · ${section.toUpperCase()}`;
   }
@@ -21,18 +24,59 @@ const getHeaderRoleBadge = (role: string, section?: string): string => {
 };
 
 export const Header: React.FC = () => {
-  const { isReportsModalOpen, setIsReportsModalOpen, isRealtimeConnected } = useVehicles();
-  const { signOut, user } = useAuth();
-  const { displayName, currentRole, section } = usePermissions();
+  const {
+    isReportsModalOpen,
+    setIsReportsModalOpen,
+    isRealtimeConnected,
+    outboxPendingCount,
+    isOutboxSyncing,
+    drainOutbox,
+    refreshVehicles,
+  } = useVehicles();
+  const { signOut, user, activeBranchCode, activeBranchName, availableBranches, switchBranch } = useAuth();
+  const { displayName, currentRole, section, canSwitchBranch } = usePermissions();
   const { themeMode, isDark, colors, setThemeMode, toggleTheme } = useTheme();
   const [timeStr, setTimeStr] = useState<string>('');
   const [activeBreak, setActiveBreak] = useState<{ name: string; endStr: string } | null>(null);
   const [isAudioMuted, setIsAudioMuted] = useState<boolean>(chimeService.getMuted());
   const [isHapticsMuted, setIsHapticsMuted] = useState<boolean>(hapticService.getMuted());
   const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
-  
-  // Pulse Animation
-  const pulseAnim = React.useRef(new Animated.Value(1)).current;
+  const [isBranchSwitcherOpen, setIsBranchSwitcherOpen] = useState<boolean>(false);
+
+  // Pulse Animation for live indicator
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  // Spin Animation for manual refresh button
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const spinAnim = useRef(new Animated.Value(0)).current;
+
+  const handleRefresh = async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    Animated.timing(spinAnim, {
+      toValue: 1,
+      duration: 650,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: Platform.OS !== 'web',
+    }).start(() => {
+      spinAnim.setValue(0);
+    });
+
+    try {
+      if (refreshVehicles) {
+        await refreshVehicles();
+      }
+    } catch (err) {
+      console.warn('Manual refresh failed:', err);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  const spinRotate = spinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
 
   const toggleAudio = () => {
     const nextMuted = !isAudioMuted;
@@ -55,16 +99,16 @@ export const Header: React.FC = () => {
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
-      const options: Intl.DateTimeFormatOptions = {
-        weekday: 'short',
-        month: 'short',
-        day: 'numeric',
+      const timeFormatter = new Intl.DateTimeFormat('en-US', {
         hour: 'numeric',
         minute: '2-digit',
-        second: '2-digit',
         hour12: true,
-      };
-      setTimeStr(now.toLocaleDateString('en-US', options));
+      });
+      const dateFormatter = new Intl.DateTimeFormat('en-US', {
+        month: 'short',
+        day: 'numeric',
+      });
+      setTimeStr(`${dateFormatter.format(now)} · ${timeFormatter.format(now)}`);
       setActiveBreak(getCurrentActiveBreak(now));
     };
 
@@ -128,20 +172,27 @@ export const Header: React.FC = () => {
           <View style={styles.brandTextContainer}>
             <View style={styles.titleRow}>
               <Text style={[styles.brandTitle, { color: colors.textPrimary }]}>UNITED MOTORS</Text>
-              <View style={styles.statusContainer}>
-                {isRealtimeConnected && (
-                  <Animated.View 
-                    style={[
-                      styles.dotPulse,
-                      { transform: [{ scale: pulseAnim }], opacity: pulseAnim.interpolate({ inputRange: [1, 1.5], outputRange: [0.8, 0] }) }
-                    ]} 
-                  />
-                )}
-                <View style={[styles.statusDot, isRealtimeConnected ? styles.dotOnline : styles.dotOffline]} />
-              </View>
             </View>
             <View style={styles.brandSubRow}>
-              <Text style={[styles.brandSub, { color: colors.textMuted }]}>{timeStr}</Text>
+              <Text style={[styles.brandSub, { color: colors.textMuted }]} numberOfLines={1}>{timeStr}</Text>
+              {/* Branch Badge — tappable for AGM/Manager */}
+              <TouchableOpacity
+                onPress={() => canSwitchBranch && setIsBranchSwitcherOpen(true)}
+                activeOpacity={canSwitchBranch ? 0.7 : 1}
+                style={[
+                  styles.branchPill,
+                  {
+                    backgroundColor: isDark ? 'rgba(56, 189, 248, 0.12)' : '#e0f2fe',
+                    borderColor: isDark ? 'rgba(56, 189, 248, 0.3)' : '#bae6fd',
+                  },
+                ]}
+              >
+                <MapPin size={9} color={isDark ? '#38bdf8' : '#0284c7'} />
+                <Text style={[styles.branchPillText, { color: isDark ? '#38bdf8' : '#0284c7' }]}>
+                  {activeBranchCode}
+                </Text>
+                {canSwitchBranch && <ChevronDown size={9} color={isDark ? '#38bdf8' : '#0284c7'} />}
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -150,39 +201,111 @@ export const Header: React.FC = () => {
           style={styles.rightGroup}
           {...(Platform.OS === 'web' ? ({ id: 'profile-menu-container' } as any) : {})}
         >
-          {/* Reports / Back Toggle Button */}
+          {/* Offline Outbox Queue Status Indicator */}
+          {outboxPendingCount > 0 && (
+            <TouchableOpacity
+              style={[
+                styles.outboxBadge,
+                {
+                  backgroundColor: isOutboxSyncing
+                    ? (isDark ? 'rgba(56, 189, 248, 0.15)' : '#e0f2fe')
+                    : (isDark ? 'rgba(245, 158, 11, 0.15)' : '#fef3c7'),
+                  borderColor: isOutboxSyncing
+                    ? (isDark ? 'rgba(56, 189, 248, 0.4)' : '#7dd3fc')
+                    : (isDark ? 'rgba(245, 158, 11, 0.4)' : '#fcd34d'),
+                }
+              ]}
+              onPress={() => drainOutbox()}
+              disabled={isOutboxSyncing}
+              activeOpacity={0.7}
+            >
+              {isOutboxSyncing ? (
+                <>
+                  <RefreshCw size={11} color={isDark ? '#38bdf8' : '#0284c7'} />
+                  <Text style={[styles.outboxBadgeText, { color: isDark ? '#38bdf8' : '#0284c7' }]}>
+                    Syncing {outboxPendingCount}...
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <CloudOff size={11} color={isDark ? '#fbbf24' : '#d97706'} />
+                  <Text style={[styles.outboxBadgeText, { color: isDark ? '#fbbf24' : '#d97706' }]}>
+                    {outboxPendingCount} Queued
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+
+          {/* Realtime Connection Status Dot Pill */}
+          <View style={[
+            styles.liveIndicatorPill,
+            {
+              backgroundColor: isRealtimeConnected ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+              borderColor: isRealtimeConnected ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)',
+            }
+          ]}>
+            <View style={styles.statusContainer}>
+              {isRealtimeConnected && (
+                <Animated.View
+                  style={[
+                    styles.dotPulse,
+                    { transform: [{ scale: pulseAnim }], opacity: pulseAnim.interpolate({ inputRange: [1, 1.5], outputRange: [0.8, 0] }) }
+                  ]}
+                />
+              )}
+              <View style={[styles.statusDot, isRealtimeConnected ? styles.dotOnline : styles.dotOffline]} />
+            </View>
+          </View>
+
+          {/* Manual Refresh Button (Square squircle matching profile) */}
           <TouchableOpacity
             style={[
-              styles.reportsBtn,
-              { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)', borderColor: colors.borderGlass }
+              styles.squareIconBtn,
+              {
+                backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)',
+                borderColor: colors.borderGlass,
+              },
+              isRefreshing && { borderColor: colors.primary },
+            ]}
+            onPress={handleRefresh}
+            activeOpacity={0.7}
+            disabled={isRefreshing}
+          >
+            <Animated.View style={{ transform: [{ rotate: spinRotate }] }}>
+              <RefreshCw size={14} color={isRefreshing ? colors.primaryLight : colors.textSecondary} />
+            </Animated.View>
+          </TouchableOpacity>
+
+          {/* Reports / Back Toggle Button (Square squircle matching profile) */}
+          <TouchableOpacity
+            style={[
+              styles.squareIconBtn,
+              isReportsModalOpen
+                ? { backgroundColor: colors.primary, borderColor: colors.primary }
+                : { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)', borderColor: colors.borderGlass },
             ]}
             onPress={() => setIsReportsModalOpen(!isReportsModalOpen)}
             activeOpacity={0.8}
           >
             {isReportsModalOpen ? (
-              <>
-                <ChevronLeft size={15} color={colors.primaryLight} />
-                <Text style={[styles.reportsBtnText, { color: colors.textPrimary }]}>{APP_TERMINOLOGY.navigation.back}</Text>
-              </>
+              <ChevronLeft size={16} color="#ffffff" />
             ) : (
-              <>
-                <FileText size={15} color={colors.primaryLight} />
-                <Text style={[styles.reportsBtnText, { color: colors.textPrimary }]}>{APP_TERMINOLOGY.navigation.reports}</Text>
-              </>
+              <FileText size={15} color={colors.primaryLight} />
             )}
           </TouchableOpacity>
 
-          {/* User Profile Avatar Trigger */}
+          {/* User Profile Avatar Trigger (Square squircle) */}
           <TouchableOpacity
             style={[
-              styles.avatarCircleBtn,
+              styles.squareIconBtn,
               { backgroundColor: colors.primaryDim, borderColor: colors.primaryBorder },
-              isMenuOpen && styles.avatarCircleBtnActive,
+              isMenuOpen && styles.squareIconBtnActive,
             ]}
             onPress={() => setIsMenuOpen(!isMenuOpen)}
             activeOpacity={0.8}
           >
-            <User size={20} color={colors.primaryLight} />
+            <User size={17} color={colors.primaryLight} />
           </TouchableOpacity>
 
           {/* Profile Dropdown Popover */}
@@ -202,6 +325,31 @@ export const Header: React.FC = () => {
                   </View>
                 </View>
               </View>
+
+              <View style={[styles.dropdownDivider, { backgroundColor: colors.borderGlass }]} />
+
+              {/* Branch info row (always visible) */}
+              <TouchableOpacity
+                style={styles.dropdownItem}
+                onPress={() => {
+                  if (canSwitchBranch) {
+                    setIsMenuOpen(false);
+                    setIsBranchSwitcherOpen(true);
+                  }
+                }}
+                activeOpacity={canSwitchBranch ? 0.7 : 1}
+              >
+                <Building2 size={16} color={colors.primaryLight} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.dropdownItemText, { color: colors.textPrimary }]} numberOfLines={1}>
+                    {activeBranchName}
+                  </Text>
+                  {canSwitchBranch && (
+                    <Text style={{ fontSize: 10, color: colors.textMuted, marginTop: 1 }}>Tap to switch branch</Text>
+                  )}
+                </View>
+                {canSwitchBranch && <ChevronDown size={14} color={colors.textMuted} />}
+              </TouchableOpacity>
 
               <View style={[styles.dropdownDivider, { backgroundColor: colors.borderGlass }]} />
 
@@ -234,8 +382,8 @@ export const Header: React.FC = () => {
                   style={[
                     styles.tinyAutoBtn,
                     {
-                      backgroundColor: themeMode === 'system' 
-                        ? colors.primaryDim 
+                      backgroundColor: themeMode === 'system'
+                        ? colors.primaryDim
                         : (isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)'),
                       borderColor: themeMode === 'system' ? colors.primary : colors.borderGlass,
                     }
@@ -307,6 +455,34 @@ export const Header: React.FC = () => {
                 )}
               </TouchableOpacity>
 
+              {/* Offline Actions Outbox Status in Dropdown */}
+              {outboxPendingCount > 0 && (
+                <TouchableOpacity
+                  style={[styles.dropdownItem, { backgroundColor: isDark ? 'rgba(245, 158, 11, 0.08)' : '#fffbeb' }]}
+                  onPress={() => {
+                    drainOutbox();
+                  }}
+                  disabled={isOutboxSyncing}
+                  activeOpacity={0.7}
+                >
+                  {isOutboxSyncing ? (
+                    <>
+                      <RefreshCw size={16} color={colors.primaryLight} />
+                      <Text style={[styles.dropdownItemText, { color: colors.primaryLight }]}>
+                        Syncing {outboxPendingCount} offline actions...
+                      </Text>
+                    </>
+                  ) : (
+                    <>
+                      <CloudOff size={16} color={colors.warning} />
+                      <Text style={[styles.dropdownItemText, { color: colors.warning }]}>
+                        Sync {outboxPendingCount} Offline Action{outboxPendingCount > 1 ? 's' : ''} Now
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
+
               <View style={[styles.dropdownDivider, { backgroundColor: colors.borderGlass }]} />
 
               {/* Sign Out Option */}
@@ -333,6 +509,55 @@ export const Header: React.FC = () => {
           </Text>
         </View>
       )}
+
+      {/* Branch Switcher Sheet — Super Admin only */}
+      {isBranchSwitcherOpen && canSwitchBranch && (
+        <TouchableOpacity
+          style={styles.branchOverlay}
+          activeOpacity={1}
+          onPress={() => setIsBranchSwitcherOpen(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={[styles.branchSheet, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderGlassBright }]}
+          >
+            <View style={styles.branchSheetHeader}>
+              <Building2 size={16} color={colors.primaryLight} />
+              <Text style={[styles.branchSheetTitle, { color: colors.textPrimary }]}>Switch Branch</Text>
+            </View>
+            <View style={[styles.dropdownDivider, { backgroundColor: colors.borderGlass }]} />
+            {availableBranches.map(branch => {
+              const isActive = branch.id === activeBranchCode.toLowerCase() ||
+                availableBranches.find(b => b.code === activeBranchCode)?.id === branch.id;
+              return (
+                <TouchableOpacity
+                  key={branch.id}
+                  style={[
+                    styles.branchOption,
+                    isActive && { backgroundColor: colors.primaryDim, borderRadius: 8 }
+                  ]}
+                  onPress={() => {
+                    switchBranch(branch.id);
+                    setIsBranchSwitcherOpen(false);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <MapPin size={14} color={isActive ? colors.primaryLight : colors.textMuted} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.dropdownItemText, { color: isActive ? colors.primaryLight : colors.textPrimary }]}>
+                      {branch.name}
+                    </Text>
+                    <Text style={{ fontSize: 10, color: colors.textMuted }}>{branch.city} · {branch.code}</Text>
+                  </View>
+                  {isActive && (
+                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primaryLight }} />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      )}
     </>
   );
 };
@@ -342,7 +567,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingVertical: 12,
     backgroundColor: '#0b0f19',
     borderBottomWidth: 1,
@@ -353,11 +578,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    flex: 1,
+    minWidth: 0,
   },
   logoBox: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
+    width: 36,
+    height: 36,
+    borderRadius: 9,
     backgroundColor: '#0b0f19',
     alignItems: 'center',
     justifyContent: 'center',
@@ -375,63 +602,66 @@ const styles = StyleSheet.create({
         }),
   },
   logoImage: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
+    width: 36,
+    height: 36,
+    borderRadius: 9,
   },
   brandTextContainer: {
     gap: 2,
+    flex: 1,
+    minWidth: 0,
   },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   brandTitle: {
     color: '#ffffff',
     fontWeight: '900',
-    fontSize: 16,
-    letterSpacing: 1.2,
+    fontSize: 13.5,
+    letterSpacing: 0.8,
   },
-  statusContainer: {
-    width: 12,
-    height: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
+  sectionBadge: {
+    paddingHorizontal: 5,
+    paddingVertical: 1,
     borderRadius: 4,
+    borderWidth: 1,
   },
-  dotOnline: {
-    backgroundColor: '#10b981',
-  },
-  dotOffline: {
-    backgroundColor: '#ef4444',
-  },
-  dotPulse: {
-    position: 'absolute',
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: '#10b981',
+  sectionBadgeText: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
   brandSubRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
+    marginTop: 1,
+  },
+  branchPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3.5,
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 5,
+    borderWidth: 1,
+  },
+  branchPillText: {
+    fontSize: 9.5,
+    fontWeight: '800',
   },
   brandSub: {
     color: '#64748b',
     fontSize: 11,
     fontWeight: '600',
-    letterSpacing: 0.5,
+    letterSpacing: 0.2,
   },
   breakStrip: {
-    paddingVertical: 5,
-    paddingHorizontal: 16,
+    paddingVertical: 4,
+    paddingHorizontal: 14,
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
@@ -447,35 +677,62 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    flexShrink: 0,
     position: 'relative',
   },
-  avatarCircleBtn: {
+  squareIconBtn: {
     alignItems: 'center',
     justifyContent: 'center',
     width: 36,
     height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(14, 165, 233, 0.15)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(14, 165, 233, 0.5)',
-    ...(Platform.OS === 'web'
-      ? ({ boxShadow: '0px 2px 6px rgba(14, 165, 233, 0.3)' } as any)
-      : {
-          shadowColor: '#0ea5e9',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.3,
-          shadowRadius: 6,
-          elevation: 4,
-        }),
+    borderRadius: 9,
+    borderWidth: 1,
   },
-  avatarCircleBtnActive: {
+  squareIconBtnActive: {
     borderColor: '#38bdf8',
     backgroundColor: 'rgba(14, 165, 233, 0.3)',
-    transform: [{ scale: 1.05 }],
+  },
+  liveIndicatorPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  liveIndicatorText: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  statusContainer: {
+    width: 8,
+    height: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  dotOnline: {
+    backgroundColor: '#10b981',
+  },
+  dotOffline: {
+    backgroundColor: '#ef4444',
+  },
+  dotPulse: {
+    position: 'absolute',
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#10b981',
   },
   dropdownPopover: {
     position: 'absolute',
-    top: 44,
+    top: 48,
     right: 0,
     width: 260,
     backgroundColor: '#111827',
@@ -585,19 +842,6 @@ const styles = StyleSheet.create({
   tinyAutoText: {
     fontSize: 11,
   },
-  reportsBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    height: 32,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  reportsBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
   dropdownSignOutItem: {
     backgroundColor: 'rgba(239, 68, 68, 0.1)',
   },
@@ -605,5 +849,66 @@ const styles = StyleSheet.create({
     color: '#ef4444',
     fontSize: 13,
     fontWeight: '700',
+  },
+  branchOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    zIndex: 998,
+    justifyContent: 'flex-start',
+    alignItems: 'flex-start',
+    paddingTop: 60,
+    paddingLeft: 12,
+  },
+  branchSheet: {
+    width: 300,
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    gap: 4,
+    ...(Platform.OS === 'web'
+      ? ({ boxShadow: '0px 8px 24px rgba(0,0,0,0.6)' } as any)
+      : {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 8 },
+          shadowOpacity: 0.6,
+          shadowRadius: 20,
+          elevation: 16,
+        }),
+  },
+  branchSheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+  },
+  branchSheetTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  branchOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+  },
+  outboxBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  outboxBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
 });

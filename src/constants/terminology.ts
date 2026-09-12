@@ -64,6 +64,15 @@ export const APP_TERMINOLOGY = {
       code: 'FINAL',
       description: 'Final quality assurance, road test verification, and customer delivery',
     },
+    completed: {
+      id: 'completed',
+      name: 'Completed',
+      shortName: 'Done',
+      tabLabel: 'Done',
+      dispatchBtn: 'Complete',
+      code: 'DONE',
+      description: 'Vehicle servicing completed and handed over to customer',
+    },
   } as Record<BayZone, StationTerminology>,
 
   sections: {
@@ -75,6 +84,13 @@ export const APP_TERMINOLOGY = {
   },
 
   roles: {
+    super_admin: {
+      role: 'super_admin',
+      title: 'Super Administrator',
+      badge: 'Super Admin',
+      shortCode: 'ADMIN',
+      stationId: 'workshop',
+    },
     service_executive: {
       role: 'service_executive',
       title: 'Service Executive',
