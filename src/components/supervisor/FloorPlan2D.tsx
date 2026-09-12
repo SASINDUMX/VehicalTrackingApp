@@ -12,6 +12,78 @@ import { usePinnedVehicles } from '../../hooks/usePinnedVehicles';
 import { useTheme } from '../../context/ThemeContext';
 import { APP_TERMINOLOGY } from '../../constants/terminology';
 
+interface SpatialVehicleCardProps {
+  vehicle: import('../../types/vehicle').Vehicle;
+  isPinned: boolean;
+  onTogglePin: (id: string) => void;
+  onPress: (vehicle: import('../../types/vehicle').Vehicle) => void;
+  colors: import('../../constants/theme').ThemeColors;
+}
+
+const SpatialVehicleCard = React.memo<SpatialVehicleCardProps>(({
+  vehicle,
+  isPinned,
+  onTogglePin,
+  onPress,
+  colors,
+}) => {
+  const { isCurrentTaskDone, isStageIdle, progressPercent, completedCount, totalRequired } = computeSpatialVehicleStatus(vehicle);
+  const isUrgent = Boolean(vehicle.is_urgent);
+
+  return (
+    <TouchableOpacity
+      style={[
+        styles.spatialVehicleCard,
+        {
+          backgroundColor: isUrgent
+            ? colors.cardUrgentBg
+            : isCurrentTaskDone
+            ? colors.cardDoneBg
+            : isStageIdle
+            ? colors.cardIdleBg
+            : colors.cardActiveBg,
+          borderColor: isUrgent
+            ? colors.cardUrgentBorder
+            : isCurrentTaskDone
+            ? colors.cardDoneBorder
+            : isStageIdle
+            ? colors.cardIdleBorder
+            : colors.cardActiveBorder,
+          borderLeftWidth: 3,
+          borderLeftColor: isUrgent
+            ? colors.danger
+            : isCurrentTaskDone
+            ? colors.success
+            : isStageIdle
+            ? colors.warning
+            : colors.primary,
+        }
+      ]}
+      onPress={() => onPress(vehicle)}
+      activeOpacity={0.8}
+    >
+      <VehicleCardHeader
+        vehicle={vehicle}
+        size="sm"
+        isStageIdle={isStageIdle}
+        isTaskDone={isCurrentTaskDone}
+        isPinned={isPinned}
+        onTogglePin={() => onTogglePin(vehicle.id)}
+        showChevron={false}
+      />
+
+      <VehicleProgressBar
+        compact
+        completedCount={completedCount}
+        totalRequired={totalRequired}
+        percent={progressPercent}
+        isCurrentTaskDone={isCurrentTaskDone}
+        isStageIdle={isStageIdle}
+      />
+    </TouchableOpacity>
+  );
+});
+
 export const FloorPlan2D: React.FC = React.memo(() => {
   const {
     bays,
@@ -99,73 +171,22 @@ export const FloorPlan2D: React.FC = React.memo(() => {
                         </View>
                       ) : (
                         <View style={styles.bayVehicleContainer}>
-                          {bayVehicles.map((vehicle) => {
-                            const { isCurrentTaskDone, isStageIdle, progressPercent, completedCount, totalRequired } = computeSpatialVehicleStatus(vehicle);
-                            const isUrgent = Boolean(vehicle.is_urgent);
-                            const vehiclePinned = isPinned(vehicle.id);
-
-                            return (
-                              <TouchableOpacity
-                                key={vehicle.id}
-                                style={[
-                                  styles.spatialVehicleCard,
-                                  {
-                                    backgroundColor: isUrgent
-                                      ? colors.cardUrgentBg
-                                      : isCurrentTaskDone
-                                      ? colors.cardDoneBg
-                                      : isStageIdle
-                                      ? colors.cardIdleBg
-                                      : colors.cardActiveBg,
-                                    borderColor: isUrgent
-                                      ? colors.cardUrgentBorder
-                                      : isCurrentTaskDone
-                                      ? colors.cardDoneBorder
-                                      : isStageIdle
-                                      ? colors.cardIdleBorder
-                                      : colors.cardActiveBorder,
-                                    borderLeftWidth: 3,
-                                    borderLeftColor: isUrgent
-                                      ? colors.danger
-                                      : isCurrentTaskDone
-                                      ? colors.success
-                                      : isStageIdle
-                                      ? colors.warning
-                                      : colors.primary,
-                                  }
-                                ]}
-                                onPress={() => setSelectedVehicle(vehicle)}
-                                activeOpacity={0.8}
-                              >
-                              <VehicleCardHeader
-                                vehicle={vehicle}
-                                size="sm"
-                                elapsedText={elapsedTimes[vehicle.id] || '0m 00s'}
-                                isStageIdle={isStageIdle}
-                                isTaskDone={isCurrentTaskDone}
-                                isPinned={vehiclePinned}
-                                onTogglePin={() => togglePin(vehicle.id)}
-                                showChevron={false}
-                                style={styles.cardHeaderTopRow}
-                              />
-
-                              <VehicleProgressBar
-                                compact
-                                completedCount={completedCount}
-                                totalRequired={totalRequired}
-                                percent={progressPercent}
-                                isCurrentTaskDone={isCurrentTaskDone}
-                                isStageIdle={isStageIdle}
-                              />
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </View>
-                    )}
+                          {bayVehicles.map((vehicle) => (
+                            <SpatialVehicleCard
+                              key={vehicle.id}
+                              vehicle={vehicle}
+                              isPinned={isPinned(vehicle.id)}
+                              onTogglePin={togglePin}
+                              onPress={setSelectedVehicle}
+                              colors={colors}
+                            />
+                          ))}
+                        </View>
+                      )}
+                    </View>
                   </View>
-                </View>
-              );
-            })}
+                );
+              })}
           </View>
         </ScrollView>
       </View>

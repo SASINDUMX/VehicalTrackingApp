@@ -5,9 +5,11 @@ import { usePermissions } from '../../hooks/usePermissions';
 import { BayZone, TaskType, Vehicle } from '../../types/vehicle';
 import { 
   Wrench, Navigation, Pencil, Save, 
-  Clock, CheckCircle2, Trash2, AlertTriangle, Droplets
+  Clock, CheckCircle2, Trash2, AlertTriangle,
+  PauseCircle, PlayCircle, CheckSquare, Square
 } from 'lucide-react-native';
 
+import { isValidVehicleNo, formatVehicleNoInput } from '../../utils/vehicleNumberUtils';
 import { LicensePlate } from './LicensePlate';
 import { StatusPill } from './StatusPill';
 import { BaseModal } from './BaseModal';
@@ -24,7 +26,7 @@ import { APP_TERMINOLOGY } from '../../constants/terminology';
 const STAGE_ICONS: Record<BayZone, any> = {
   workshop: Wrench,
   alignment: Navigation,
-  hoist: Droplets,
+  hoist: Wrench,
   inspection: CheckCircle2,
   completed: CheckCircle2,
 };
@@ -40,17 +42,31 @@ const getStageOrder = (colors?: any) =>
 const calculateTimers = (vehicle: Vehicle) => computeVehicleModalTimers(vehicle);
 
 export const VehicleDetailsModal: React.FC = () => {
-  const { selectedVehicle, setSelectedVehicle, transferVehicleZone, updateVehicleJobOrder, deleteVehicle, updateUrgency } = useVehicles();
+  const { 
+    selectedVehicle, 
+    setSelectedVehicle, 
+    transferVehicleZone, 
+    updateVehicleJobOrder, 
+    updateVehiclePlate,
+    toggleVehiclePause,
+    deleteVehicle, 
+    updateUrgency 
+  } = useVehicles();
   const { canRelocateVehicle, canAddVehicle, canDeleteVehicle, canEditRemarks, canSetUrgent, displayName } = usePermissions();
   const { colors, isDark } = useTheme();
 
   const [isEditing, setIsEditing] = useState<boolean>(false);
+  const [editPlate, setEditPlate] = useState<string>(() => selectedVehicle?.vehicle_no || '');
   const [selectedTasks, setSelectedTasks] = useState<TaskType[]>(() =>
     selectedVehicle ? selectedVehicle.tasks.filter(t => t.is_required).map(t => t.task_type) : []
   );
   const [remarks, setRemarks] = useState<string>(() => selectedVehicle?.remarks || '');
+  const [technicianName, setTechnicianName] = useState<string>(() => selectedVehicle?.technician_name || '');
+  const [isBooking, setIsBooking] = useState<boolean>(() => Boolean(selectedVehicle?.is_booking));
+  const [hasAdditionalRepairs, setHasAdditionalRepairs] = useState<boolean>(() => Boolean(selectedVehicle?.has_additional_repairs));
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<boolean>(false);
+  const [showHoldConfirm, setShowHoldConfirm] = useState<boolean>(false);
 
   const initialTimers = useMemo(() => {
     if (!selectedVehicle) return { totalElapsedStr: '0m 00s', grossElapsedStr: '0m 00s', activeStageDuration: '0m 00s', activeStageDurationRaw: '0m 00s' };
@@ -69,8 +85,12 @@ export const VehicleDetailsModal: React.FC = () => {
       const activeTaskTypes = selectedVehicle.tasks
         .filter(t => t.is_required)
         .map(t => t.task_type);
+      setEditPlate(selectedVehicle.vehicle_no);
       setSelectedTasks(activeTaskTypes);
       setRemarks(selectedVehicle.remarks || '');
+      setTechnicianName(selectedVehicle.technician_name || '');
+      setIsBooking(Boolean(selectedVehicle.is_booking));
+      setHasAdditionalRepairs(Boolean(selectedVehicle.has_additional_repairs));
       setIsEditing(false);
       setLocalIsUrgent(selectedVehicle.is_urgent || false);
       setLocalUrgentNote(selectedVehicle.urgent_note || '');
@@ -164,6 +184,14 @@ export const VehicleDetailsModal: React.FC = () => {
   const handleSaveJobOrder = async () => {
     setIsSubmitting(true);
     try {
+      // If plate changed and is valid, update plate
+      const cleanPlate = editPlate.trim().toUpperCase();
+      if (cleanPlate && cleanPlate !== selectedVehicle.vehicle_no) {
+        if (isValidVehicleNo(cleanPlate)) {
+          await updateVehiclePlate(selectedVehicle.id, cleanPlate);
+        }
+      }
+
       // Only Master Access can alter job order tasks
       // Non-master roles retain the original required tasks while saving remarks/urgency
       const tasksToSave = canAddVehicle 
@@ -176,8 +204,15 @@ export const VehicleDetailsModal: React.FC = () => {
         ? { is_urgent: localIsUrgent, urgent_note: localIsUrgent ? (localUrgentNote?.trim() || null) : null }
         : undefined;
 
-      // Single consolidated save: updates remarks, urgency, and only changed tasks in 1 batch
-      await updateVehicleJobOrder(selectedVehicle.id, tasksToSave, remarksToSave, urgencyData);
+      const metadataToSave = {
+        vehicle_no: cleanPlate,
+        technician_name: technicianName.trim() || null,
+        is_booking: isBooking,
+        has_additional_repairs: hasAdditionalRepairs,
+      };
+
+      // Single consolidated save: updates remarks, urgency, metadata, and only changed tasks in 1 batch
+      await updateVehicleJobOrder(selectedVehicle.id, tasksToSave, remarksToSave, urgencyData, metadataToSave);
 
       setIsEditing(false);
       setSelectedVehicle(null);
@@ -254,6 +289,33 @@ export const VehicleDetailsModal: React.FC = () => {
               </View>
 
               <View style={styles.footerRightButtons}>
+                {/* Hold / Pause for Major Repair Button */}
+                {!selectedVehicle.is_finished && (
+                  <TouchableOpacity
+                    style={[
+                      styles.deleteBtn,
+                      {
+                        backgroundColor: selectedVehicle.is_paused ? (isDark ? 'rgba(34, 197, 94, 0.15)' : '#dcfce7') : (isDark ? 'rgba(245, 158, 11, 0.15)' : '#fffbeb'),
+                        borderColor: selectedVehicle.is_paused ? colors.success : '#f59e0b',
+                      }
+                    ]}
+                    onPress={() => setShowHoldConfirm(true)}
+                    activeOpacity={0.7}
+                  >
+                    {selectedVehicle.is_paused ? (
+                      <>
+                        <PlayCircle size={14} color={colors.success} />
+                        <Text style={[styles.deleteBtnText, { color: colors.success }]}>Resume Work</Text>
+                      </>
+                    ) : (
+                      <>
+                        <PauseCircle size={14} color="#f59e0b" />
+                        <Text style={[styles.deleteBtnText, { color: '#f59e0b' }]}>Hold / Major Repair</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                )}
+
                 {canDeleteVehicle && (
                   <TouchableOpacity
                     style={[styles.deleteBtn, { backgroundColor: colors.dangerDim, borderColor: colors.dangerBorder }]}
@@ -280,6 +342,34 @@ export const VehicleDetailsModal: React.FC = () => {
             {isEditing ? (
               /* --- EDIT JOB ORDER FORM MODE --- */
               <View style={styles.editContainer}>
+                {/* Plate Editing Input with Sri Lankan Validation */}
+                <View style={styles.remarksEditGroup}>
+                  <Text style={[styles.editSectionTitle, { color: colors.textSecondary }]}>VEHICLE REGISTRATION / LICENSE PLATE:</Text>
+                  <TextInput
+                    style={[
+                      styles.textAreaInput,
+                      {
+                        backgroundColor: isDark ? 'rgba(0, 0, 0, 0.2)' : 'rgba(0, 0, 0, 0.04)',
+                        borderColor: isValidVehicleNo(editPlate) ? colors.success : colors.borderGlass,
+                        color: colors.textPrimary,
+                        height: 44,
+                        paddingVertical: 10,
+                        fontWeight: '800',
+                        fontSize: 16,
+                      }
+                    ]}
+                    placeholder="e.g. CAB-7712, 300-4234, or WP-1234"
+                    placeholderTextColor={colors.textMuted}
+                    value={editPlate}
+                    onChangeText={(t) => setEditPlate(formatVehicleNoInput(t, editPlate))}
+                    autoCapitalize="characters"
+                    maxLength={8}
+                  />
+                  <Text style={{ fontSize: 11, color: isValidVehicleNo(editPlate) ? colors.success : colors.danger, marginTop: 4 }}>
+                    {isValidVehicleNo(editPlate) ? '✓ Valid Sri Lankan registration' : '✕ Format: CAB-1234, 300-4234, or 14-1234'}
+                  </Text>
+                </View>
+
                 {canAddVehicle && (
                   <TaskSelectorChips
                     selectedTasks={selectedTasks}
@@ -327,6 +417,72 @@ export const VehicleDetailsModal: React.FC = () => {
                     />
                   </View>
                 )}
+
+                {/* Technician Name (Actual mechanic) */}
+                <View style={styles.remarksEditGroup}>
+                  <Text style={[styles.editSectionTitle, { color: colors.textSecondary }]}>ASSIGNED TECHNICIAN (ACTUAL MECHANIC):</Text>
+                  <TextInput
+                    style={[
+                      styles.textAreaInput,
+                      {
+                        backgroundColor: isDark ? 'rgba(0, 0, 0, 0.2)' : 'rgba(0, 0, 0, 0.04)',
+                        borderColor: colors.borderGlass,
+                        color: colors.textPrimary,
+                        height: 44,
+                        paddingVertical: 10,
+                      }
+                    ]}
+                    placeholder="e.g. Kasun Fernando, Sunil Shantha..."
+                    placeholderTextColor={colors.textMuted}
+                    value={technicianName}
+                    onChangeText={setTechnicianName}
+                  />
+                </View>
+
+                {/* Prior Booking & Additional Repairs Checkboxes */}
+                <View style={{ flexDirection: 'row', gap: 12, flexWrap: 'wrap', marginTop: 4 }}>
+                  <TouchableOpacity
+                    style={{
+                      flex: 1,
+                      minWidth: 180,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: 12,
+                      borderRadius: 10,
+                      borderWidth: 1,
+                      backgroundColor: isBooking ? (isDark ? 'rgba(59, 130, 246, 0.15)' : '#eff6ff') : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
+                      borderColor: isBooking ? '#3b82f6' : colors.borderGlass,
+                    }}
+                    onPress={() => setIsBooking(!isBooking)}
+                  >
+                    {isBooking ? <CheckSquare size={16} color="#3b82f6" /> : <Square size={16} color={colors.textMuted} />}
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: isBooking ? colors.textPrimary : colors.textSecondary }}>
+                      PRIOR BOOKING
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={{
+                      flex: 1,
+                      minWidth: 180,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: 12,
+                      borderRadius: 10,
+                      borderWidth: 1,
+                      backgroundColor: hasAdditionalRepairs ? (isDark ? 'rgba(245, 158, 11, 0.15)' : '#fffbeb') : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
+                      borderColor: hasAdditionalRepairs ? '#f59e0b' : colors.borderGlass,
+                    }}
+                    onPress={() => setHasAdditionalRepairs(!hasAdditionalRepairs)}
+                  >
+                    {hasAdditionalRepairs ? <CheckSquare size={16} color="#f59e0b" /> : <Square size={16} color={colors.textMuted} />}
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: hasAdditionalRepairs ? colors.textPrimary : colors.textSecondary }}>
+                      ADDITIONAL REPAIRS
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             ) : (
               /* --- HIGH-TECH STEPPER TIMELINE STAGE AUDIT MODE --- */
@@ -529,6 +685,46 @@ export const VehicleDetailsModal: React.FC = () => {
           await deleteVehicle(selectedVehicle.id);
         }}
         onCancel={() => setShowDeleteConfirm(false)}
+      />
+
+      {/* Hold / Major Repair Confirmation Dialog */}
+      <ConfirmModal
+        visible={showHoldConfirm}
+        title={selectedVehicle.is_paused ? 'Resume Vehicle Work' : 'Hold / Pause for Major Repair'}
+        subtitle={selectedVehicle.is_paused ? 'Resume Operation' : 'Pause Operational Timers'}
+        confirmVariant={selectedVehicle.is_paused ? 'primary' : 'warning'}
+        icon={selectedVehicle.is_paused ? <PlayCircle size={20} color={colors.success} /> : <PauseCircle size={20} color="#f59e0b" />}
+        description={
+          <Text style={[styles.confirmBodyText, { color: colors.textSecondary }]}>
+            {selectedVehicle.is_paused ? (
+              <>
+                Resume work on vehicle{' '}
+                <Text style={[styles.confirmBoldPlate, { color: colors.primaryLight }]}>
+                  {selectedVehicle.vehicle_no}
+                </Text>
+                ?{'\n\n'}The floor timers will restart and the vehicle will return to active status.
+              </>
+            ) : (
+              <>
+                Put vehicle{' '}
+                <Text style={[styles.confirmBoldPlate, { color: colors.warningLight }]}>
+                  {selectedVehicle.vehicle_no}
+                </Text>
+                {' '}on hold for major repairs / spare parts?{'\n\n'}
+                • Floor timers will freeze.{'\n'}
+                • The vehicle will be strictly protected from midnight auto-deletion.{'\n'}
+                • Hold time is excluded from benchmark average turnaround metrics.
+              </>
+            )}
+          </Text>
+        }
+        confirmLabel={selectedVehicle.is_paused ? 'Resume Work' : 'Place On Hold'}
+        onConfirm={async () => {
+          setShowHoldConfirm(false);
+          const nextPaused = !selectedVehicle.is_paused;
+          await toggleVehiclePause(selectedVehicle.id, nextPaused, nextPaused ? 'major_repair' : undefined);
+        }}
+        onCancel={() => setShowHoldConfirm(false)}
       />
     </>
   );

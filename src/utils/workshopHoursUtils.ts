@@ -80,7 +80,37 @@ export const getBreakOverlap = (
   let totalBreakSeconds = 0;
   const breakNamesSet = new Set<string>();
 
-  // Iterate day by day between start and end date
+  // Fast-Path: If both timestamps are on the exact same calendar day, calculate overlap in O(1)
+  const isSameCalendarDay =
+    start.getFullYear() === end.getFullYear() &&
+    start.getMonth() === end.getMonth() &&
+    start.getDate() === end.getDate();
+
+  if (isSameCalendarDay) {
+    const dayStartMs = new Date(start.getFullYear(), start.getMonth(), start.getDate()).getTime();
+    const startMs = start.getTime();
+    const endMs = end.getTime();
+
+    for (const b of WORKSHOP_BREAKS) {
+      const bStartMs = dayStartMs + (b.startHour * 3600 + b.startMinute * 60) * 1000;
+      const bEndMs = dayStartMs + (b.endHour * 3600 + b.endMinute * 60) * 1000;
+
+      const oStart = Math.max(startMs, bStartMs);
+      const oEnd = Math.min(endMs, bEndMs);
+
+      if (oEnd > oStart) {
+        totalBreakSeconds += Math.floor((oEnd - oStart) / 1000);
+        breakNamesSet.add(b.name);
+      }
+    }
+
+    return {
+      breakSeconds: totalBreakSeconds,
+      breakNames: Array.from(breakNamesSet),
+    };
+  }
+
+  // Fallback: Multi-day intervals iterate day by day
   const currentDay = new Date(start);
   currentDay.setHours(0, 0, 0, 0);
 

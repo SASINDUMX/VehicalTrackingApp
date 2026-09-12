@@ -2,11 +2,12 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, TextInput, Platform } from 'react-native';
 import { useVehicles } from '../../context/VehicleContext';
 import { usePermissions } from '../../hooks/usePermissions';
-import { Search, X, Plus, Car, Bookmark } from 'lucide-react-native';
+import { Search, X, Plus, Bookmark } from 'lucide-react-native';
 
 import { useTheme } from '../../context/ThemeContext';
 import { usePinnedVehicles } from '../../hooks/usePinnedVehicles';
 import { APP_TERMINOLOGY } from '../../constants/terminology';
+import { matchesVehicleSearch } from '../../utils/searchUtils';
 
 export const SearchBarRow: React.FC = () => {
   const { searchQuery, setSearchQuery, showMyVehiclesOnly, setShowMyVehiclesOnly, setIsAddModalOpen, activeTab, vehicles } = useVehicles();
@@ -29,16 +30,17 @@ export const SearchBarRow: React.FC = () => {
     setLocalSearch(searchQuery);
   }, [searchQuery]);
 
-  // Active vehicle count calculation for current page view (respects showMyVehiclesOnly)
+  // Active vehicle count calculation reflecting current view, tab, pinned toggle AND live search results
   const activeCount = React.useMemo(() => {
     const roleFiltered = vehicles.filter(v => {
       if (v.is_finished) return false;
       if (showMyVehiclesOnly && !isPinned(v.id)) return false;
-      if (activeTab === 'overview') return true;
-      return v.current_zone === activeTab;
+      if (activeTab !== 'overview' && v.current_zone !== activeTab) return false;
+      if (localSearch && localSearch.trim() && !matchesVehicleSearch(v.vehicle_no, localSearch)) return false;
+      return true;
     });
     return roleFiltered.length;
-  }, [vehicles, activeTab, showMyVehiclesOnly, isPinned]);
+  }, [vehicles, activeTab, showMyVehiclesOnly, isPinned, localSearch]);
 
   return (
     <View style={[styles.topSearchContainer, { backgroundColor: colors.background, borderBottomColor: colors.borderGlass }]}>
@@ -72,6 +74,11 @@ export const SearchBarRow: React.FC = () => {
               <X size={14} color={colors.textMuted} />
             </TouchableOpacity>
           )}
+
+          {/* Integrated Vehicle Count (clean right-aligned number without rounded wrapper) */}
+          <Text style={[styles.searchCountText, { color: colors.textMuted }]}>
+            {activeCount}
+          </Text>
         </View>
 
         {/* My Vehicles Filter Button */}
@@ -91,12 +98,6 @@ export const SearchBarRow: React.FC = () => {
             {showMyVehiclesOnly ? APP_TERMINOLOGY.navigation.myVehicles : APP_TERMINOLOGY.navigation.allVehicles}
           </Text>
         </TouchableOpacity>
-
-        {/* Active Vehicle Counter Badge */}
-        <View style={[styles.vehicleCountPill, { backgroundColor: colors.primaryDim, borderColor: colors.primaryBorder }]}>
-          <Car size={14} color={colors.primaryLight} />
-          <Text style={[styles.vehicleCountPillText, { color: colors.primaryLight }]}>{activeCount}</Text>
-        </View>
 
         {canAddVehicle && (
           <TouchableOpacity style={[styles.addVehicleBtn, { backgroundColor: colors.primary }]} onPress={() => setIsAddModalOpen(true)}>
@@ -351,16 +352,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  vehicleCountPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 5,
-    height: 36,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    borderRadius: 20,
+  searchCountText: {
+    fontSize: 13,
+    fontWeight: '700',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    marginLeft: 6,
+    marginRight: 2,
     flexShrink: 0,
+    opacity: 0.9,
   },
   singleFilterToggleBtn: {
     flexDirection: 'row',
@@ -375,10 +374,6 @@ const styles = StyleSheet.create({
   },
   singleFilterToggleText: {
     fontSize: 11,
-    fontWeight: '700',
-  },
-  vehicleCountPillText: {
-    fontSize: 12,
     fontWeight: '700',
   },
   searchBoxContainer: {

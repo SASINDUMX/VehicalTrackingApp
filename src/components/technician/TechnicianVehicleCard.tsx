@@ -14,7 +14,7 @@ export interface TechnicianVehicleCardProps {
   vehicle: Vehicle;
   isExpanded: boolean;
   isPinned: boolean;
-  elapsedText: string;
+  elapsedText?: string;
   activeBay: BayZone;
   activeTaskType: TaskType;
   currentRole: string;
@@ -83,28 +83,35 @@ export const TechnicianVehicleCard: React.FC<TechnicianVehicleCardProps> = React
   // Work can only be started if this bay actually has a required task to perform
   const canStartBayWork = canStart && isTaskRequiredForBay;
   const isCardIdle = isStageIdle && isTaskRequiredForBay;
+  const isPaused = Boolean(vehicle.is_paused);
 
   return (
     <View
       style={[
         styles.vehicleCardWrapper,
         {
-          backgroundColor: isUrgent
+          backgroundColor: isPaused
+            ? (isDark ? 'rgba(245, 158, 11, 0.08)' : '#fffbeb')
+            : isUrgent
             ? colors.cardUrgentBg
             : isCurrentTaskDone
             ? colors.cardDoneBg
             : isCardIdle
             ? colors.cardIdleBg
             : colors.cardActiveBg,
-          borderColor: isUrgent
+          borderColor: isPaused
+            ? '#f59e0b'
+            : isUrgent
             ? colors.cardUrgentBorder
             : isCurrentTaskDone
             ? colors.cardDoneBorder
             : isCardIdle
             ? colors.cardIdleBorder
             : colors.cardActiveBorder,
-          borderLeftWidth: 4,
-          borderLeftColor: isUrgent
+          borderLeftWidth: 5,
+          borderLeftColor: isPaused
+            ? '#f59e0b'
+            : isUrgent
             ? colors.danger
             : isCurrentTaskDone
             ? colors.success
@@ -169,6 +176,29 @@ export const TechnicianVehicleCard: React.FC<TechnicianVehicleCardProps> = React
             />
           )}
 
+          {/* Assigned Mechanic / Technician */}
+          {Boolean(vehicle.technician_name && vehicle.technician_name.trim()) && (
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 8,
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+              borderRadius: 8,
+              backgroundColor: isDark ? 'rgba(56, 189, 248, 0.08)' : '#f0f9ff',
+              borderWidth: 1,
+              borderColor: isDark ? 'rgba(56, 189, 248, 0.2)' : '#bae6fd',
+              marginBottom: 8,
+            }}>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: isDark ? '#38bdf8' : '#0284c7' }}>
+                👨‍🔧 MECHANIC:
+              </Text>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textPrimary }}>
+                {vehicle.technician_name}
+              </Text>
+            </View>
+          )}
+
           {/* Station Assigned Task Checklist */}
           <View style={[styles.tasksSection, { borderTopColor: colors.borderGlass }]}>
             <View style={styles.tasksSectionHeaderRow}>
@@ -222,17 +252,20 @@ export const TechnicianVehicleCard: React.FC<TechnicianVehicleCardProps> = React
                   </View>
 
                   {isEditable ? (
-                    <View
+                    <TouchableOpacity
                       style={[
                         styles.taskDoneBtn,
                         { backgroundColor: colors.primary },
                         task.is_completed && { backgroundColor: colors.success },
                       ]}
+                      onPress={() => onToggleTask(task.id)}
+                      activeOpacity={0.7}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
                       <Text style={[styles.taskDoneBtnText, { color: colors.textDark }]}>
                         {task.is_completed ? 'DONE ✓' : 'MARK DONE'}
                       </Text>
-                    </View>
+                    </TouchableOpacity>
                   ) : (
                     <View style={[
                       styles.lockedTaskBadge,

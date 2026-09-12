@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Modal, View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Platform } from 'react-native';
 import { useVehicles } from '../../context/VehicleContext';
 import { BayZone, TaskType } from '../../types/vehicle';
-import { X, Car, Wrench, Shield, Navigation, Send, CheckSquare, Square, AlertTriangle, Droplets } from 'lucide-react-native';
+import { X, Car, Wrench, Shield, Navigation, Send, CheckSquare, Square, AlertTriangle } from 'lucide-react-native';
 
 import { formatVehicleNoInput, isValidVehicleNo } from '../../utils/vehicleNumberUtils';
 import { computeRecommendedStation } from '../../utils/bayLogicUtils';
@@ -25,6 +25,9 @@ export const AddVehicleModal: React.FC = () => {
   const [targetZone, setTargetZone] = useState<BayZone>('workshop');
   const [assignedTech, setAssignedTech] = useState<string>(APP_TERMINOLOGY.stations.workshop.name);
   const [remarks, setRemarks] = useState<string>('');
+  const [technicianName, setTechnicianName] = useState<string>('');
+  const [isBooking, setIsBooking] = useState<boolean>(false);
+  const [hasAdditionalRepairs, setHasAdditionalRepairs] = useState<boolean>(false);
   const [isUrgent, setIsUrgent] = useState<boolean>(false);
   const [urgentNote, setUrgentNote] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -61,10 +64,24 @@ export const AddVehicleModal: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      await addVehicle(vehicleNo.trim(), selectedTasks, targetZone, assignedTech, remarks, isUrgent, urgentNote);
+      await addVehicle(
+        vehicleNo.trim(),
+        selectedTasks,
+        targetZone,
+        assignedTech,
+        remarks,
+        isUrgent,
+        urgentNote,
+        technicianName.trim() || null,
+        isBooking,
+        hasAdditionalRepairs
+      );
       setIsAddModalOpen(false);
       setVehicleNo('');
       setRemarks('');
+      setTechnicianName('');
+      setIsBooking(false);
+      setHasAdditionalRepairs(false);
       setIsUrgent(false);
       setUrgentNote('');
     } catch (err) {
@@ -223,7 +240,7 @@ export const AddVehicleModal: React.FC = () => {
                       setAssignedTech(APP_TERMINOLOGY.stations.hoist.name);
                     }}
                   >
-                    <Droplets size={16} color={targetZone === 'hoist' ? colors.bayHoistLight : colors.textMuted} />
+                    <Wrench size={16} color={targetZone === 'hoist' ? colors.bayHoistLight : colors.textMuted} />
                     <Text style={[styles.dispatchText, { color: targetZone === 'hoist' ? colors.textPrimary : colors.textSecondary }]}>
                       TO {APP_TERMINOLOGY.stations.hoist.shortName}
                     </Text>
@@ -251,6 +268,64 @@ export const AddVehicleModal: React.FC = () => {
                 multiline
                 numberOfLines={2}
               />
+            </View>
+
+            {/* Technician Name (Actual mechanic) */}
+            <View style={styles.formGroup}>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>ASSIGNED TECHNICIAN (MECHANIC):</Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)',
+                    borderColor: colors.borderGlass,
+                    color: colors.textPrimary,
+                  }
+                ]}
+                placeholder="e.g. Kasun Fernando, Sunil Shantha..."
+                placeholderTextColor={colors.textMuted}
+                value={technicianName}
+                onChangeText={setTechnicianName}
+              />
+            </View>
+
+            {/* Booking & Additional Repairs Checkboxes */}
+            <View style={[styles.formGroup, { flexDirection: 'row', gap: 12, flexWrap: 'wrap' }]}>
+              <TouchableOpacity
+                style={[
+                  styles.dispatchBtn,
+                  {
+                    flex: 1,
+                    minWidth: 200,
+                    backgroundColor: isBooking ? (isDark ? 'rgba(59, 130, 246, 0.15)' : '#eff6ff') : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
+                    borderColor: isBooking ? '#3b82f6' : colors.borderGlass,
+                  }
+                ]}
+                onPress={() => setIsBooking(!isBooking)}
+              >
+                {isBooking ? <CheckSquare size={16} color="#3b82f6" /> : <Square size={16} color={colors.textMuted} />}
+                <Text style={[styles.dispatchText, { color: isBooking ? colors.textPrimary : colors.textSecondary }]}>
+                  PRIOR BOOKING
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.dispatchBtn,
+                  {
+                    flex: 1,
+                    minWidth: 200,
+                    backgroundColor: hasAdditionalRepairs ? (isDark ? 'rgba(245, 158, 11, 0.15)' : '#fffbeb') : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
+                    borderColor: hasAdditionalRepairs ? '#f59e0b' : colors.borderGlass,
+                  }
+                ]}
+                onPress={() => setHasAdditionalRepairs(!hasAdditionalRepairs)}
+              >
+                {hasAdditionalRepairs ? <CheckSquare size={16} color="#f59e0b" /> : <Square size={16} color={colors.textMuted} />}
+                <Text style={[styles.dispatchText, { color: hasAdditionalRepairs ? colors.textPrimary : colors.textSecondary }]}>
+                  ADDITIONAL REPAIRS
+                </Text>
+              </TouchableOpacity>
             </View>
 
             {/* Urgent Toggle */}

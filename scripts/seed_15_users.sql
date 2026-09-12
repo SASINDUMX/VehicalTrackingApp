@@ -109,7 +109,7 @@ BEGIN
       account.name,
       account.role::user_role,
       account.section,
-      'main_workshop',
+      'peliyagoda_sec5',
       'system'
     )
     ON CONFLICT (id) DO UPDATE

@@ -7,7 +7,8 @@ export const usePermissions = () => {
   const section: ForemanSection | string = userProfile?.section ?? 'car';
 
   // 1. Classification Flags
-  const isMasterAccess = role === 'service_executive' || role === 'agm' || role === 'job_controller';
+  const isSuperAdmin = role === 'super_admin' || role === 'service_executive';
+  const isMasterAccess = isSuperAdmin || role === 'agm' || role === 'job_controller';
   const isWorkshopManager = role === 'workshop_manager';
   const isForeman = role === 'foreman';
   const isAdvisor = role === 'advisor';
@@ -32,10 +33,12 @@ export const usePermissions = () => {
 
   return {
     // Role Tiers
+    isSuperAdmin,
     isMasterAccess,
     isWorkshopManager,
     isForeman,
     isAdvisor,
+    canSwitchBranch: isSuperAdmin,
     section,
 
     // Vehicle Administration (Intake, Deletion, Floor Relocation)

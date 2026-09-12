@@ -101,12 +101,21 @@ export const computeVehicleTimelineStages = (
   const traversedNodes: PreNode[] = [];
 
   sortedLogs.forEach((log, logIdx) => {
-    const stageDef = stageDefMap.get(log.to_zone) || {
+    const baseDef = stageDefMap.get(log.to_zone) || {
       zone: log.to_zone,
       name: log.to_zone,
       icon: null,
       color: '#666',
       isRequired: isRequiredForZone(log.to_zone),
+    };
+
+    const visitNum = log.visit_number || 1;
+    const hasMultipleVisitsForZone = sortedLogs.filter(l => l.to_zone === log.to_zone).length > 1;
+    const stageName = hasMultipleVisitsForZone ? `${baseDef.name} (Pass ${visitNum})` : baseDef.name;
+
+    const stageDef = {
+      ...baseDef,
+      name: stageName,
     };
 
     const isCurrent = !log.exited_at && vehicle.current_zone === log.to_zone;

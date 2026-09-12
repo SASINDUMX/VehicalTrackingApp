@@ -18,12 +18,14 @@ export const vehicleService = {
    * Calls PostgreSQL RPC `reconcile_daily_vehicles` atomically.
    * If RPC is unavailable, falls back to direct table update/delete.
    */
-  async reconcileDailyVehicles(): Promise<{ completedCount: number; deletedCount: number }> {
+  async reconcileDailyVehicles(branchId: string = 'peliyagoda_sec5'): Promise<{ completedCount: number; deletedCount: number }> {
     const client = supabase;
     if (!client || !isSupabaseConnected) return { completedCount: 0, deletedCount: 0 };
 
     try {
-      const { data: rpcRes, error: rpcErr } = await client.rpc('reconcile_daily_vehicles');
+      const { data: rpcRes, error: rpcErr } = await client.rpc('reconcile_daily_vehicles', {
+        p_branch_id: branchId,
+      });
       if (!rpcErr && rpcRes) {
         return {
           completedCount: Number(rpcRes.completed_count || 0),
@@ -41,7 +43,8 @@ export const vehicleService = {
       const { data: unfinished, error } = await client
         .from('vehicles')
         .select('id, vehicle_no, current_zone, intake_at, created_at')
-        .eq('is_finished', false);
+        .eq('is_finished', false)
+        .eq('branch_id', branchId);
 
       if (error || !unfinished || unfinished.length === 0) {
         return { completedCount: 0, deletedCount: 0 };
@@ -54,27 +57,33 @@ export const vehicleService = {
 
       if (stale.length === 0) return { completedCount: 0, deletedCount: 0 };
 
-      // 1. Complete inspection vehicles from previous days
+      // 1. Complete inspection vehicles from previous days in a single batch
       const inspectionVehicles = stale.filter(v => v.current_zone === 'inspection');
-      for (const iv of inspectionVehicles) {
+      const inspectionIds = inspectionVehicles.map(v => v.id);
+
+      if (inspectionIds.length > 0) {
         const nowIso = now.toISOString();
-        const { data: logs } = await client
+
+        // Close any unclosed stage logs for these vehicles in batch
+        const { data: openLogs } = await client
           .from('stage_logs')
-          .select('*')
-          .eq('vehicle_id', iv.id)
+          .select('id, vehicle_id, entered_at')
+          .in('vehicle_id', inspectionIds)
           .is('exited_at', null);
 
-        if (logs && logs.length > 0) {
-          for (const l of logs) {
+        if (openLogs && openLogs.length > 0) {
+          const logClosePromises = openLogs.map(l => {
             const entered = new Date(l.entered_at).getTime();
             const dur = Math.max(0, Math.floor((now.getTime() - entered) / 1000));
-            await client
+            return client
               .from('stage_logs')
               .update({ exited_at: nowIso, duration_seconds: dur, idle_seconds: dur })
               .eq('id', l.id);
-          }
+          });
+          await Promise.all(logClosePromises);
         }
 
+        // Complete all inspection vehicles in one single query
         await client
           .from('vehicles')
           .update({
@@ -84,15 +93,17 @@ export const vehicleService = {
             is_paused: false,
             paused_at: null,
           })
-          .eq('id', iv.id);
+          .in('id', inspectionIds);
       }
 
-      // 2. Delete out-of-scope unfinished vehicles in working bays from previous days
+      // 2. Delete out-of-scope unfinished vehicles in working bays from previous days in batch
       const bayVehicles = stale.filter(v => v.current_zone !== 'inspection');
       const bayIds = bayVehicles.map(v => v.id);
       if (bayIds.length > 0) {
-        await client.from('stage_logs').delete().in('vehicle_id', bayIds);
-        await client.from('vehicle_tasks').delete().in('vehicle_id', bayIds);
+        await Promise.all([
+          client.from('stage_logs').delete().in('vehicle_id', bayIds),
+          client.from('vehicle_tasks').delete().in('vehicle_id', bayIds),
+        ]);
         await client.from('vehicles').delete().in('id', bayIds);
       }
 
@@ -108,7 +119,7 @@ export const vehicleService = {
    * Queries active vehicles (is_finished = false) plus jobs finished within the last 48 hours,
    * embedding vehicle_tasks and stage_logs in a single HTTP network trip.
    */
-  async fetchLiveVehicles(): Promise<Vehicle[]> {
+  async fetchLiveVehicles(branchId?: string): Promise<Vehicle[]> {
     const client = supabase;
     if (!client || !isSupabaseConnected) return [];
 
@@ -116,17 +127,23 @@ export const vehicleService = {
     const liveFilter = `is_finished.eq.false,created_at.gte.${cutoff48h}`;
 
     // Single-trip PostgREST nested select with pre-sorted stage_logs
-    const vRes = await client
+    let query = client
       .from('vehicles')
       .select('*, tasks:vehicle_tasks(*), stage_logs(*)')
       .or(liveFilter)
       .order('created_at', { ascending: false })
       .order('entered_at', { foreignTable: 'stage_logs', ascending: true });
 
+    if (branchId) {
+      query = query.eq('branch_id', branchId);
+    }
+
+    const vRes = await query;
+
     if (vRes.error) {
       // If nested join fails (e.g. schema cache reloading), fallback to parallel query
       console.warn('[vehicleService] Single-trip fetch fallback:', vRes.error.message);
-      return this._fallbackParallelFetch(liveFilter);
+      return this._fallbackParallelFetch(liveFilter, branchId);
     }
 
     const dbVehicles = vRes.data || [];
@@ -137,28 +154,53 @@ export const vehicleService = {
    * Internal mapper for relational vehicle payloads.
    */
   _mapRawVehicle(v: any): Vehicle {
-    const rawLogs = (v.stage_logs || []) as StageLog[];
+    const rawLogs = (v.stage_logs || []) as any[];
     // Sort logs chronologically
-    const sortedLogs = [...rawLogs].sort(
+    const sortedLogs: StageLog[] = [...rawLogs].sort(
       (a, b) => new Date(a.entered_at).getTime() - new Date(b.entered_at).getTime()
-    );
+    ).map(l => ({
+      id: l.id as string,
+      vehicle_id: l.vehicle_id as string,
+      from_zone: l.from_zone as BayZone || null,
+      to_zone: l.to_zone as BayZone,
+      visit_number: Number(l.visit_number) || 1,
+      entered_at: l.entered_at as string,
+      work_started_at: (l.work_started_at as string) || null,
+      work_completed_at: (l.work_completed_at as string) || null,
+      exited_at: (l.exited_at as string) || null,
+      duration_seconds: Number(l.duration_seconds) || 0,
+      active_seconds: Number(l.active_seconds) || 0,
+      idle_seconds: Number(l.idle_seconds) || 0,
+      break_seconds: Number(l.break_seconds) || 0,
+      moved_by: (l.moved_by as string) || undefined,
+      technician_name: (l.technician_name as string) || null,
+      stage_remarks: (l.stage_remarks as string) || null,
+      is_paused: Boolean(l.is_paused),
+      paused_at: (l.paused_at as string) || null,
+      paused_seconds: Number(l.paused_seconds) || 0,
+      is_dispatched: Boolean(l.is_dispatched || l.exited_at),
+    }));
 
     return {
       id: v.id as string,
       vehicle_no: v.vehicle_no as string,
       current_zone: v.current_zone as BayZone,
+      technician_name: (v.technician_name as string) || null,
       assigned_tech: (v.assigned_tech as string) || 'Unassigned',
       remarks: (v.remarks as string) || '',
+      is_booking: Boolean(v.is_booking),
+      has_additional_repairs: Boolean(v.has_additional_repairs),
       intake_at: v.intake_at as string,
       completed_at: (v.completed_at as string) || null,
       is_finished: Boolean(v.is_finished),
       created_at: v.created_at as string,
-      status: (v.status as 'active' | 'finished' | 'incomplete') || 'active',
+      status: (v.status as 'active' | 'finished' | 'incomplete' | 'on_hold') || 'active',
       is_urgent: Boolean(v.is_urgent),
       urgent_note: (v.urgent_note as string) || null,
       is_paused: Boolean(v.is_paused),
       paused_at: (v.paused_at as string) || null,
       paused_seconds: Number(v.paused_seconds) || 0,
+      pause_reason: (v.pause_reason as string) || null,
       effective_completed_at: (v.effective_completed_at as string) || null,
       gross_tat_seconds: Number(v.gross_tat_seconds) || 0,
       net_tat_seconds: Number(v.net_tat_seconds) || 0,
@@ -171,13 +213,16 @@ export const vehicleService = {
   /**
    * Resilient fallback in case nested relational join encounters permission/schema cache delay.
    */
-  async _fallbackParallelFetch(filterString?: string): Promise<Vehicle[]> {
+  async _fallbackParallelFetch(filterString?: string, branchId?: string): Promise<Vehicle[]> {
     const client = supabase;
     if (!client) return [];
 
     let query = client.from('vehicles').select('*');
     if (filterString) {
       query = query.or(filterString);
+    }
+    if (branchId) {
+      query = query.eq('branch_id', branchId);
     }
     const vRes = await query.order('created_at', { ascending: false });
     if (vRes.error) throw vRes.error;
@@ -239,20 +284,30 @@ export const vehicleService = {
    * On-Demand Single-Trip Historical Range Querying for Service Reports.
    * Harmonized to filter by intake_at (falling back to created_at) to align with get_service_report_kpis.
    */
-  async fetchHistoricalVehicles(datePreset: 'today' | 'yesterday' | '7days' | 'month' | '3months'): Promise<Vehicle[]> {
+  async fetchHistoricalVehicles(
+    datePreset: 'today' | 'yesterday' | '7days' | 'month' | '3months' | 'custom',
+    customStartDate?: string,
+    customEndDate?: string,
+    branchId?: string
+  ): Promise<Vehicle[]> {
     const client = supabase;
     if (!client || !isSupabaseConnected) return [];
 
     let query = client
       .from('vehicles')
       .select(`
-        id, vehicle_no, current_zone, assigned_tech, remarks, intake_at, completed_at, effective_completed_at,
-        is_finished, status, is_urgent, urgent_note, branch_id, gross_tat_seconds, net_tat_seconds, total_break_seconds, created_at,
+        id, vehicle_no, current_zone, technician_name, assigned_tech, remarks, is_booking, has_additional_repairs, intake_at, completed_at, effective_completed_at,
+        is_finished, status, is_urgent, urgent_note, is_paused, paused_at, paused_seconds, pause_reason, branch_id, gross_tat_seconds, net_tat_seconds, total_break_seconds, created_at,
         tasks:vehicle_tasks(id, vehicle_id, task_name, task_type, is_required, is_completed, completed_at, completed_by, created_at),
-        stage_logs(id, vehicle_id, from_zone, to_zone, entered_at, work_started_at, exited_at, duration_seconds, idle_seconds, moved_by)
+        stage_logs(id, vehicle_id, from_zone, to_zone, visit_number, entered_at, work_started_at, work_completed_at, exited_at, duration_seconds, active_seconds, idle_seconds, break_seconds, moved_by, technician_name, stage_remarks, is_paused)
       `)
       .order('entered_at', { foreignTable: 'stage_logs', ascending: true });
     const now = new Date();
+
+    // Scope to branch first
+    if (branchId) {
+      query = query.eq('branch_id', branchId);
+    }
 
     if (datePreset === 'today') {
       const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
@@ -270,12 +325,19 @@ export const vehicleService = {
     } else if (datePreset === '3months') {
       const startOf3Months = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate()).toISOString();
       query = query.gte('intake_at', startOf3Months);
+    } else if (datePreset === 'custom') {
+      if (customStartDate) {
+        query = query.gte('intake_at', customStartDate);
+      }
+      if (customEndDate) {
+        query = query.lte('intake_at', customEndDate);
+      }
     }
 
     const { data: dbVehicles, error: vErr } = await query.order('intake_at', { ascending: false });
     if (vErr) {
       console.warn('[vehicleService] Historical single-trip fetch fallback:', vErr.message);
-      return this._fallbackParallelFetch();
+      return this._fallbackParallelFetch(undefined, branchId);
     }
 
     if (!dbVehicles || dbVehicles.length === 0) return [];
@@ -377,6 +439,72 @@ export const vehicleService = {
   },
 
   /**
+   * Ultra-Fast Server-Side Comprehensive Report Generator via `get_service_report_data`.
+   * Returns pre-computed summary, bay velocities, and pre-formatted vehicle records
+   * directly from PostgreSQL, offloading 100% of mathematical aggregation from the client CPU.
+   */
+  async fetchReportData(params: {
+    startDate?: string | null;
+    endDate?: string | null;
+    branchId?: string;
+    status?: 'all' | 'completed' | 'in_progress';
+  }): Promise<{
+    kpis: any;
+    records: any[];
+  } | null> {
+    const client = supabase;
+    if (!client || !isSupabaseConnected) return null;
+
+    try {
+      const { data, error } = await client.rpc('get_service_report_data', {
+        p_start_date: params.startDate || null,
+        p_end_date: params.endDate || null,
+        p_branch_id: params.branchId || null,
+        p_status: params.status || 'all',
+      });
+
+      if (error) {
+        console.warn('[vehicleService] RPC get_service_report_data note:', error.message);
+        return null;
+      }
+      if (!data) return null;
+
+      let raw: any = data;
+      if (typeof raw === 'string') {
+        try {
+          raw = JSON.parse(raw);
+        } catch {
+          return null;
+        }
+      }
+      if (Array.isArray(raw)) {
+        raw = raw[0];
+      }
+      if (!raw || typeof raw !== 'object') return null;
+
+      const summary = raw.summary || {};
+      const kpis = {
+        totalVehicles: Number(summary.totalVehicles ?? summary.total_vehicles ?? 0),
+        completedCount: Number(summary.completedCount ?? summary.completed_count ?? 0),
+        inProgressCount: Number(summary.inProgressCount ?? summary.in_progress_count ?? 0),
+        bookingCount: Number(summary.bookingCount ?? summary.booking_count ?? 0),
+        additionalRepairsCount: Number(summary.additionalRepairsCount ?? summary.additional_repairs_count ?? 0),
+        workshopBay: raw.workshopBay || raw.workshop_bay,
+        alignmentBay: raw.alignmentBay || raw.alignment_bay,
+        hoistBay: raw.hoistBay || raw.hoist_bay,
+        totalBreakSeconds: Number(summary.totalBreakSeconds ?? summary.total_break_seconds ?? 0),
+      };
+
+      const records = Array.isArray(raw.records) ? raw.records : [];
+
+      return { kpis, records };
+    } catch (err) {
+      console.warn('[vehicleService] RPC get_service_report_data error:', err);
+      return null;
+    }
+  },
+
+  /**
    * Intakes a new vehicle, creating initial stage_log and checklist tasks in database.
    * Calls PostgreSQL RPC `intake_vehicle` for atomic single-transaction execution.
    * If RPC is unavailable, falls back to direct table inserts.
@@ -385,12 +513,16 @@ export const vehicleService = {
     vehicleData: {
       vehicle_no: string;
       current_zone: BayZone;
+      technician_name?: string | null;
       assigned_tech: string;
       remarks: string;
+      is_booking?: boolean;
+      has_additional_repairs?: boolean;
       intake_at: string;
-      status: 'active' | 'finished' | 'incomplete';
+      status: 'active' | 'finished' | 'incomplete' | 'on_hold';
       is_urgent: boolean;
       urgent_note: string | null;
+      branch_id?: string;
     },
     tasksList: { task_name: string; task_type: TaskType; is_required: boolean }[]
   ): Promise<Vehicle> {
@@ -402,25 +534,84 @@ export const vehicleService = {
       const { data: rpcRes, error: rpcErr } = await client.rpc('intake_vehicle', {
         p_vehicle_no: vehicleData.vehicle_no,
         p_target_zone: vehicleData.current_zone,
-        p_assigned_tech: vehicleData.assigned_tech,
+        p_technician_name: vehicleData.technician_name || null,
         p_remarks: vehicleData.remarks,
+        p_is_booking: Boolean(vehicleData.is_booking),
+        p_has_additional_repairs: Boolean(vehicleData.has_additional_repairs),
         p_is_urgent: vehicleData.is_urgent,
         p_urgent_note: vehicleData.urgent_note,
         p_tasks: tasksList,
-        p_branch_id: 'main_workshop',
+        p_branch_id: vehicleData.branch_id || 'peliyagoda_sec5',
       });
 
       if (!rpcErr && rpcRes && rpcRes.vehicle_id) {
-        // Fetch newly created vehicle with full relations
-        const { data: createdV, error: fetchErr } = await client
-          .from('vehicles')
-          .select('*, tasks:vehicle_tasks(*), stage_logs(*)')
-          .eq('id', rpcRes.vehicle_id)
-          .single();
+        // High-Performance $O(1)$ assembly: RPC created vehicle, initial log, and tasks atomically.
+        // Synthesizing the return object in memory eliminates a redundant 100-150ms HTTP network roundtrip.
+        const createdId = rpcRes.vehicle_id;
+        const initialLogId = rpcRes.log_id || `log-${Date.now()}`;
+        const intakeTimestamp = vehicleData.intake_at;
 
-        if (!fetchErr && createdV) {
-          return this._mapRawVehicle(createdV);
-        }
+        const initialStageLog: StageLog = {
+          id: initialLogId,
+          vehicle_id: createdId,
+          from_zone: null,
+          to_zone: vehicleData.current_zone,
+          visit_number: 1,
+          entered_at: intakeTimestamp,
+          work_started_at: null,
+          work_completed_at: null,
+          exited_at: null,
+          duration_seconds: 0,
+          active_seconds: 0,
+          idle_seconds: 0,
+          break_seconds: 0,
+          moved_by: 'Job Supervisor',
+          technician_name: vehicleData.technician_name || null,
+          stage_remarks: null,
+          is_paused: false,
+          paused_at: null,
+          paused_seconds: 0,
+          is_dispatched: false,
+        };
+
+        const initialTasks: VehicleTask[] = tasksList.map((t, idx) => ({
+          id: `task-${createdId}-${idx}`,
+          vehicle_id: createdId,
+          task_name: t.task_name,
+          task_type: t.task_type,
+          is_required: t.is_required,
+          is_completed: false,
+          created_at: intakeTimestamp,
+        }));
+
+        return {
+          id: createdId,
+          vehicle_no: vehicleData.vehicle_no,
+          current_zone: vehicleData.current_zone,
+          technician_name: vehicleData.technician_name || null,
+          assigned_tech: vehicleData.assigned_tech,
+          remarks: vehicleData.remarks,
+          is_booking: Boolean(vehicleData.is_booking),
+          has_additional_repairs: Boolean(vehicleData.has_additional_repairs),
+          intake_at: intakeTimestamp,
+          completed_at: null,
+          is_finished: false,
+          created_at: intakeTimestamp,
+          status: vehicleData.status,
+          is_urgent: vehicleData.is_urgent,
+          urgent_note: vehicleData.urgent_note,
+          branch_id: vehicleData.branch_id || 'peliyagoda_sec5',
+          is_paused: false,
+          paused_at: null,
+          paused_seconds: 0,
+          pause_reason: null,
+          effective_completed_at: null,
+          gross_tat_seconds: 0,
+          net_tat_seconds: 0,
+          total_break_seconds: 0,
+          tasks: initialTasks,
+          stage_logs: [initialStageLog],
+        };
       } else if (rpcErr) {
         console.warn('[vehicleService] RPC intake_vehicle fallback:', rpcErr.message);
       }
@@ -434,13 +625,17 @@ export const vehicleService = {
       .insert({
         vehicle_no: vehicleData.vehicle_no,
         current_zone: vehicleData.current_zone,
+        technician_name: vehicleData.technician_name || null,
         assigned_tech: vehicleData.assigned_tech,
         remarks: vehicleData.remarks,
+        is_booking: Boolean(vehicleData.is_booking),
+        has_additional_repairs: Boolean(vehicleData.has_additional_repairs),
         intake_at: vehicleData.intake_at,
         status: vehicleData.status,
         is_urgent: vehicleData.is_urgent,
         urgent_note: vehicleData.urgent_note,
         is_finished: false,
+        branch_id: vehicleData.branch_id || 'peliyagoda_sec5',
       })
       .select()
       .single();
@@ -452,10 +647,13 @@ export const vehicleService = {
       .insert({
         vehicle_id: insertedV.id,
         to_zone: vehicleData.current_zone,
+        visit_number: 1,
         entered_at: vehicleData.intake_at,
         work_started_at: null,
         idle_seconds: 0,
         moved_by: 'Job Supervisor',
+        technician_name: vehicleData.technician_name || null,
+        branch_id: vehicleData.branch_id || 'peliyagoda_sec5',
       })
       .select()
       .single();
@@ -481,45 +679,52 @@ export const vehicleService = {
       if (tData) insertedTasks = tData as VehicleTask[];
     }
 
-    return {
-      id: insertedV.id,
-      vehicle_no: insertedV.vehicle_no,
-      current_zone: insertedV.current_zone,
-      assigned_tech: insertedV.assigned_tech || 'Unassigned',
-      remarks: insertedV.remarks || '',
-      intake_at: insertedV.intake_at,
-      completed_at: insertedV.completed_at,
-      is_finished: insertedV.is_finished,
-      created_at: insertedV.created_at,
-      status: insertedV.status,
-      is_urgent: insertedV.is_urgent,
-      urgent_note: insertedV.urgent_note,
-      is_paused: insertedV.is_paused || false,
-      paused_at: insertedV.paused_at,
-      paused_seconds: insertedV.paused_seconds || 0,
+    return this._mapRawVehicle({
+      ...insertedV,
       tasks: insertedTasks,
-      stage_logs: insertedLog ? [insertedLog as StageLog] : [],
-    };
+      stage_logs: insertedLog ? [insertedLog] : [],
+    });
   },
 
   /**
-   * Updates vehicle remarks and required tasks matrix.
+   * Updates vehicle remarks, license plate, mechanic, booking flags, and required tasks matrix.
    */
   async updateJobOrder(
     vehicleId: string,
     existingTasks: VehicleTask[],
     finalTaskTypes: TaskType[],
     updatedRemarks: string,
-    urgencyData?: { is_urgent: boolean; urgent_note: string | null }
+    urgencyData?: { is_urgent: boolean; urgent_note: string | null },
+    extraData?: {
+      vehicle_no?: string;
+      technician_name?: string | null;
+      is_booking?: boolean;
+      has_additional_repairs?: boolean;
+    }
   ): Promise<void> {
     const client = supabase;
     if (!client || !isSupabaseConnected) return;
 
     // 1. Single consolidated vehicle update
-    const vehicleUpdatePayload: Record<string, any> = { remarks: updatedRemarks };
+    const vehicleUpdatePayload: Record<string, any> = { 
+      remarks: updatedRemarks,
+      updated_at: new Date().toISOString(),
+    };
     if (urgencyData !== undefined) {
       vehicleUpdatePayload.is_urgent = urgencyData.is_urgent;
       vehicleUpdatePayload.urgent_note = urgencyData.urgent_note;
+    }
+    if (extraData?.vehicle_no !== undefined) {
+      vehicleUpdatePayload.vehicle_no = extraData.vehicle_no.trim().toUpperCase();
+    }
+    if (extraData?.technician_name !== undefined) {
+      vehicleUpdatePayload.technician_name = extraData.technician_name ? extraData.technician_name.trim() : null;
+    }
+    if (extraData?.is_booking !== undefined) {
+      vehicleUpdatePayload.is_booking = extraData.is_booking;
+    }
+    if (extraData?.has_additional_repairs !== undefined) {
+      vehicleUpdatePayload.has_additional_repairs = extraData.has_additional_repairs;
     }
 
     const { error: vErr } = await client
@@ -570,6 +775,65 @@ export const vehicleService = {
         if (res?.error) throw res.error;
       }
     }
+  },
+
+  /**
+   * Directly updates vehicle license plate number with uppercase normalization.
+   */
+  async updateVehiclePlate(vehicleId: string, newPlate: string): Promise<void> {
+    const client = supabase;
+    if (!client || !isSupabaseConnected) return;
+    const cleanPlate = newPlate.trim().toUpperCase();
+    const { error } = await client
+      .from('vehicles')
+      .update({ vehicle_no: cleanPlate, updated_at: new Date().toISOString() })
+      .eq('id', vehicleId);
+    if (error) throw error;
+  },
+
+  /**
+   * Toggles vehicle pause / hold state for major repair.
+   * Freezes active timer and accumulates paused_seconds.
+   */
+  async togglePauseVehicle(vehicleId: string, isPaused: boolean, reason: string = 'major_repair'): Promise<void> {
+    const client = supabase;
+    if (!client || !isSupabaseConnected) return;
+    const now = new Date().toISOString();
+
+    const { data: v } = await client
+      .from('vehicles')
+      .select('is_paused, paused_at, paused_seconds')
+      .eq('id', vehicleId)
+      .single();
+
+    let nextPausedSec = Number(v?.paused_seconds) || 0;
+    if (!isPaused && v?.is_paused && v?.paused_at) {
+      const elapsed = Math.max(0, Math.floor((new Date(now).getTime() - new Date(v.paused_at).getTime()) / 1000));
+      nextPausedSec += elapsed;
+    }
+
+    const { error: vErr } = await client
+      .from('vehicles')
+      .update({
+        is_paused: isPaused,
+        paused_at: isPaused ? now : null,
+        paused_seconds: nextPausedSec,
+        status: isPaused ? 'on_hold' : 'active',
+        pause_reason: isPaused ? reason : null,
+        updated_at: now,
+      })
+      .eq('id', vehicleId);
+    if (vErr) throw vErr;
+
+    // Update active stage log pause state
+    await client
+      .from('stage_logs')
+      .update({
+        is_paused: isPaused,
+        paused_at: isPaused ? now : null,
+      })
+      .eq('vehicle_id', vehicleId)
+      .is('exited_at', null);
   },
 
   /**
@@ -633,10 +897,17 @@ export const vehicleService = {
         const idle = workStartedAt
           ? (existingIdleSec ?? Math.max(0, Math.floor((new Date(workStartedAt).getTime() - entered) / 1000)))
           : duration;
+        const active = workStartedAt ? Math.max(0, duration - idle) : 0;
 
         const { error: updateErr } = await client
           .from('stage_logs')
-          .update({ exited_at: now, duration_seconds: duration, idle_seconds: idle })
+          .update({ 
+            exited_at: now, 
+            work_completed_at: now,
+            duration_seconds: duration, 
+            idle_seconds: idle,
+            active_seconds: active 
+          })
           .eq('id', activeLogId);
         if (updateErr) throw updateErr;
       } else {
@@ -655,23 +926,42 @@ export const vehicleService = {
           const idle = activeLog.work_started_at
             ? (existingIdleSec ?? activeLog.idle_seconds ?? Math.max(0, Math.floor((new Date(activeLog.work_started_at).getTime() - entered) / 1000)))
             : duration;
+          const active = activeLog.work_started_at ? Math.max(0, duration - idle) : 0;
           const { error: updateActiveErr } = await client
             .from('stage_logs')
-            .update({ exited_at: now, duration_seconds: duration, idle_seconds: idle })
+            .update({ 
+              exited_at: now, 
+              work_completed_at: now,
+              duration_seconds: duration, 
+              idle_seconds: idle,
+              active_seconds: active 
+            })
             .eq('id', activeLog.id);
           if (updateActiveErr) throw updateActiveErr;
         }
       }
+
+      // Count past visits to compute visit_number
+      const { count: pastVisitsCount } = await client
+        .from('stage_logs')
+        .select('id', { count: 'exact', head: true })
+        .eq('vehicle_id', vehicleId)
+        .eq('to_zone', targetZone);
+
+      const nextVisitNumber = (pastVisitsCount || 0) + 1;
 
       // Insert new stage log
       const { error: insertErr } = await client.from('stage_logs').insert({
         vehicle_id: vehicleId,
         from_zone: fromZone || null,
         to_zone: targetZone,
+        visit_number: nextVisitNumber,
         entered_at: now,
         work_started_at: null,
         idle_seconds: 0,
+        active_seconds: 0,
         duration_seconds: 0,
+        moved_by: movedBy || 'Staff',
       });
       if (insertErr) throw insertErr;
 

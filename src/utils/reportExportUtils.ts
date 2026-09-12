@@ -19,6 +19,9 @@ export interface ReportKPIs {
   totalVehicles: number;
   completedCount: number;
   inProgressCount: number;
+  bookingCount: number;
+  additionalRepairsCount: number;
+  washingBay?: BayKPI;
   workshopBay: BayKPI;
   alignmentBay: BayKPI;
   hoistBay: BayKPI;
@@ -26,7 +29,39 @@ export interface ReportKPIs {
   totalBreakSeconds?: number;
 }
 
-export type DateFilterPreset = 'today' | 'yesterday' | '7days' | 'month' | '3months';
+export interface ServerReportRecord {
+  id: string;
+  vehicle_no: string;
+  status: string;
+  current_zone: BayZone;
+  is_finished: boolean;
+  is_effective_done: boolean;
+  is_booking: boolean;
+  has_additional_repairs: boolean;
+  technician_name: string | null;
+  assigned_tech: string | null;
+  remarks: string | null;
+  intake_at: string | null;
+  created_at: string;
+  effective_completed_at: string | null;
+  gross_tat_seconds: number;
+  net_tat_seconds: number;
+  total_break_seconds: number;
+  total_idle_sec: number;
+  total_active_sec: number;
+  workshop_idle: number;
+  workshop_active: number;
+  workshop_break: number;
+  alignment_idle: number;
+  alignment_active: number;
+  alignment_break: number;
+  hoist_idle: number;
+  hoist_active: number;
+  hoist_break: number;
+  completed_tasks_str: string;
+}
+
+export type DateFilterPreset = 'today' | 'yesterday' | '7days' | 'month' | '3months' | 'custom';
 export type StatusFilterPreset = 'all' | 'completed' | 'in_progress';
 
 export const formatDuration = (totalSeconds: number): string => {
@@ -75,7 +110,8 @@ export const getVehicleEffectiveCompletion = (v: Vehicle): { isEffectiveDone: bo
 export const filterVehiclesForReport = (
   vehicles: Vehicle[],
   datePreset: DateFilterPreset = '3months',
-  statusPreset: StatusFilterPreset = 'all'
+  statusPreset: StatusFilterPreset = 'all',
+  customDateRange?: { start: string; end?: string }
 ): Vehicle[] => {
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -94,6 +130,14 @@ export const filterVehiclesForReport = (
     if (datePreset === '7days' && intakeDate < startOf7Days) return false;
     if (datePreset === 'month' && intakeDate < startOfMonth) return false;
     if (datePreset === '3months' && intakeDate < startOf3Months) return false;
+    if (datePreset === 'custom' && customDateRange?.start) {
+      const customStart = new Date(customDateRange.start);
+      if (!Number.isNaN(customStart.getTime()) && intakeDate < customStart) return false;
+      if (customDateRange.end) {
+        const customEnd = new Date(customDateRange.end);
+        if (!Number.isNaN(customEnd.getTime()) && intakeDate > customEnd) return false;
+      }
+    }
 
     // 2. Status Filter (Vehicles in inspection zone are treated as completed/ready)
     const { isEffectiveDone } = getVehicleEffectiveCompletion(v);
@@ -108,7 +152,9 @@ export const filterVehiclesForReport = (
  * Returns user-friendly date boundary description for a given preset, e.g. "05 Sep 2026" or "29 Aug – 05 Sep 2026".
  */
 export const getDatePresetRangeDescription = (
-  preset: DateFilterPreset
+  preset: DateFilterPreset,
+  customDate?: string,
+  customEndDate?: string
 ): { label: string; rangeStr: string; isMultiDate: boolean } => {
   const now = new Date();
   const formatFullDate = (d: Date) =>
@@ -142,8 +188,23 @@ export const getDatePresetRangeDescription = (
       return { label: 'Last 3 Months', rangeStr: `${formatShortDate(past3Mo)} – ${todayStr}`, isMultiDate: true };
     }
 
+    case 'custom': {
+      if (customDate && customEndDate && customDate !== customEndDate) {
+        return {
+          label: 'Custom Range',
+          rangeStr: `${customDate} – ${customEndDate}`,
+          isMultiDate: true,
+        };
+      }
+      return {
+        label: 'Custom Date',
+        rangeStr: customDate ? customDate : 'Select Date',
+        isMultiDate: false,
+      };
+    }
+
     default:
-      return { label: 'Last 3 Months', rangeStr: todayStr, isMultiDate: false };
+      return { label: 'Today', rangeStr: todayStr, isMultiDate: false };
   }
 };
 
@@ -166,6 +227,8 @@ export const calculateReportKPIs = (filteredVehicles: Vehicle[]): ReportKPIs => 
       totalVehicles: 0,
       completedCount: 0,
       inProgressCount: 0,
+      bookingCount: 0,
+      additionalRepairsCount: 0,
       workshopBay: emptyBayKPI('workshop', 'General Service'),
       alignmentBay: emptyBayKPI('alignment', 'Wheel Alignment'),
       hoistBay: emptyBayKPI('hoist', 'Hoist Service'),
@@ -175,8 +238,10 @@ export const calculateReportKPIs = (filteredVehicles: Vehicle[]): ReportKPIs => 
 
   let totalBreaks = 0;
   let completed = 0;
+  let bookingCount = 0;
+  let additionalRepairsCount = 0;
 
-  // Bay telemetry accumulators
+  // Bay telemetry accumulators (Excludes additional repairs from standard benchmark velocity)
   let workshopVehicles = 0;
   let workshopActive = 0;
   let workshopIdle = 0;
@@ -195,15 +260,20 @@ export const calculateReportKPIs = (filteredVehicles: Vehicle[]): ReportKPIs => 
   filteredVehicles.forEach(v => {
     const { isEffectiveDone, effectiveCompletionDate } = getVehicleEffectiveCompletion(v);
     if (isEffectiveDone) completed++;
+    if (v.is_booking) bookingCount++;
+    if (v.has_additional_repairs) additionalRepairsCount++;
 
     const start = new Date(v.intake_at || v.created_at);
     const end = effectiveCompletionDate ? effectiveCompletionDate : new Date();
     const { breakSeconds } = getBreakOverlap(start, end);
     totalBreaks += breakSeconds;
 
+    // RULE 4: Vehicles flagged with additional repairs are excluded from the benchmark average stay time
+    const isExcludedFromAverage = Boolean(v.has_additional_repairs);
+
     // Workshop Bay (Only count officially completed AND dispatched vehicles)
     const workshopTiming = getStageTimingForZone(v, 'workshop');
-    if (workshopTiming.isCompletedAndDispatched) {
+    if (workshopTiming.isCompletedAndDispatched && !isExcludedFromAverage) {
       workshopVehicles++;
       workshopActive += workshopTiming.activeSec;
       workshopIdle += workshopTiming.idleSec;
@@ -212,7 +282,7 @@ export const calculateReportKPIs = (filteredVehicles: Vehicle[]): ReportKPIs => 
 
     // Alignment Bay (Only count officially completed AND dispatched vehicles)
     const alignmentTiming = getStageTimingForZone(v, 'alignment');
-    if (alignmentTiming.isCompletedAndDispatched) {
+    if (alignmentTiming.isCompletedAndDispatched && !isExcludedFromAverage) {
       alignmentVehicles++;
       alignmentActive += alignmentTiming.activeSec;
       alignmentIdle += alignmentTiming.idleSec;
@@ -221,7 +291,7 @@ export const calculateReportKPIs = (filteredVehicles: Vehicle[]): ReportKPIs => 
 
     // Hoist Bay (Only count officially completed AND dispatched vehicles)
     const hoistTiming = getStageTimingForZone(v, 'hoist');
-    if (hoistTiming.isCompletedAndDispatched) {
+    if (hoistTiming.isCompletedAndDispatched && !isExcludedFromAverage) {
       hoistVehicles++;
       hoistActive += hoistTiming.activeSec;
       hoistIdle += hoistTiming.idleSec;
@@ -233,6 +303,8 @@ export const calculateReportKPIs = (filteredVehicles: Vehicle[]): ReportKPIs => 
     totalVehicles: filteredVehicles.length,
     completedCount: completed,
     inProgressCount: filteredVehicles.length - completed,
+    bookingCount,
+    additionalRepairsCount,
     workshopBay: {
       zone: 'workshop',
       name: 'General Service',
@@ -386,7 +458,7 @@ export const getVehicleIdleAndActiveTotals = (v: Vehicle): { totalIdleSec: numbe
  * Generates an Excel-compatible CSV with UTF-8 BOM encoding and Two-Tier Grouped Headers.
  */
 export const exportServiceLogsToCSV = (
-  vehicles: Vehicle[],
+  vehicles: (Vehicle | ServerReportRecord)[],
   datePresetLabel: string = 'All Time',
   kpis?: ReportKPIs
 ) => {
@@ -416,6 +488,8 @@ export const exportServiceLogsToCSV = (
     '',
     '',
     '',
+    '',
+    '',
     'OVERALL EFFICIENCY',
     '',
     '',
@@ -432,6 +506,7 @@ export const exportServiceLogsToCSV = (
     'AUDIT DETAILS',
     '',
     '',
+    '',
   ];
 
   // Row 2: Sub-headers (Metric Columns)
@@ -439,6 +514,8 @@ export const exportServiceLogsToCSV = (
     'Vehicle Reg No',
     'Status',
     'Current Station',
+    'Booking',
+    'Extra Repairs',
     'Intake Date',
     'Intake Time',
     'Completion Time',
@@ -459,7 +536,8 @@ export const exportServiceLogsToCSV = (
     'Active',
     'Breaks',
     'Tasks Completed',
-    'Technician / Lead',
+    'Mechanic Name',
+    'Assigned Lead',
     'Remarks / Notes',
   ];
 
@@ -467,59 +545,130 @@ export const exportServiceLogsToCSV = (
   rows.push(subHeaders.map(h => `"${h}"`).join(','));
 
   // Data Rows
-  vehicles.forEach(v => {
-    const { isEffectiveDone, effectiveCompletionDate } = getVehicleEffectiveCompletion(v);
-    const start = new Date(v.intake_at || v.created_at);
-    const end = effectiveCompletionDate ? effectiveCompletionDate : new Date();
-    const grossSec = Math.max(0, Math.floor((end.getTime() - start.getTime()) / 1000));
-    const netSec = getNetWorkingSeconds(start, end);
-    const { breakSeconds } = getBreakOverlap(start, end);
+  vehicles.forEach((v: any) => {
+    // Check if record is pre-computed from PostgreSQL get_service_report_data RPC
+    const isServerRecord = 'total_idle_sec' in v && 'workshop_idle' in v;
 
-    const workshopTiming = getStageTimingForZone(v, 'workshop');
-    const alignmentTiming = getStageTimingForZone(v, 'alignment');
-    const hoistTiming = getStageTimingForZone(v, 'hoist');
-    const { totalIdleSec, totalActiveSec } = getVehicleIdleAndActiveTotals(v);
+    let vehicleNo = v.vehicle_no;
+    let statusLabel = '';
+    let stationLabel = '';
+    let isBookingStr = v.is_booking ? 'Yes' : 'No';
+    let extraRepairsStr = v.has_additional_repairs ? 'Yes' : 'No';
+    let intakeDateStr = '--';
+    let intakeTimeStr = '--:--';
+    let finishedStr = 'Pending';
+    let grossSec = 0;
+    let totalActiveSec = 0;
+    let totalIdleSec = 0;
+    let breakSeconds = 0;
+    let wsIdle = 0, wsActive = 0, wsBreak = 0;
+    let alIdle = 0, alActive = 0, alBreak = 0;
+    let hsIdle = 0, hsActive = 0, hsBreak = 0;
+    let completedTasksStr = '';
+    let techName = v.technician_name || '-';
+    let assignedLead = v.assigned_tech || 'Unassigned';
+    let remarks = v.remarks || '';
 
-    const completedTasksStr = v.tasks
-      .filter(t => t.is_completed)
-      .map(t => `${t.task_name} (by ${t.completed_by || 'Tech'})`)
-      .join('; ');
+    if (isServerRecord) {
+      const rec = v as ServerReportRecord;
+      statusLabel = rec.is_effective_done ? 'DONE' : (rec.current_zone === 'workshop' ? 'GENERAL' : rec.current_zone.toUpperCase());
+      stationLabel = rec.is_finished ? 'Delivered' : (rec.is_effective_done ? 'Inspection' : (rec.current_zone === 'workshop' ? 'General' : rec.current_zone.toUpperCase()));
+      
+      const start = new Date(rec.intake_at || rec.created_at);
+      if (!Number.isNaN(start.getTime())) {
+        intakeDateStr = start.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Colombo' });
+        intakeTimeStr = start.toLocaleTimeString('en-US', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit', hour12: true });
+      }
 
-    const statusLabel = isEffectiveDone ? 'DONE' : (v.current_zone === 'workshop' ? 'GENERAL' : v.current_zone.toUpperCase());
-    const intakeDateStr = !Number.isNaN(start.getTime())
-      ? start.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Colombo' })
-      : '--';
-    const intakeTimeStr = !Number.isNaN(start.getTime())
-      ? start.toLocaleTimeString('en-US', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit', hour12: true })
-      : '--:--';
+      if (rec.effective_completed_at) {
+        const end = new Date(rec.effective_completed_at);
+        if (!Number.isNaN(end.getTime())) {
+          finishedStr = end.toLocaleString('en-US', { timeZone: 'Asia/Colombo' });
+        }
+      }
+
+      grossSec = rec.gross_tat_seconds;
+      totalActiveSec = rec.total_active_sec;
+      totalIdleSec = rec.total_idle_sec;
+      breakSeconds = rec.total_break_seconds;
+      wsIdle = rec.workshop_idle;
+      wsActive = rec.workshop_active;
+      wsBreak = rec.workshop_break;
+      alIdle = rec.alignment_idle;
+      alActive = rec.alignment_active;
+      alBreak = rec.alignment_break;
+      hsIdle = rec.hoist_idle;
+      hsActive = rec.hoist_active;
+      hsBreak = rec.hoist_break;
+      completedTasksStr = rec.completed_tasks_str;
+    } else {
+      const { isEffectiveDone, effectiveCompletionDate } = getVehicleEffectiveCompletion(v);
+      const start = new Date(v.intake_at || v.created_at);
+      const end = effectiveCompletionDate ? effectiveCompletionDate : new Date();
+      grossSec = Math.max(0, Math.floor((end.getTime() - start.getTime()) / 1000));
+      const totals = getVehicleIdleAndActiveTotals(v);
+      totalIdleSec = totals.totalIdleSec;
+      totalActiveSec = totals.totalActiveSec;
+      const breaks = getBreakOverlap(start, end);
+      breakSeconds = breaks.breakSeconds;
+
+      const workshopTiming = getStageTimingForZone(v, 'workshop');
+      const alignmentTiming = getStageTimingForZone(v, 'alignment');
+      const hoistTiming = getStageTimingForZone(v, 'hoist');
+      wsIdle = workshopTiming.idleSec;
+      wsActive = workshopTiming.activeSec;
+      wsBreak = workshopTiming.breakSec;
+      alIdle = alignmentTiming.idleSec;
+      alActive = alignmentTiming.activeSec;
+      alBreak = alignmentTiming.breakSec;
+      hsIdle = hoistTiming.idleSec;
+      hsActive = hoistTiming.activeSec;
+      hsBreak = hoistTiming.breakSec;
+
+      completedTasksStr = (v.tasks || [])
+        .filter((t: any) => t.is_completed)
+        .map((t: any) => `${t.task_name} (by ${t.completed_by || 'Tech'})`)
+        .join('; ');
+
+      statusLabel = isEffectiveDone ? 'DONE' : (v.current_zone === 'workshop' ? 'GENERAL' : v.current_zone.toUpperCase());
+      stationLabel = v.is_finished ? 'Delivered' : (isEffectiveDone ? 'Inspection' : (v.current_zone === 'workshop' ? 'General' : v.current_zone.toUpperCase()));
+      if (!Number.isNaN(start.getTime())) {
+        intakeDateStr = start.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Colombo' });
+        intakeTimeStr = start.toLocaleTimeString('en-US', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit', hour12: true });
+      }
+      finishedStr = effectiveCompletionDate ? effectiveCompletionDate.toLocaleString('en-US', { timeZone: 'Asia/Colombo' }) : 'Pending';
+    }
 
     const row = [
-      escapeCSV(v.vehicle_no),
+      escapeCSV(vehicleNo),
       escapeCSV(statusLabel),
-      escapeCSV(v.is_finished ? 'Delivered' : (isEffectiveDone ? 'Inspection' : (v.current_zone === 'workshop' ? 'General' : v.current_zone.toUpperCase()))),
+      escapeCSV(stationLabel),
+      escapeCSV(isBookingStr),
+      escapeCSV(extraRepairsStr),
       escapeCSV(intakeDateStr),
       escapeCSV(intakeTimeStr),
-      escapeCSV(effectiveCompletionDate ? effectiveCompletionDate.toLocaleString('en-US', { timeZone: 'Asia/Colombo' }) : 'Pending'),
+      escapeCSV(finishedStr),
       escapeCSV(formatDuration(grossSec)),
       escapeCSV(formatDuration(totalActiveSec)),
       escapeCSV(formatDuration(totalIdleSec)),
       escapeCSV(formatDuration(breakSeconds)),
       // General Service (Idle | Active | Breaks)
-      escapeCSV(formatDuration(workshopTiming.idleSec)),
-      escapeCSV(formatDuration(workshopTiming.activeSec)),
-      escapeCSV(workshopTiming.breakSec > 0 ? formatDuration(workshopTiming.breakSec) : '-'),
+      escapeCSV(formatDuration(wsIdle)),
+      escapeCSV(formatDuration(wsActive)),
+      escapeCSV(wsBreak > 0 ? formatDuration(wsBreak) : '-'),
       // Wheel Alignment (Idle | Active | Breaks)
-      escapeCSV(formatDuration(alignmentTiming.idleSec)),
-      escapeCSV(formatDuration(alignmentTiming.activeSec)),
-      escapeCSV(alignmentTiming.breakSec > 0 ? formatDuration(alignmentTiming.breakSec) : '-'),
+      escapeCSV(formatDuration(alIdle)),
+      escapeCSV(formatDuration(alActive)),
+      escapeCSV(alBreak > 0 ? formatDuration(alBreak) : '-'),
       // Hoist Service (Idle | Active | Breaks)
-      escapeCSV(formatDuration(hoistTiming.idleSec)),
-      escapeCSV(formatDuration(hoistTiming.activeSec)),
-      escapeCSV(hoistTiming.breakSec > 0 ? formatDuration(hoistTiming.breakSec) : '-'),
+      escapeCSV(formatDuration(hsIdle)),
+      escapeCSV(formatDuration(hsActive)),
+      escapeCSV(hsBreak > 0 ? formatDuration(hsBreak) : '-'),
       // Audit Details
       escapeCSV(completedTasksStr || 'None'),
-      escapeCSV(v.assigned_tech || 'Unassigned'),
-      escapeCSV(v.remarks || ''),
+      escapeCSV(techName),
+      escapeCSV(assignedLead),
+      escapeCSV(remarks),
     ];
 
     rows.push(row.join(','));
@@ -550,43 +699,120 @@ export const exportServiceLogsToCSV = (
  * Generates an executive PDF report with Two-Tier Grouped Headers and printable styles.
  */
 export const exportServiceLogsToPDF = (
-  vehicles: Vehicle[],
+  vehicles: (Vehicle | ServerReportRecord)[],
   kpis: ReportKPIs,
   datePresetLabel: string = 'All Time'
 ) => {
   if (Platform.OS !== 'web' || typeof window === 'undefined') return;
 
-  const tableRowsHtml = vehicles.map((v, i) => {
-    const { isEffectiveDone, effectiveCompletionDate } = getVehicleEffectiveCompletion(v);
-    const start = new Date(v.intake_at || v.created_at);
-    const end = effectiveCompletionDate ? effectiveCompletionDate : new Date();
-    const grossSec = Math.max(0, Math.floor((end.getTime() - start.getTime()) / 1000));
-    const netSec = getNetWorkingSeconds(start, end);
-    const { breakSeconds } = getBreakOverlap(start, end);
+  const tableRowsHtml = vehicles.map((v: any, i) => {
+    const isServerRecord = 'total_idle_sec' in v && 'workshop_idle' in v;
 
-    const workshopTiming = getStageTimingForZone(v, 'workshop');
-    const alignmentTiming = getStageTimingForZone(v, 'alignment');
-    const hoistTiming = getStageTimingForZone(v, 'hoist');
-    const { totalIdleSec, totalActiveSec } = getVehicleIdleAndActiveTotals(v);
+    let vehicleNo = v.vehicle_no;
+    let isEffectiveDone = false;
+    let statusLabel = '';
+    let statusBg = '#e0f2fe';
+    let statusColor = '#0369a1';
+    let intakeDateStr = '--';
+    let intakeTimeStr = '--:--';
+    let finishedStr = 'In Progress';
+    let grossSec = 0;
+    let totalActiveSec = 0;
+    let totalIdleSec = 0;
+    let breakSeconds = 0;
+    let wsIdle = 0, wsActive = 0, wsBreak = 0;
+    let alIdle = 0, alActive = 0, alBreak = 0;
+    let hsIdle = 0, hsActive = 0, hsBreak = 0;
+    let taskProgressStr = '';
+    let techName = v.technician_name || null;
 
-    const completedTasksCount = v.tasks.filter(t => t.is_completed).length;
-    const totalTasksCount = v.tasks.filter(t => t.is_required).length;
+    if (isServerRecord) {
+      const rec = v as ServerReportRecord;
+      isEffectiveDone = rec.is_effective_done;
+      statusLabel = isEffectiveDone ? 'DONE' : (rec.current_zone === 'workshop' ? 'GENERAL' : rec.current_zone.toUpperCase());
+      statusBg = isEffectiveDone ? '#dcfce7' : rec.current_zone === 'workshop' ? '#e0f2fe' : rec.current_zone === 'alignment' ? '#ecfdf5' : '#fef3c7';
+      statusColor = isEffectiveDone ? '#15803d' : rec.current_zone === 'workshop' ? '#0369a1' : rec.current_zone === 'alignment' ? '#047857' : '#b45309';
 
-    const statusLabel = isEffectiveDone ? 'DONE' : (v.current_zone === 'workshop' ? 'GENERAL' : v.current_zone.toUpperCase());
-    const statusBg = isEffectiveDone ? '#dcfce7' : v.current_zone === 'workshop' ? '#e0f2fe' : v.current_zone === 'alignment' ? '#ecfdf5' : '#fef3c7';
-    const statusColor = isEffectiveDone ? '#15803d' : v.current_zone === 'workshop' ? '#0369a1' : v.current_zone === 'alignment' ? '#047857' : '#b45309';
+      const start = new Date(rec.intake_at || rec.created_at);
+      if (!Number.isNaN(start.getTime())) {
+        intakeDateStr = start.toLocaleDateString('en-US', { day: '2-digit', month: 'short', timeZone: 'Asia/Colombo' });
+        intakeTimeStr = start.toLocaleTimeString('en-US', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit', hour12: true });
+      }
 
-    const intakeDateStr = !Number.isNaN(start.getTime())
-      ? start.toLocaleDateString('en-US', { day: '2-digit', month: 'short', timeZone: 'Asia/Colombo' })
-      : '--';
-    const intakeTimeStr = !Number.isNaN(start.getTime())
-      ? start.toLocaleTimeString('en-US', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit', hour12: true })
-      : '--:--';
+      if (rec.effective_completed_at) {
+        const end = new Date(rec.effective_completed_at);
+        if (!Number.isNaN(end.getTime())) {
+          finishedStr = end.toLocaleTimeString('en-US', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit', hour12: true });
+        }
+      }
+
+      grossSec = rec.gross_tat_seconds;
+      totalActiveSec = rec.total_active_sec;
+      totalIdleSec = rec.total_idle_sec;
+      breakSeconds = rec.total_break_seconds;
+      wsIdle = rec.workshop_idle;
+      wsActive = rec.workshop_active;
+      wsBreak = rec.workshop_break;
+      alIdle = rec.alignment_idle;
+      alActive = rec.alignment_active;
+      alBreak = rec.alignment_break;
+      hsIdle = rec.hoist_idle;
+      hsActive = rec.hoist_active;
+      hsBreak = rec.hoist_break;
+      taskProgressStr = rec.completed_tasks_str !== 'None' ? rec.completed_tasks_str : 'Standard';
+    } else {
+      const eff = getVehicleEffectiveCompletion(v);
+      isEffectiveDone = eff.isEffectiveDone;
+      const start = new Date(v.intake_at || v.created_at);
+      const end = eff.effectiveCompletionDate ? eff.effectiveCompletionDate : new Date();
+      grossSec = Math.max(0, Math.floor((end.getTime() - start.getTime()) / 1000));
+      const totals = getVehicleIdleAndActiveTotals(v);
+      totalIdleSec = totals.totalIdleSec;
+      totalActiveSec = totals.totalActiveSec;
+      const breaks = getBreakOverlap(start, end);
+      breakSeconds = breaks.breakSeconds;
+
+      const workshopTiming = getStageTimingForZone(v, 'workshop');
+      const alignmentTiming = getStageTimingForZone(v, 'alignment');
+      const hoistTiming = getStageTimingForZone(v, 'hoist');
+      wsIdle = workshopTiming.idleSec;
+      wsActive = workshopTiming.activeSec;
+      wsBreak = workshopTiming.breakSec;
+      alIdle = alignmentTiming.idleSec;
+      alActive = alignmentTiming.activeSec;
+      alBreak = alignmentTiming.breakSec;
+      hsIdle = hoistTiming.idleSec;
+      hsActive = hoistTiming.activeSec;
+      hsBreak = hoistTiming.breakSec;
+
+      const completedTasksCount = (v.tasks || []).filter((t: any) => t.is_completed).length;
+      const totalTasksCount = (v.tasks || []).filter((t: any) => t.is_required).length;
+      taskProgressStr = `${completedTasksCount}/${totalTasksCount} done`;
+
+      statusLabel = isEffectiveDone ? 'DONE' : (v.current_zone === 'workshop' ? 'GENERAL' : v.current_zone.toUpperCase());
+      statusBg = isEffectiveDone ? '#dcfce7' : v.current_zone === 'workshop' ? '#e0f2fe' : v.current_zone === 'alignment' ? '#ecfdf5' : '#fef3c7';
+      statusColor = isEffectiveDone ? '#15803d' : v.current_zone === 'workshop' ? '#0369a1' : v.current_zone === 'alignment' ? '#047857' : '#b45309';
+
+      if (!Number.isNaN(start.getTime())) {
+        intakeDateStr = start.toLocaleDateString('en-US', { day: '2-digit', month: 'short', timeZone: 'Asia/Colombo' });
+        intakeTimeStr = start.toLocaleTimeString('en-US', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit', hour12: true });
+      }
+      finishedStr = isEffectiveDone && eff.effectiveCompletionDate ? eff.effectiveCompletionDate.toLocaleTimeString('en-US', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit', hour12: true }) : 'In Progress';
+    }
+
+    const bookingBadge = v.is_booking
+      ? `<span style="display: inline-block; padding: 1px 5px; border-radius: 4px; font-size: 8px; font-weight: 800; background: #e0f2fe; color: #0369a1; margin-top: 2px;">BOOKING</span>`
+      : '';
+    const extraRepairsBadge = v.has_additional_repairs
+      ? `<span style="display: inline-block; padding: 1px 5px; border-radius: 4px; font-size: 8px; font-weight: 800; background: #fef3c7; color: #b45309; margin-top: 2px; margin-left: 2px;">EXTRA</span>`
+      : '';
 
     return `
       <tr style="background: ${i % 2 === 0 ? '#ffffff' : '#f8fafc'};">
         <td style="padding: 8px 10px; font-weight: 700; font-family: monospace; font-size: 13px; color: #0f172a; border-bottom: 1px solid #e2e8f0;">
-          ${v.vehicle_no}
+          <div>${vehicleNo}</div>
+          <div>${bookingBadge}${extraRepairsBadge}</div>
+          ${techName ? `<div style="font-size: 9px; color: #0284c7; font-weight: 600; margin-top: 2px;">🔧 ${techName}</div>` : ''}
         </td>
         <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0;">
           <span style="display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: 800; background: ${statusBg}; color: ${statusColor};">
@@ -600,7 +826,7 @@ export const exportServiceLogsToPDF = (
           ${intakeTimeStr}
         </td>
         <td style="padding: 8px 10px; font-size: 11px; font-weight: 700; color: ${isEffectiveDone ? '#16a34a' : '#d97706'}; border-bottom: 1px solid #e2e8f0;">
-          ${isEffectiveDone && effectiveCompletionDate ? effectiveCompletionDate.toLocaleTimeString('en-US', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit', hour12: true }) : 'In Progress'}
+          ${finishedStr}
         </td>
         <td style="padding: 8px 10px; font-weight: 700; font-size: 11px; color: #0284c7; border-bottom: 1px solid #e2e8f0;">
           ${formatDuration(grossSec)}
@@ -616,36 +842,36 @@ export const exportServiceLogsToPDF = (
         </td>
         <!-- General Workshop -->
         <td style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #f59e0b; text-align: center; border-bottom: 1px solid #e2e8f0;">
-          ${workshopTiming.idleSec > 0 ? formatDuration(workshopTiming.idleSec) : '-'}
+          ${wsIdle > 0 ? formatDuration(wsIdle) : '-'}
         </td>
         <td style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #0284c7; text-align: center; border-bottom: 1px solid #e2e8f0;">
-          ${workshopTiming.activeSec > 0 ? formatDuration(workshopTiming.activeSec) : '-'}
+          ${wsActive > 0 ? formatDuration(wsActive) : '-'}
         </td>
         <td style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #fbbf24; text-align: center; border-bottom: 1px solid #e2e8f0;">
-          ${workshopTiming.breakSec > 0 ? formatDuration(workshopTiming.breakSec) : '-'}
+          ${wsBreak > 0 ? formatDuration(wsBreak) : '-'}
         </td>
         <!-- Wheel Alignment -->
         <td style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #f59e0b; text-align: center; border-bottom: 1px solid #e2e8f0;">
-          ${alignmentTiming.idleSec > 0 ? formatDuration(alignmentTiming.idleSec) : '-'}
+          ${alIdle > 0 ? formatDuration(alIdle) : '-'}
         </td>
         <td style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #0284c7; text-align: center; border-bottom: 1px solid #e2e8f0;">
-          ${alignmentTiming.activeSec > 0 ? formatDuration(alignmentTiming.activeSec) : '-'}
+          ${alActive > 0 ? formatDuration(alActive) : '-'}
         </td>
         <td style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #fbbf24; text-align: center; border-bottom: 1px solid #e2e8f0;">
-          ${alignmentTiming.breakSec > 0 ? formatDuration(alignmentTiming.breakSec) : '-'}
+          ${alBreak > 0 ? formatDuration(alBreak) : '-'}
         </td>
         <!-- Hoist Service -->
         <td style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #f59e0b; text-align: center; border-bottom: 1px solid #e2e8f0;">
-          ${hoistTiming.idleSec > 0 ? formatDuration(hoistTiming.idleSec) : '-'}
+          ${hsIdle > 0 ? formatDuration(hsIdle) : '-'}
         </td>
         <td style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #0284c7; text-align: center; border-bottom: 1px solid #e2e8f0;">
-          ${hoistTiming.activeSec > 0 ? formatDuration(hoistTiming.activeSec) : '-'}
+          ${hsActive > 0 ? formatDuration(hsActive) : '-'}
         </td>
         <td style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #fbbf24; text-align: center; border-bottom: 1px solid #e2e8f0;">
-          ${hoistTiming.breakSec > 0 ? formatDuration(hoistTiming.breakSec) : '-'}
+          ${hsBreak > 0 ? formatDuration(hsBreak) : '-'}
         </td>
         <td style="padding: 8px 10px; font-size: 11px; font-weight: 700; color: #0f172a; border-bottom: 1px solid #e2e8f0;">
-          ${completedTasksCount}/${totalTasksCount} done
+          ${taskProgressStr}
         </td>
       </tr>
     `;
