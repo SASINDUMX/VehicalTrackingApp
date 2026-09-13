@@ -68,7 +68,7 @@ class RealtimeVehicleService {
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'vehicle_tasks' },
+        { event: '*', schema: 'public', table: 'vehicle_tasks', filter: `branch_id=eq.${branchId}` },
         payload => {
           const taskData = (payload.new || payload.old) as VehicleTask | null;
           if (taskData?.vehicle_id && taskData?.id) {

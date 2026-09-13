@@ -664,6 +664,8 @@ export const VehicleDispatchProvider: React.FC<{ children: ReactNode }> = ({ chi
             return {
               ...v,
               current_zone: targetZone,
+              effective_completed_at: targetZone === 'inspection' ? now : null,
+              is_finished: targetZone === 'completed',
               stage_logs: updatedLogs,
               is_paused: false,
               paused_at: null,

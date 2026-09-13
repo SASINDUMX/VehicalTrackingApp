@@ -65,7 +65,7 @@ import { AuditTrailView } from './AuditTrailView';
 export const ServiceReportsModal: React.FC = () => {
   const { vehicles, fetchHistoricalVehicles, setIsReportsModalOpen } = useVehicles();
   const { colors, isDark } = useTheme();
-  const { isSuperAdmin } = usePermissions();
+  const { canViewAuditLogs } = usePermissions();
 
   const [activeReportTab, setActiveReportTab] = useState<'kpi' | 'audit'>('kpi');
   const [datePreset, setDatePreset] = useState<DateFilterPreset>('today');
@@ -268,7 +268,7 @@ export const ServiceReportsModal: React.FC = () => {
           </View>
         </View>
         {/* Super Admin Executive View Switcher */}
-        {isSuperAdmin && (
+        {canViewAuditLogs && (
           <View style={[styles.tabSwitcherBar, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.03)', borderColor: colors.borderGlass }]}>
             <TouchableOpacity
               style={[
@@ -300,7 +300,7 @@ export const ServiceReportsModal: React.FC = () => {
           </View>
         )}
 
-        {isSuperAdmin && activeReportTab === 'audit' ? (
+        {canViewAuditLogs && activeReportTab === 'audit' ? (
           <AuditTrailView />
         ) : (
           <>
@@ -917,7 +917,7 @@ export const ServiceReportsModal: React.FC = () => {
       </ScrollView>
 
       {/* Sticky Bottom Action Footer */}
-      {(!isSuperAdmin || activeReportTab === 'kpi') && (
+      {(!canViewAuditLogs || activeReportTab === 'kpi') && (
         <View style={[styles.stickyFooter, { backgroundColor: colors.surface, borderTopColor: colors.borderGlass }]}>
           <View style={styles.stickyFooterLeft}>
             {/* Back Button matching right-side action buttons */}

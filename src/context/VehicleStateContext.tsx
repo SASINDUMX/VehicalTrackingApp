@@ -213,8 +213,11 @@ export const VehicleStateProvider: React.FC<{ children: ReactNode }> = ({ childr
               ...v,
               vehicle_no: updated.vehicle_no as string,
               current_zone: targetZone,
+              technician_name: (updated.technician_name as string | null) ?? v.technician_name,
               assigned_tech: (updated.assigned_tech as string) || v.assigned_tech,
               remarks: (updated.remarks as string) ?? v.remarks,
+              is_booking: (updated.is_booking as boolean) ?? v.is_booking,
+              has_additional_repairs: (updated.has_additional_repairs as boolean) ?? v.has_additional_repairs,
               completed_at: updated.completed_at as string | null,
               is_finished: updated.is_finished as boolean,
               status: (updated.status as 'active' | 'finished' | 'incomplete') || v.status,
@@ -223,6 +226,7 @@ export const VehicleStateProvider: React.FC<{ children: ReactNode }> = ({ childr
               is_paused: (updated.is_paused as boolean) ?? v.is_paused,
               paused_at: (updated.paused_at as string | null) ?? v.paused_at,
               paused_seconds: (updated.paused_seconds as number) ?? v.paused_seconds,
+              pause_reason: (updated.pause_reason as string | null) ?? v.pause_reason,
               effective_completed_at: (updated.effective_completed_at as string | null) ?? v.effective_completed_at,
             };
           })

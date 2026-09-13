@@ -1,5 +1,6 @@
 import { useAuth } from '../context/AuthContext';
 import { BayZone, UserRole, ForemanSection } from '../types/vehicle';
+import { hasCapability, canForemanWorkInZone, AppCapability } from '../constants/permissions';
 
 export const usePermissions = () => {
   const { userProfile } = useAuth();
@@ -7,29 +8,14 @@ export const usePermissions = () => {
   const section: ForemanSection | string = userProfile?.section ?? 'car';
 
   // 1. Classification Flags
-  const isSuperAdmin = role === 'super_admin' || role === 'service_executive';
-  const isMasterAccess = isSuperAdmin || role === 'agm' || role === 'job_controller';
+  const isSuperAdmin = role === 'super_admin';
   const isWorkshopManager = role === 'workshop_manager';
   const isForeman = role === 'foreman';
   const isAdvisor = role === 'advisor';
+  const isMasterAccess = ['super_admin', 'service_executive', 'agm', 'job_controller'].includes(role);
 
-  // 2. Zone labor capability check for Foremen
-  const canWorkInZone = (bayZone: BayZone): boolean => {
-    if (isMasterAccess) return true;
-    if (!isForeman) return false;
-
-    // Hoist foreman can ONLY work in Hoist
-    if (section === 'hoist') {
-      return bayZone === 'hoist';
-    }
-
-    // CAR, SUV, LCV, and Alignment foremen can work in BOTH Workshop and Alignment
-    if (section === 'car' || section === 'suv' || section === 'lcv' || section === 'alignment') {
-      return bayZone === 'workshop' || bayZone === 'alignment';
-    }
-
-    return false;
-  };
+  // 2. Generic capability checker
+  const check = (capability: AppCapability) => hasCapability(role, capability);
 
   return {
     // Role Tiers
@@ -38,33 +24,26 @@ export const usePermissions = () => {
     isWorkshopManager,
     isForeman,
     isAdvisor,
-    canSwitchBranch: isSuperAdmin,
     section,
 
-    // Vehicle Administration (Intake, Deletion, Floor Relocation)
-    canAddVehicle: isMasterAccess,
-    canDeleteVehicle: isMasterAccess,
-    canRelocateVehicle: isMasterAccess,
+    // Core Permissions (driven 100% by src/constants/permissions.ts)
+    canSwitchBranch: check('switch_branch'),
+    canViewAuditLogs: check('view_audit_logs'),
+    canAddVehicle: check('add_vehicle'),
+    canDeleteVehicle: check('delete_vehicle'),
+    canRelocateVehicle: check('relocate_vehicle'),
+    canEditRemarks: check('edit_remarks'),
+    canSetUrgent: check('set_urgent'),
+    canBookmark: check('bookmark'),
+    canTransferVehicle: check('transfer_vehicle'),
+    canFinishJob: check('finish_job'),
 
-    // Remarks & Urgency Management
-    // Advisors, Workshop Manager, Foremen, and Master Access can add remarks
-    canEditRemarks: isMasterAccess || isWorkshopManager || isAdvisor || isForeman,
-    // Advisors, Workshop Manager, and Master Access can flag urgent priority
-    canSetUrgent: isMasterAccess || isWorkshopManager || isAdvisor,
-    // Pinning / Bookmarks are available to all authenticated roles
-    canBookmark: true,
-
-    // Labor Actions (Starting Work & Task Completion)
-    canStartWork: (bayZone: BayZone): boolean => canWorkInZone(bayZone),
-    canMarkTaskDone: (bayZone: BayZone): boolean => canWorkInZone(bayZone),
-
-    // Vehicle Transfer across sections (Master Access + all Foremen)
-    canTransferVehicle: isMasterAccess || isForeman,
-
-    // Final Handover / Inspection Delivery (Master Access + Advisors)
-    canFinishJob: isMasterAccess || isAdvisor,
+    // Labor Actions (Starting Work & Task Completion per zone)
+    canStartWork: (bayZone: BayZone): boolean => canForemanWorkInZone(role, section, bayZone),
+    canMarkTaskDone: (bayZone: BayZone): boolean => canForemanWorkInZone(role, section, bayZone),
 
     currentRole: role,
     displayName: userProfile?.display_name ?? 'User',
   };
 };
+

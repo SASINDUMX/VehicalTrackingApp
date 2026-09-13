@@ -18,7 +18,7 @@ export const vehicleService = {
    * Calls PostgreSQL RPC `reconcile_daily_vehicles` atomically.
    * If RPC is unavailable, falls back to direct table update/delete.
    */
-  async reconcileDailyVehicles(branchId: string = 'peliyagoda_sec5'): Promise<{ completedCount: number; deletedCount: number }> {
+  async reconcileDailyVehicles(branchId: string = 'orugodawatta_sec5'): Promise<{ completedCount: number; deletedCount: number }> {
     const client = supabase;
     if (!client || !isSupabaseConnected) return { completedCount: 0, deletedCount: 0 };
 
@@ -97,13 +97,10 @@ export const vehicleService = {
       }
 
       // 2. Delete out-of-scope unfinished vehicles in working bays from previous days in batch
+      // Child tables (stage_logs, vehicle_tasks) are automatically cleaned up via database ON DELETE CASCADE
       const bayVehicles = stale.filter(v => v.current_zone !== 'inspection');
       const bayIds = bayVehicles.map(v => v.id);
       if (bayIds.length > 0) {
-        await Promise.all([
-          client.from('stage_logs').delete().in('vehicle_id', bayIds),
-          client.from('vehicle_tasks').delete().in('vehicle_id', bayIds),
-        ]);
         await client.from('vehicles').delete().in('id', bayIds);
       }
 
@@ -541,7 +538,7 @@ export const vehicleService = {
         p_is_urgent: vehicleData.is_urgent,
         p_urgent_note: vehicleData.urgent_note,
         p_tasks: tasksList,
-        p_branch_id: vehicleData.branch_id || 'peliyagoda_sec5',
+        p_branch_id: vehicleData.branch_id || 'orugodawatta_sec5',
       });
 
       if (!rpcErr && rpcRes && rpcRes.vehicle_id) {
@@ -600,7 +597,7 @@ export const vehicleService = {
           status: vehicleData.status,
           is_urgent: vehicleData.is_urgent,
           urgent_note: vehicleData.urgent_note,
-          branch_id: vehicleData.branch_id || 'peliyagoda_sec5',
+          branch_id: vehicleData.branch_id || 'orugodawatta_sec5',
           is_paused: false,
           paused_at: null,
           paused_seconds: 0,
@@ -635,7 +632,7 @@ export const vehicleService = {
         is_urgent: vehicleData.is_urgent,
         urgent_note: vehicleData.urgent_note,
         is_finished: false,
-        branch_id: vehicleData.branch_id || 'peliyagoda_sec5',
+        branch_id: vehicleData.branch_id || 'orugodawatta_sec5',
       })
       .select()
       .single();
@@ -653,7 +650,7 @@ export const vehicleService = {
         idle_seconds: 0,
         moved_by: 'Job Supervisor',
         technician_name: vehicleData.technician_name || null,
-        branch_id: vehicleData.branch_id || 'peliyagoda_sec5',
+        branch_id: vehicleData.branch_id || 'orugodawatta_sec5',
       })
       .select()
       .single();
@@ -965,15 +962,14 @@ export const vehicleService = {
       });
       if (insertErr) throw insertErr;
 
-      // Update vehicle zone & effective_completed_at if moving to inspection
+      // Update vehicle zone & effective_completed_at (State Invalidation Pattern)
       const updatePayload: any = {
         current_zone: targetZone,
+        effective_completed_at: targetZone === 'inspection' ? now : null,
+        is_finished: targetZone === 'completed',
         is_paused: false,
         paused_at: null,
       };
-      if (targetZone === 'inspection') {
-        updatePayload.effective_completed_at = now;
-      }
 
       const { error: directErr } = await client
         .from('vehicles')

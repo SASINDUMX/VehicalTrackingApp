@@ -9,14 +9,42 @@ export const useDateWatcher = (onDateChange: () => void) => {
   const lastDateRef = useRef<string>(new Date().toISOString().split('T')[0]);
 
   useEffect(() => {
-    const interval = setInterval(() => {
+    const checkDate = () => {
       const today = new Date().toISOString().split('T')[0];
       if (today !== lastDateRef.current) {
         lastDateRef.current = today;
         onDateChange();
       }
-    }, 30_000); // check every 30 seconds
+    };
 
-    return () => clearInterval(interval);
+    const interval = setInterval(checkDate, 30_000); // check every 30 seconds
+
+    // Mobile / Tablet wake-up listener: instant date check when tab or screen unlocks
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        checkDate();
+      }
+    };
+
+    const handleFocus = () => {
+      checkDate();
+    };
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('focus', handleFocus);
+    }
+
+    return () => {
+      clearInterval(interval);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('focus', handleFocus);
+      }
+    };
   }, [onDateChange]);
 };
