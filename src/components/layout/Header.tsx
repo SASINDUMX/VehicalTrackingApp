@@ -172,10 +172,20 @@ export const Header: React.FC = () => {
           <View style={styles.brandTextContainer}>
             <View style={styles.titleRow}>
               <Text style={[styles.brandTitle, { color: colors.textPrimary }]}>UNITED MOTORS</Text>
+              <View style={styles.statusContainer}>
+                {isRealtimeConnected && (
+                  <Animated.View
+                    style={[
+                      styles.dotPulse,
+                      { transform: [{ scale: pulseAnim }], opacity: pulseAnim.interpolate({ inputRange: [1, 1.5], outputRange: [0.8, 0] }) }
+                    ]}
+                  />
+                )}
+                <View style={[styles.statusDot, isRealtimeConnected ? styles.dotOnline : styles.dotOffline]} />
+              </View>
             </View>
             <View style={styles.brandSubRow}>
-              <Text style={[styles.brandSub, { color: colors.textMuted }]} numberOfLines={1}>{timeStr}</Text>
-              {/* Branch Badge — tappable for AGM/Manager */}
+              {/* Branch / Section Badge — moved to left of row */}
               <TouchableOpacity
                 onPress={() => canSwitchBranch && setIsBranchSwitcherOpen(true)}
                 activeOpacity={canSwitchBranch ? 0.7 : 1}
@@ -193,6 +203,7 @@ export const Header: React.FC = () => {
                 </Text>
                 {canSwitchBranch && <ChevronDown size={9} color={isDark ? '#38bdf8' : '#0284c7'} />}
               </TouchableOpacity>
+              <Text style={[styles.brandSub, { color: colors.textMuted }]} numberOfLines={1}>{timeStr}</Text>
             </View>
           </View>
         </View>
@@ -236,27 +247,6 @@ export const Header: React.FC = () => {
               )}
             </TouchableOpacity>
           )}
-
-          {/* Realtime Connection Status Dot Pill */}
-          <View style={[
-            styles.liveIndicatorPill,
-            {
-              backgroundColor: isRealtimeConnected ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
-              borderColor: isRealtimeConnected ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)',
-            }
-          ]}>
-            <View style={styles.statusContainer}>
-              {isRealtimeConnected && (
-                <Animated.View
-                  style={[
-                    styles.dotPulse,
-                    { transform: [{ scale: pulseAnim }], opacity: pulseAnim.interpolate({ inputRange: [1, 1.5], outputRange: [0.8, 0] }) }
-                  ]}
-                />
-              )}
-              <View style={[styles.statusDot, isRealtimeConnected ? styles.dotOnline : styles.dotOffline]} />
-            </View>
-          </View>
 
           {/* Manual Refresh Button (Square squircle matching profile) */}
           <TouchableOpacity
@@ -691,20 +681,6 @@ const styles = StyleSheet.create({
   squareIconBtnActive: {
     borderColor: '#38bdf8',
     backgroundColor: 'rgba(14, 165, 233, 0.3)',
-  },
-  liveIndicatorPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  liveIndicatorText: {
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 0.5,
   },
   statusContainer: {
     width: 8,
