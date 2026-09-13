@@ -25,6 +25,7 @@ import {
   RefreshCw,
   ClipboardList,
   Layers,
+  CloudOff,
 } from 'lucide-react-native';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
@@ -406,7 +407,8 @@ export const AuditTrailView: React.FC = () => {
         <View style={styles.listContainer}>
           {auditLogs.map(entry => {
             const config = getActionConfig(entry.action);
-            const dateObj = new Date(entry.created_at);
+            const displayIso = entry.action_timestamp || entry.created_at;
+            const dateObj = new Date(displayIso);
             const formattedTime = !Number.isNaN(dateObj.getTime())
               ? dateObj.toLocaleString('en-US', {
                   month: 'short',
@@ -417,7 +419,7 @@ export const AuditTrailView: React.FC = () => {
                   second: '2-digit',
                   hour12: true,
                 })
-              : entry.created_at;
+              : displayIso;
 
             const changeEntries = Object.entries(entry.changed_fields || {});
 
@@ -436,7 +438,7 @@ export const AuditTrailView: React.FC = () => {
                     <View style={[styles.facilityPill, { backgroundColor: colors.primaryDim, borderColor: colors.primaryBorder }]}>
                       <MapPin size={10} color={colors.primaryLight} />
                       <Text style={[styles.facilityPillText, { color: colors.primaryLight }]}>
-                        {entry.branch_id.replace('peliyagoda_', '').toUpperCase()}
+                        {availableBranches.find(b => b.id === entry.branch_id)?.code || entry.branch_id.toUpperCase()}
                       </Text>
                     </View>
 
@@ -452,6 +454,12 @@ export const AuditTrailView: React.FC = () => {
                   </View>
 
                   <View style={styles.cardHeaderRight}>
+                    {Boolean(entry.is_offline_sync) && (
+                      <View style={[styles.offlineSyncBadge, { backgroundColor: isDark ? 'rgba(245, 158, 11, 0.15)' : '#fef3c7', borderColor: isDark ? 'rgba(245, 158, 11, 0.35)' : '#fde68a' }]}>
+                        <CloudOff size={10} color={isDark ? '#fbbf24' : '#d97706'} />
+                        <Text style={[styles.offlineSyncBadgeText, { color: isDark ? '#fbbf24' : '#d97706' }]}>Synced Offline</Text>
+                      </View>
+                    )}
                     <Clock size={11} color={colors.textMuted} />
                     <Text style={[styles.timestampText, { color: colors.textMuted }]}>{formattedTime}</Text>
                   </View>
@@ -823,7 +831,21 @@ const styles = StyleSheet.create({
   cardHeaderRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 8,
+  },
+  offlineSyncBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3.5,
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 4,
+    borderWidth: 1,
+  },
+  offlineSyncBadgeText: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
   facilityPill: {
     flexDirection: 'row',

@@ -44,7 +44,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
 
   // Branch state — seeded from profile.branch_id, switchable by manager roles
-  const [activeBranchId, setActiveBranchId] = useState<string>('peliyagoda_sec5');
+  const [activeBranchId, setActiveBranchId] = useState<string>('orugodawatta_sec5');
   const [availableBranches, setAvailableBranches] = useState<WorkplaceRecord[]>([]);
 
   // In-flight request deduplication map to collapse simultaneous calls into 1 network roundtrip
@@ -59,7 +59,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         .select('id, name, code, city')
         .eq('is_active', true)
         .order('name', { ascending: true });
-      if (data && data.length > 0) setAvailableBranches(data as WorkplaceRecord[]);
+      if (data && data.length > 0) {
+        setAvailableBranches(data as WorkplaceRecord[]);
+        setActiveBranchId(prev => (prev ? prev : data[0].id));
+      }
     } catch (err) {
       console.warn('[AuthContext] workplaces fetch failed:', err);
     }
@@ -135,7 +138,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
         setUserProfile(null);
-        setActiveBranchId('peliyagoda_sec5');
+        setActiveBranchId('orugodawatta_sec5');
         profileMemoryCache.clear();
       }
     });
@@ -175,11 +178,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             display_name: 'Super Administrator (Headquarters)',
             role: 'super_admin',
             section: null,
-            branch_id: 'peliyagoda_sec5',
+            branch_id: 'orugodawatta_sec5',
             theme_preference: 'system',
           };
           setUserProfile(superAdminProfile);
-          setActiveBranchId('peliyagoda_sec5');
+          setActiveBranchId('orugodawatta_sec5');
           return { error: null };
         }
       } catch (err: any) {
@@ -220,7 +223,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           return { error: 'No user profile found. Contact your administrator.' };
         }
         setUserProfile(profile);
-        setActiveBranchId(profile.branch_id || 'peliyagoda_sec5');
+        setActiveBranchId(profile.branch_id || 'orugodawatta_sec5');
       }
 
       return { error: null };
@@ -240,7 +243,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } finally {
       setUser(null);
       setUserProfile(null);
-      setActiveBranchId('peliyagoda_sec5');
+      setActiveBranchId('orugodawatta_sec5');
       profileMemoryCache.clear();
       if (typeof window !== 'undefined' && window.localStorage) {
         // Purge any lingering supabase auth keys from storage
@@ -255,7 +258,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // Derived branch display values from availableBranches list
   const activeBranch = availableBranches.find(b => b.id === activeBranchId);
-  const activeBranchName = activeBranch?.name ?? 'United Motors - Peliyagoda (Section 5)';
+  const activeBranchName = activeBranch?.name ?? 'United Motors - Orugodawatta (Section 5)';
   const activeBranchCode = activeBranch?.code ?? 'SEC 5';
 
   // switchBranch: only called by Manager/AGM roles via header switcher

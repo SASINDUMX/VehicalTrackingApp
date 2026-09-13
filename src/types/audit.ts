@@ -37,6 +37,8 @@ export type AuditActionCategory =
 export interface AuditLogEntry {
   id: string;
   created_at: string;
+  action_timestamp?: string;
+  is_offline_sync?: boolean;
   branch_id: string;
   entity_type: string;
   entity_id: string;
