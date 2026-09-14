@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Modal, View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Platform } from 'react-native';
 import { useVehicles } from '../../context/VehicleContext';
+import { useUI } from '../../context/UIContext';
 import { BayZone, TaskType } from '../../types/vehicle';
 import { X, Car, Wrench, Shield, Navigation, Send, CheckSquare, Square, AlertTriangle } from 'lucide-react-native';
 
@@ -13,7 +14,8 @@ import { UrgentToggleInput } from '../shared/UrgentToggleInput';
 import { APP_TERMINOLOGY } from '../../constants/terminology';
 
 export const AddVehicleModal: React.FC = () => {
-  const { isAddModalOpen, setIsAddModalOpen, addVehicle, vehicles } = useVehicles();
+  const { isAddModalOpen, setIsAddModalOpen } = useUI();
+  const { addVehicle, vehicles } = useVehicles();
   const { colors, isDark } = useTheme();
 
   const [vehicleNo, setVehicleNo] = useState<string>('');
@@ -25,7 +27,6 @@ export const AddVehicleModal: React.FC = () => {
   const [targetZone, setTargetZone] = useState<BayZone>('workshop');
   const [assignedTech, setAssignedTech] = useState<string>(APP_TERMINOLOGY.stations.workshop.name);
   const [remarks, setRemarks] = useState<string>('');
-  const [technicianName, setTechnicianName] = useState<string>('');
   const [isBooking, setIsBooking] = useState<boolean>(false);
   const [hasAdditionalRepairs, setHasAdditionalRepairs] = useState<boolean>(false);
   const [isUrgent, setIsUrgent] = useState<boolean>(false);
@@ -72,14 +73,13 @@ export const AddVehicleModal: React.FC = () => {
         remarks,
         isUrgent,
         urgentNote,
-        technicianName.trim() || null,
+        null,
         isBooking,
         hasAdditionalRepairs
       );
       setIsAddModalOpen(false);
       setVehicleNo('');
       setRemarks('');
-      setTechnicianName('');
       setIsBooking(false);
       setHasAdditionalRepairs(false);
       setIsUrgent(false);
@@ -146,7 +146,7 @@ export const AddVehicleModal: React.FC = () => {
                     borderColor: colors.borderGlass,
                     color: colors.textPrimary,
                   },
-                  isNoValid && styles.inputValid
+                  isNoValid && { borderColor: colors.success, backgroundColor: colors.successDim }
                 ]}
                 placeholder="e.g. CAB-7712, 300-4234, or WP-1234"
                 placeholderTextColor={colors.textMuted}
@@ -157,8 +157,9 @@ export const AddVehicleModal: React.FC = () => {
               />
               <Text style={[
                 styles.helperText,
-                isNoValid && styles.helperTextValid,
-                (isDuplicate || (isNoTouched && !isNoValid)) && styles.helperTextInvalid
+                { color: colors.textMuted },
+                isNoValid && { color: colors.success, fontWeight: '600' },
+                (isDuplicate || (isNoTouched && !isNoValid)) && { color: colors.danger, fontWeight: '600' }
               ]}>
                 {isDuplicate
                   ? '✕ Vehicle is already active in workshop'
@@ -270,25 +271,6 @@ export const AddVehicleModal: React.FC = () => {
               />
             </View>
 
-            {/* Technician Name (Actual mechanic) */}
-            <View style={styles.formGroup}>
-              <Text style={[styles.label, { color: colors.textSecondary }]}>ASSIGNED TECHNICIAN (MECHANIC):</Text>
-              <TextInput
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)',
-                    borderColor: colors.borderGlass,
-                    color: colors.textPrimary,
-                  }
-                ]}
-                placeholder="e.g. Kasun Fernando, Sunil Shantha..."
-                placeholderTextColor={colors.textMuted}
-                value={technicianName}
-                onChangeText={setTechnicianName}
-              />
-            </View>
-
             {/* Booking & Additional Repairs Checkboxes */}
             <View style={[styles.formGroup, { flexDirection: 'row', gap: 12, flexWrap: 'wrap' }]}>
               <TouchableOpacity
@@ -297,13 +279,13 @@ export const AddVehicleModal: React.FC = () => {
                   {
                     flex: 1,
                     minWidth: 200,
-                    backgroundColor: isBooking ? (isDark ? 'rgba(59, 130, 246, 0.15)' : '#eff6ff') : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
-                    borderColor: isBooking ? '#3b82f6' : colors.borderGlass,
+                    backgroundColor: isBooking ? colors.primaryDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
+                    borderColor: isBooking ? colors.primary : colors.borderGlass,
                   }
                 ]}
                 onPress={() => setIsBooking(!isBooking)}
               >
-                {isBooking ? <CheckSquare size={16} color="#3b82f6" /> : <Square size={16} color={colors.textMuted} />}
+                {isBooking ? <CheckSquare size={16} color={colors.primary} /> : <Square size={16} color={colors.textMuted} />}
                 <Text style={[styles.dispatchText, { color: isBooking ? colors.textPrimary : colors.textSecondary }]}>
                   PRIOR BOOKING
                 </Text>
@@ -315,13 +297,13 @@ export const AddVehicleModal: React.FC = () => {
                   {
                     flex: 1,
                     minWidth: 200,
-                    backgroundColor: hasAdditionalRepairs ? (isDark ? 'rgba(245, 158, 11, 0.15)' : '#fffbeb') : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
-                    borderColor: hasAdditionalRepairs ? '#f59e0b' : colors.borderGlass,
+                    backgroundColor: hasAdditionalRepairs ? colors.warningDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
+                    borderColor: hasAdditionalRepairs ? colors.warning : colors.borderGlass,
                   }
                 ]}
                 onPress={() => setHasAdditionalRepairs(!hasAdditionalRepairs)}
               >
-                {hasAdditionalRepairs ? <CheckSquare size={16} color="#f59e0b" /> : <Square size={16} color={colors.textMuted} />}
+                {hasAdditionalRepairs ? <CheckSquare size={16} color={colors.warning} /> : <Square size={16} color={colors.textMuted} />}
                 <Text style={[styles.dispatchText, { color: hasAdditionalRepairs ? colors.textPrimary : colors.textSecondary }]}>
                   ADDITIONAL REPAIRS
                 </Text>
@@ -352,66 +334,9 @@ const styles = StyleSheet.create({
     gap: 12,
     width: '100%',
   },
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    justifyContent: 'center',
-    padding: 16,
-    ...(Platform.OS === 'web' ? {
-      backdropFilter: 'blur(8px)',
-      transition: 'opacity 100ms ease-out',
-      animationDuration: '100ms',
-    } as any : {}),
-  },
-  modalCard: {
-    backgroundColor: '#0f172a',
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    maxHeight: '90%',
-    ...(Platform.OS === 'web' ? {
-      boxShadow: '0px 10px 20px rgba(0, 0, 0, 0.5)',
-      transition: 'transform 100ms ease-out, opacity 100ms ease-out',
-      animationDuration: '100ms',
-    } as any : {
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 10 },
-      shadowOpacity: 0.5,
-      shadowRadius: 20,
-      elevation: 10,
-    }),
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  headerTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
   iconWrapper: {
-    backgroundColor: 'rgba(14, 165, 233, 0.15)',
     padding: 8,
     borderRadius: 8,
-  },
-  headerTitle: {
-    color: '#ffffff',
-    fontWeight: '800',
-    fontSize: 16,
-    letterSpacing: 0.5,
-  },
-  closeBtn: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    padding: 8,
-    borderRadius: 20,
-  },
-  body: {
-    padding: 20,
   },
   bodyContent: {
     gap: 20,
@@ -420,39 +345,28 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   label: {
-    color: '#94a3b8',
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 1,
   },
   input: {
-    backgroundColor: 'rgba(0, 0, 0, 0.2)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    color: '#ffffff',
     fontSize: 15,
     fontWeight: '600',
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
     letterSpacing: 1,
   },
-  inputValid: {
-    borderColor: 'rgba(16, 185, 129, 0.5)',
-    backgroundColor: 'rgba(16, 185, 129, 0.05)',
-  },
   helperText: {
     fontSize: 11,
-    color: '#64748b',
     marginTop: 2,
   },
   helperTextValid: {
-    color: '#10b981',
     fontWeight: '600',
   },
   helperTextInvalid: {
-    color: '#ef4444',
     fontWeight: '600',
   },
   textArea: {
@@ -480,52 +394,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    backgroundColor: 'rgba(255, 255, 255, 0.02)',
-  },
-  activeDispatch: {
-    borderColor: '#0ea5e9',
-    backgroundColor: 'rgba(14, 165, 233, 0.15)',
-  },
-  activeDispatchText: {
-    color: '#38bdf8',
-  },
-  activeDispatchHo: {
-    borderColor: '#f59e0b',
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
-  },
-  activeDispatchTextHo: {
-    color: '#fbbf24',
-  },
-  activeDispatchAl: {
-    borderColor: '#10b981',
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-  },
-  activeDispatchTextAl: {
-    color: '#34d399',
   },
   dispatchText: {
-    color: '#94a3b8',
     fontSize: 11.5,
     fontWeight: '700',
     textAlign: 'center',
-  },
-  footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.05)',
   },
   backBtn: {
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
   },
   backBtnText: {
-    color: '#cbd5e1',
     fontWeight: '600',
     fontSize: 14,
   },
@@ -533,19 +413,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#0ea5e9',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 12,
-    ...(Platform.OS === 'web'
-      ? ({ boxShadow: '0px 4px 8px rgba(14, 165, 233, 0.3)' } as any)
-      : {
-          shadowColor: '#0ea5e9',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.3,
-          shadowRadius: 8,
-          elevation: 5,
-        }),
   },
   disabledBtn: {
     opacity: 0.4,

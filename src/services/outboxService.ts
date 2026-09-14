@@ -184,12 +184,12 @@ class OutboxService {
   }
 
   private async executeMutation(mutation: OutboxMutation): Promise<void> {
-    const { type, payload } = mutation;
-    const now = new Date().toISOString();
+    const { type, payload, createdAt } = mutation;
+    const eventTime = createdAt || new Date().toISOString();
 
     switch (type) {
       case 'START_STAGE_WORK':
-        await vehicleService.startWork(payload.vehicleId, payload.startedBy, now, null, null);
+        await vehicleService.startWork(payload.vehicleId, payload.startedBy, eventTime, null, null);
         break;
 
       case 'TOGGLE_TASK':
@@ -202,7 +202,7 @@ class OutboxService {
           payload.toZone,
           payload.toZone,
           undefined,
-          now,
+          eventTime,
           null,
           null,
           null,
@@ -234,7 +234,7 @@ class OutboxService {
         await vehicleService.finishJob(
           payload.vehicleId,
           payload.advisorName,
-          now,
+          eventTime,
           null,
           null,
           null

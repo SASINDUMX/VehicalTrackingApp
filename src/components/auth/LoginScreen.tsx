@@ -152,7 +152,7 @@ export const LoginScreen: React.FC = () => {
         </View>
 
         {/* Footer */}
-        <Text style={styles.footer}>
+        <Text style={[styles.footer, { color: colors.textMuted }]}>
           v1.1
         </Text>
       </ScrollView>
@@ -163,7 +163,6 @@ export const LoginScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#070b14', // Ultra-premium carbon dark backdrop
   },
   scrollInner: {
     flexGrow: 1,
@@ -179,25 +178,14 @@ const styles = StyleSheet.create({
     width: 90,
     height: 90,
     borderRadius: 24,
-    backgroundColor: 'rgba(6, 182, 212, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 20,
-    ...(Platform.OS === 'web'
-      ? ({ boxShadow: '0px 0px 20px rgba(6, 182, 212, 0.8)' } as any)
-      : {
-          shadowColor: '#06b6d4',
-          shadowOffset: { width: 0, height: 0 },
-          shadowOpacity: 0.8,
-          shadowRadius: 20,
-          elevation: 12,
-        }),
   },
   logoCircleInner: {
     width: 68,
     height: 68,
     borderRadius: 20,
-    backgroundColor: '#0b0f19',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -208,13 +196,11 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   appTitle: {
-    color: '#ffffff',
     fontWeight: '900',
     fontSize: 28,
     letterSpacing: 2.5,
   },
   appSubtitle: {
-    color: '#94a3b8',
     fontSize: 14,
     marginTop: 6,
     letterSpacing: 1,
@@ -223,10 +209,8 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 420,
-    backgroundColor: '#0f172a', // Floating glassmorphic card
-    borderRadius: 20, // Radius 20
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)', // Border
     padding: 28,
     ...(Platform.OS === 'web'
       ? ({ boxShadow: '0px 8px 16px rgba(0, 0, 0, 0.5)' } as any)
@@ -242,28 +226,23 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   cardTitle: {
-    color: '#ffffff',
     fontWeight: '800',
     fontSize: 22,
     marginBottom: 4,
   },
   cardSubtitle: {
-    color: '#94a3b8',
     fontSize: 14,
   },
   errorBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
     borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.25)',
     borderRadius: 12,
     padding: 14,
     marginBottom: 20,
   },
   errorText: {
-    color: '#fca5a5',
     fontSize: 14,
     flex: 1,
   },
@@ -275,19 +254,15 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   label: {
-    color: '#cbd5e1',
     fontSize: 13,
     fontWeight: '600',
     letterSpacing: 0.5,
   },
   input: {
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    color: '#ffffff',
     fontSize: 16,
   },
   signInBtn: {
@@ -295,18 +270,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    backgroundColor: '#06b6d4',
     paddingVertical: 16,
     borderRadius: 12,
-    ...(Platform.OS === 'web'
-      ? ({ boxShadow: '0px 4px 8px rgba(6, 182, 212, 0.3)' } as any)
-      : {
-          shadowColor: '#06b6d4',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.3,
-          shadowRadius: 8,
-          elevation: 6,
-        }),
   },
   signInBtnDisabled: {
     opacity: 0.6,
@@ -318,7 +283,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   footer: {
-    color: '#475569',
     fontSize: 12,
     marginTop: 32,
     letterSpacing: 0.5,

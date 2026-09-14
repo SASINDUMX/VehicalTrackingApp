@@ -18,26 +18,9 @@ import { VehicleNotePill } from './VehicleNotePill';
 import { TaskSelectorChips } from './TaskSelectorChips';
 import { UrgentToggleInput } from './UrgentToggleInput';
 import { computeVehicleModalTimers, getBayForTaskType } from '../../utils/vehicleUtils';
-import { computeVehicleTimelineStages } from '../../utils/timelineUtils';
 import { useTheme } from '../../context/ThemeContext';
-import { getBayDefinitions } from '../../constants/bays';
 import { APP_TERMINOLOGY } from '../../constants/terminology';
-
-const STAGE_ICONS: Record<BayZone, any> = {
-  workshop: Wrench,
-  alignment: Navigation,
-  hoist: Wrench,
-  inspection: CheckCircle2,
-  completed: CheckCircle2,
-};
-
-const getStageOrder = (colors?: any) =>
-  getBayDefinitions(colors).map(bay => ({
-    zone: bay.id,
-    name: bay.name,
-    icon: STAGE_ICONS[bay.id] || CheckCircle2,
-    color: bay.color,
-  }));
+import { VehicleTimelineView } from './VehicleTimelineView';
 
 const calculateTimers = (vehicle: Vehicle) => computeVehicleModalTimers(vehicle);
 
@@ -134,12 +117,6 @@ export const VehicleDetailsModal: React.FC = () => {
 
   const currentZone = selectedVehicle?.current_zone;
 
-  // Memoize timeline stage calculation so it only recalculates when vehicle data or active stage duration changes
-  // NOTE: must be declared BEFORE the early return to satisfy React Rules of Hooks
-  const timelineStagesData = useMemo(() => {
-    if (!selectedVehicle) return [];
-    return computeVehicleTimelineStages(selectedVehicle, getStageOrder(colors), activeStageDurationRaw);
-  }, [selectedVehicle, colors, activeStageDurationRaw]);
 
   if (!selectedVehicle) return null;
 
@@ -295,8 +272,8 @@ export const VehicleDetailsModal: React.FC = () => {
                     style={[
                       styles.deleteBtn,
                       {
-                        backgroundColor: selectedVehicle.is_paused ? (isDark ? 'rgba(34, 197, 94, 0.15)' : '#dcfce7') : (isDark ? 'rgba(245, 158, 11, 0.15)' : '#fffbeb'),
-                        borderColor: selectedVehicle.is_paused ? colors.success : '#f59e0b',
+                        backgroundColor: selectedVehicle.is_paused ? colors.successDim : colors.warningDim,
+                        borderColor: selectedVehicle.is_paused ? colors.success : colors.warning,
                       }
                     ]}
                     onPress={() => setShowHoldConfirm(true)}
@@ -309,8 +286,8 @@ export const VehicleDetailsModal: React.FC = () => {
                       </>
                     ) : (
                       <>
-                        <PauseCircle size={14} color="#f59e0b" />
-                        <Text style={[styles.deleteBtnText, { color: '#f59e0b' }]}>Hold / Major Repair</Text>
+                        <PauseCircle size={14} color={colors.warning} />
+                        <Text style={[styles.deleteBtnText, { color: colors.warning }]}>Hold / Major Repair</Text>
                       </>
                     )}
                   </TouchableOpacity>
@@ -451,12 +428,12 @@ export const VehicleDetailsModal: React.FC = () => {
                       padding: 12,
                       borderRadius: 10,
                       borderWidth: 1,
-                      backgroundColor: isBooking ? (isDark ? 'rgba(59, 130, 246, 0.15)' : '#eff6ff') : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
-                      borderColor: isBooking ? '#3b82f6' : colors.borderGlass,
+                      backgroundColor: isBooking ? colors.primaryDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
+                      borderColor: isBooking ? colors.primary : colors.borderGlass,
                     }}
                     onPress={() => setIsBooking(!isBooking)}
                   >
-                    {isBooking ? <CheckSquare size={16} color="#3b82f6" /> : <Square size={16} color={colors.textMuted} />}
+                    {isBooking ? <CheckSquare size={16} color={colors.primary} /> : <Square size={16} color={colors.textMuted} />}
                     <Text style={{ fontSize: 12, fontWeight: '700', color: isBooking ? colors.textPrimary : colors.textSecondary }}>
                       PRIOR BOOKING
                     </Text>
@@ -472,12 +449,12 @@ export const VehicleDetailsModal: React.FC = () => {
                       padding: 12,
                       borderRadius: 10,
                       borderWidth: 1,
-                      backgroundColor: hasAdditionalRepairs ? (isDark ? 'rgba(245, 158, 11, 0.15)' : '#fffbeb') : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
-                      borderColor: hasAdditionalRepairs ? '#f59e0b' : colors.borderGlass,
+                      backgroundColor: hasAdditionalRepairs ? colors.warningDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
+                      borderColor: hasAdditionalRepairs ? colors.warning : colors.borderGlass,
                     }}
                     onPress={() => setHasAdditionalRepairs(!hasAdditionalRepairs)}
                   >
-                    {hasAdditionalRepairs ? <CheckSquare size={16} color="#f59e0b" /> : <Square size={16} color={colors.textMuted} />}
+                    {hasAdditionalRepairs ? <CheckSquare size={16} color={colors.warning} /> : <Square size={16} color={colors.textMuted} />}
                     <Text style={{ fontSize: 12, fontWeight: '700', color: hasAdditionalRepairs ? colors.textPrimary : colors.textSecondary }}>
                       ADDITIONAL REPAIRS
                     </Text>
@@ -486,179 +463,10 @@ export const VehicleDetailsModal: React.FC = () => {
               </View>
             ) : (
               /* --- HIGH-TECH STEPPER TIMELINE STAGE AUDIT MODE --- */
-              <View style={styles.stepperContainer}>
-                <Text style={[styles.stepperTitle, { color: colors.textMuted }]}>WORKSHOP STAGE TIMELINE & AUDIT LOG:</Text>
-
-                {/* Vertical Stepper Timeline list */}
-                <View style={styles.timelineList}>
-                  {timelineStagesData.map((node, nodeIdx) => {
-                    const {
-                      stageDef,
-                      status,
-                      connectorType,
-                      isCurrent,
-                      logsForZone,
-                      isCompleted,
-                      isBypassed,
-                      isCancelled,
-                      isLastInOrder,
-                      isInspection,
-                      isStageIdle,
-                      spentStr,
-                      breakNotes,
-                      queueNotes,
-                      workCompletedAt,
-                    } = node;
-
-                    // Direct, clean mapping from single-source status
-                    const isStrikethrough = status === 'skipped' || status === 'bypassed';
-                    const nodeTheme = {
-                      completed: { iconColor: colors.success, circleBorder: colors.success, circleBg: colors.successDim, pillVariant: 'DONE' as const, pillLabel: 'DONE' },
-                      bypassed:  { iconColor: colors.danger, circleBorder: colors.danger, circleBg: colors.dangerDim, pillVariant: 'SKIPPED' as const, pillLabel: 'BYPASSED' },
-                      active:    { iconColor: colors.primaryLight, circleBorder: colors.primary, circleBg: colors.primaryDim, pillVariant: 'ACTIVE' as const, pillLabel: 'ACTIVE' },
-                      idle:      { iconColor: colors.warningLight, circleBorder: colors.warning, circleBg: colors.warningDim, pillVariant: 'IDLE' as const, pillLabel: 'IDLE' },
-                      ready:     { iconColor: colors.success, circleBorder: colors.success, circleBg: colors.successDim, pillVariant: 'READY' as const, pillLabel: 'READY' },
-                      skipped:   { iconColor: colors.danger, circleBorder: colors.danger, circleBg: colors.dangerDim, pillVariant: 'SKIPPED' as const, pillLabel: 'SKIPPED' },
-                      pending:   { iconColor: colors.textMuted, circleBorder: colors.borderGlassBright, circleBg: colors.surfaceOverlay, pillVariant: 'PENDING' as const, pillLabel: 'PENDING' },
-                    }[status];
-
-                    const StageIconComponent = stageDef.icon || CheckCircle2;
-
-                    return (
-                      <View key={node.id || `${stageDef.zone}-${nodeIdx}`} style={styles.timelineItem}>
-                        <View style={styles.timelineNodeColumn}>
-                          <View style={[
-                            styles.nodeCircle,
-                            { backgroundColor: nodeTheme.circleBg, borderColor: nodeTheme.circleBorder }
-                          ]}>
-                            <StageIconComponent size={16} color={nodeTheme.iconColor} />
-                          </View>
-                          {!isLastInOrder && (
-                            <>
-                              {/* Background track */}
-                              <View style={[styles.timelineLine, { backgroundColor: colors.borderGlassBright }]} />
-                              {/* Connector driven directly by state engine */}
-                              {connectorType === 'completed' && (
-                                <View style={[styles.timelineLine, styles.timelineLineDone, { backgroundColor: colors.success }]} />
-                              )}
-                              {connectorType === 'bypassed' && (
-                                <View style={[styles.timelineLine, styles.timelineLineDone, { backgroundColor: colors.danger }]} />
-                              )}
-                              {connectorType === 'idle_done' && (
-                                <View style={[styles.timelineLine, styles.timelineLineDone, { backgroundColor: colors.warning }]} />
-                              )}
-                              {connectorType === 'working' && (
-                                <View style={[styles.timelineLine, styles.timelineLineHalf, { backgroundColor: colors.primary }]} />
-                              )}
-                            </>
-                          )}
-                        </View>
-
-                        <View style={styles.timelineContent}>
-                          <View style={styles.timelineHeaderRow}>
-                            <Text style={[
-                              styles.stageNameText,
-                              { color: colors.textPrimary },
-                              isCurrent && { fontWeight: '800' },
-                              isStrikethrough && { color: colors.textMuted, textDecorationLine: 'line-through' }
-                            ]}>
-                              {stageDef.name}
-                            </Text>
-                            <StatusPill variant={nodeTheme.pillVariant} label={nodeTheme.pillLabel} size="sm" />
-                          </View>
-
-                          {isInspection ? (
-                            /* Final Inspection: Pure, minimal dispatch entry */
-                            logsForZone[0] ? (
-                              <Text style={[styles.logSubText, { color: colors.textSecondary }]}>
-                                • Entered {formatSLSTime(logsForZone[0].entered_at)}
-                              </Text>
-                            ) : null
-                  ) : (
-                            /* Service Bays: Active/Idle status, timestamps, breaks & queue notes */
-                            <>
-                              <View style={styles.stageTimeRow}>
-                                <View style={styles.timeTag}>
-                                  <Clock size={12} color={nodeTheme.iconColor} />
-                                  <Text style={[
-                                    styles.timeTagText,
-                                    { color: nodeTheme.iconColor },
-                                    isCurrent && { fontWeight: '700' }
-                                  ]}>
-                                    {{
-                                      active: `Active: ${spentStr}`,
-                                      idle: `Idle: ${spentStr}`,
-                                      completed: `Spent: ${spentStr}`,
-                                      bypassed: 'Bypassed',
-                                      skipped: 'Skipped',
-                                      ready: 'Ready',
-                                      pending: 'Pending'
-                                    }[status] || 'Pending'}
-                                  </Text>
-                                </View>
-                              </View>
-
-                              {/* Historical Log Timestamps (2 Rows: Entry/Start and Finish/Exit) */}
-                              {logsForZone.map((l, lIdx) => {
-                                const entryStartStr = `• Entered ${formatSLSTime(l.entered_at)}${l.work_started_at ? ` · Started ${formatSLSTime(l.work_started_at)}` : ''}`;
-                                const finishExitParts: string[] = [];
-                                if (workCompletedAt) finishExitParts.push(`Finished ${formatSLSTime(workCompletedAt)}`);
-                                if (l.exited_at) finishExitParts.push(`Exited ${formatSLSTime(l.exited_at)}`);
-                                const finishExitStr = finishExitParts.length > 0 ? `• ${finishExitParts.join(' · ')}` : null;
-
-                                return (
-                                  <View key={lIdx} style={styles.logSubRowContainer}>
-                                    <Text style={[styles.logSubText, { color: colors.textSecondary }]}>
-                                      {entryStartStr}
-                                    </Text>
-                                    {finishExitStr && (
-                                      <Text style={[styles.logSubText, { color: colors.textSecondary }]}>
-                                        {finishExitStr}
-                                      </Text>
-                                    )}
-                                  </View>
-                                );
-                              })}
-
-                              {/* Break Deductions & Active/Idle Subtext */}
-                              {breakNotes.map((note, nIdx) => (
-                                <Text key={`bn-${nIdx}`} style={[styles.breakNoteSubText, { color: colors.warningLight }]}>
-                                  {note}
-                                </Text>
-                              ))}
-
-                              {queueNotes.map((note, qIdx) => {
-                                const parts = note.split(' · ');
-                                return (
-                                  <View key={`qn-${qIdx}`} style={styles.queueNoteRow}>
-                                    {parts.map((part, pIdx) => {
-                                      const isActive = part.startsWith('Active:');
-                                      const isIdle = part.startsWith('Idle:');
-                                      return (
-                                        <React.Fragment key={pIdx}>
-                                          {pIdx > 0 && <Text style={{ color: colors.textMuted, fontSize: 11 }}> · </Text>}
-                                          <Text
-                                            style={[
-                                              styles.queueNoteSubText,
-                                              { color: isActive ? colors.primaryLight : isIdle ? colors.warningLight : colors.textSecondary }
-                                            ]}
-                                          >
-                                            {part}
-                                          </Text>
-                                        </React.Fragment>
-                                      );
-                                    })}
-                                  </View>
-                                );
-                              })}
-                            </>
-                          )}
-                        </View>
-                      </View>
-                    );
-                  })}
-                </View>
-              </View>
+              <VehicleTimelineView
+                vehicle={selectedVehicle}
+                activeStageDurationRaw={activeStageDurationRaw}
+              />
             )}
         </View>
       </BaseModal>
@@ -693,7 +501,7 @@ export const VehicleDetailsModal: React.FC = () => {
         title={selectedVehicle.is_paused ? 'Resume Vehicle Work' : 'Hold / Pause for Major Repair'}
         subtitle={selectedVehicle.is_paused ? 'Resume Operation' : 'Pause Operational Timers'}
         confirmVariant={selectedVehicle.is_paused ? 'primary' : 'warning'}
-        icon={selectedVehicle.is_paused ? <PlayCircle size={20} color={colors.success} /> : <PauseCircle size={20} color="#f59e0b" />}
+        icon={selectedVehicle.is_paused ? <PlayCircle size={20} color={colors.success} /> : <PauseCircle size={20} color={colors.warning} />}
         description={
           <Text style={[styles.confirmBodyText, { color: colors.textSecondary }]}>
             {selectedVehicle.is_paused ? (
@@ -747,27 +555,6 @@ const styles = StyleSheet.create({
   confirmBodyText: { fontSize: 13, lineHeight: 20 },
   confirmBoldPlate: { fontWeight: '800' },
 
-  /* Stepper Timeline Audit Styles */
-  stepperContainer: { gap: 16 },
-  stepperTitle: { fontSize: 11, fontWeight: '700', letterSpacing: 1 },
-  timelineList: { gap: 0 },
-  timelineItem: { flexDirection: 'row', gap: 14 },
-  timelineNodeColumn: { alignItems: 'center', width: 28, position: 'relative' },
-  nodeCircle: { width: 28, height: 28, borderRadius: 14, borderWidth: 2, alignItems: 'center', justifyContent: 'center', zIndex: 2 },
-  timelineLine: { width: 2, position: 'absolute', top: 28, bottom: 0, zIndex: 1 },
-  timelineLineDone: { zIndex: 2 },
-  timelineLineHalf: { height: '50%', zIndex: 2 },
-  timelineContent: { flex: 1, paddingBottom: 24, gap: 4 },
-  timelineHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  stageNameText: { fontSize: 13, fontWeight: '600' },
-  stageTimeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  timeTag: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  timeTagText: { fontSize: 12, fontWeight: '500' },
-  logSubRowContainer: { gap: 2, marginTop: 2 },
-  logSubText: { fontSize: 11, lineHeight: 16 },
-  queueNoteRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginTop: 2 },
-  queueNoteSubText: { fontSize: 11, fontWeight: '500' },
-  breakNoteSubText: { fontSize: 11, marginTop: 2, fontWeight: '500' },
 
   /* Edit Mode Styles */
   editContainer: { gap: 14 },

@@ -19,6 +19,10 @@ export interface UIContextType {
   setIsConfigModalOpen: (open: boolean) => void;
   isReportsModalOpen: boolean;
   setIsReportsModalOpen: (open: boolean) => void;
+  activeReportsTab: 'kpi' | 'audit';
+  setActiveReportsTab: (tab: 'kpi' | 'audit') => void;
+  isCalculationInfoOpen: boolean;
+  setIsCalculationInfoOpen: (open: boolean) => void;
 
   // Search Query
   searchQuery: string;
@@ -45,6 +49,8 @@ export const UIProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
   const [isConfigModalOpen, setIsConfigModalOpen] = useState<boolean>(false);
   const [isReportsModalOpen, setIsReportsModalOpen] = useState<boolean>(false);
+  const [activeReportsTab, setActiveReportsTab] = useState<'kpi' | 'audit'>('kpi');
+  const [isCalculationInfoOpen, setIsCalculationInfoOpen] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [showMyVehiclesOnly, setShowMyVehiclesOnly] = useState<boolean>(false);
   const [vehicleNoteModalData, setVehicleNoteModalData] = useState<VehicleNoteModalData | null>(null);
@@ -75,6 +81,10 @@ export const UIProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
         setIsConfigModalOpen,
         isReportsModalOpen,
         setIsReportsModalOpen,
+        activeReportsTab,
+        setActiveReportsTab,
+        isCalculationInfoOpen,
+        setIsCalculationInfoOpen,
         searchQuery,
         setSearchQuery,
         showMyVehiclesOnly,

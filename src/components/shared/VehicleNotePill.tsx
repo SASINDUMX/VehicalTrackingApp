@@ -1,7 +1,7 @@
 import React from 'react';
 import { TouchableOpacity, StyleSheet } from 'react-native';
 import { StatusPill } from './StatusPill';
-import { useVehicles } from '../../context/VehicleContext';
+import { useUI } from '../../context/UIContext';
 import { Vehicle } from '../../types/vehicle';
 
 interface VehicleNotePillProps {
@@ -23,7 +23,7 @@ export const VehicleNotePill: React.FC<VehicleNotePillProps> = ({
   size = 'md',
   compact = false,
 }) => {
-  const { showVehicleNotes } = useVehicles();
+  const { showVehicleNotes } = useUI();
 
   const activeVehicleNo = vehicle?.vehicle_no ?? vehicleNo ?? '';
   const isUrgent = Boolean(vehicle?.is_urgent ?? propIsUrgent);
