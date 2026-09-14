@@ -229,6 +229,8 @@ BEGIN
       v.id,
       v.is_finished,
       v.current_zone,
+      v.status,
+      v.is_paused,
       v.is_booking,
       v.has_additional_repairs,
       v.gross_tat_seconds,
@@ -250,7 +252,8 @@ BEGIN
       COUNT(*) FILTER (WHERE is_finished = TRUE OR current_zone = 'inspection')::INT AS completed,
       COUNT(*) FILTER (WHERE is_finished = FALSE AND current_zone != 'inspection')::INT AS in_progress,
       COUNT(*) FILTER (WHERE is_booking = TRUE)::INT AS bookings,
-      COUNT(*) FILTER (WHERE has_additional_repairs = TRUE)::INT AS extra_repairs
+      COUNT(*) FILTER (WHERE has_additional_repairs = TRUE)::INT AS extra_repairs,
+      COUNT(*) FILTER (WHERE is_paused = TRUE OR status = 'on_hold')::INT AS on_hold
     FROM filtered_vehicles
   ),
   bay_logs AS (
@@ -264,6 +267,8 @@ BEGIN
     INNER JOIN filtered_vehicles fv ON fv.id = sl.vehicle_id
     WHERE sl.exited_at IS NOT NULL
       AND fv.has_additional_repairs = FALSE
+      AND fv.is_paused = FALSE
+      AND fv.status != 'on_hold'
       AND sl.to_zone IN ('workshop', 'alignment', 'hoist')
     GROUP BY sl.to_zone
   ),
@@ -291,6 +296,7 @@ BEGIN
     'inProgressCount', COALESCE(c.in_progress, 0),
     'bookingCount', COALESCE(c.bookings, 0),
     'additionalRepairsCount', COALESCE(c.extra_repairs, 0),
+    'onHoldCount', COALESCE(c.on_hold, 0),
     'workshopBay', jsonb_build_object(
       'zone', 'workshop',
       'name', 'General Service',
@@ -335,6 +341,7 @@ BEGIN
     'inProgressCount', 0,
     'bookingCount', 0,
     'additionalRepairsCount', 0,
+    'onHoldCount', 0,
     'workshopBay', jsonb_build_object('zone', 'workshop', 'name', 'General Service', 'vehicleCount', 0, 'totalActiveSec', 0, 'avgActiveSec', 0, 'totalIdleSec', 0, 'avgIdleSec', 0, 'totalStageSec', 0, 'avgStageSec', 0),
     'alignmentBay', jsonb_build_object('zone', 'alignment', 'name', 'Wheel Alignment', 'vehicleCount', 0, 'totalActiveSec', 0, 'avgActiveSec', 0, 'totalIdleSec', 0, 'avgIdleSec', 0, 'totalStageSec', 0, 'avgStageSec', 0),
     'hoistBay', jsonb_build_object('zone', 'hoist', 'name', 'Hoist Service', 'vehicleCount', 0, 'totalActiveSec', 0, 'avgActiveSec', 0, 'totalIdleSec', 0, 'avgIdleSec', 0, 'totalStageSec', 0, 'avgStageSec', 0)
@@ -366,8 +373,13 @@ BEGIN
     v.status,
     v.current_zone,
     v.is_finished,
+    v.is_paused,
+    v.paused_at,
+    v.pause_reason,
     v.is_booking,
     v.has_additional_repairs,
+    v.is_urgent,
+    v.urgent_note,
     v.technician_name,
     v.assigned_tech,
     v.remarks,
@@ -393,6 +405,7 @@ BEGIN
     'inProgressCount', COUNT(*) FILTER (WHERE is_finished = FALSE AND current_zone != 'inspection')::INT,
     'bookingCount', COUNT(*) FILTER (WHERE is_booking = TRUE)::INT,
     'additionalRepairsCount', COUNT(*) FILTER (WHERE has_additional_repairs = TRUE)::INT,
+    'onHoldCount', COUNT(*) FILTER (WHERE is_paused = TRUE OR status = 'on_hold')::INT,
     'totalBreakSeconds', COALESCE(SUM(total_break_seconds), 0)::INT
   ) INTO v_summary
   FROM temp_filtered_vehicles;
@@ -408,6 +421,8 @@ BEGIN
     INNER JOIN temp_filtered_vehicles fv ON fv.id = sl.vehicle_id
     WHERE sl.exited_at IS NOT NULL
       AND fv.has_additional_repairs = FALSE
+      AND fv.is_paused = FALSE
+      AND fv.status != 'on_hold'
       AND sl.to_zone IN ('workshop', 'alignment', 'hoist')
     GROUP BY sl.to_zone
   )
@@ -475,13 +490,14 @@ BEGIN
   task_summaries AS (
     SELECT
       vehicle_id,
+      COUNT(*) FILTER (WHERE is_completed = TRUE)::INT AS tasks_completed_count,
+      COUNT(*)::INT AS tasks_total_count,
       string_agg(
         task_name || ' (by ' || COALESCE(completed_by, 'Tech') || ')', 
         '; ' ORDER BY completed_at
-      ) AS completed_tasks_str
+      ) FILTER (WHERE is_completed = TRUE) AS completed_tasks_str
     FROM vehicle_tasks
     WHERE vehicle_id IN (SELECT id FROM temp_filtered_vehicles)
-      AND is_completed = TRUE
     GROUP BY vehicle_id
   )
   SELECT jsonb_agg(
@@ -492,8 +508,13 @@ BEGIN
       'current_zone', fv.current_zone,
       'is_finished', fv.is_finished,
       'is_effective_done', (fv.is_finished = TRUE OR fv.current_zone = 'inspection'),
+      'is_paused', COALESCE(fv.is_paused, FALSE),
+      'pause_reason', fv.pause_reason,
+      'is_on_hold', (COALESCE(fv.is_paused, FALSE) = TRUE OR fv.status = 'on_hold'),
       'is_booking', fv.is_booking,
       'has_additional_repairs', fv.has_additional_repairs,
+      'is_urgent', COALESCE(fv.is_urgent, FALSE),
+      'urgent_note', fv.urgent_note,
       'technician_name', fv.technician_name,
       'assigned_tech', fv.assigned_tech,
       'remarks', fv.remarks,
@@ -501,7 +522,7 @@ BEGIN
       'created_at', fv.created_at,
       'effective_completed_at', fv.effective_completed_at,
       'gross_tat_seconds', COALESCE(
-        fv.gross_tat_seconds,
+        NULLIF(fv.gross_tat_seconds, 0),
         GREATEST(0, EXTRACT(EPOCH FROM (COALESCE(fv.effective_completed_at, NOW()) - COALESCE(fv.intake_at, fv.created_at)))::INT)
       ),
       'net_tat_seconds', COALESCE(fv.net_tat_seconds, 0),
@@ -517,7 +538,9 @@ BEGIN
       'hoist_idle', COALESCE(vba.hs_idle, 0),
       'hoist_active', COALESCE(vba.hs_active, 0),
       'hoist_break', COALESCE(vba.hs_break, 0),
-      'completed_tasks_str', COALESCE(ts.completed_tasks_str, 'None')
+      'completed_tasks_str', COALESCE(ts.completed_tasks_str, 'None'),
+      'tasks_completed_count', COALESCE(ts.tasks_completed_count, 0),
+      'tasks_total_count', COALESCE(ts.tasks_total_count, 0)
     ) ORDER BY fv.intake_at DESC
   ) INTO v_records
   FROM temp_filtered_vehicles fv

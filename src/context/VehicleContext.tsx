@@ -17,6 +17,10 @@ export interface VehicleContextType extends VehicleStateContextType, VehicleDisp
   setIsConfigModalOpen: (open: boolean) => void;
   isReportsModalOpen: boolean;
   setIsReportsModalOpen: (open: boolean) => void;
+  activeReportsTab: 'kpi' | 'audit';
+  setActiveReportsTab: (tab: 'kpi' | 'audit') => void;
+  isCalculationInfoOpen: boolean;
+  setIsCalculationInfoOpen: (open: boolean) => void;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   showMyVehiclesOnly: boolean;
@@ -70,6 +74,10 @@ export const useVehicles = (): VehicleContextType => {
       setIsConfigModalOpen: ui.setIsConfigModalOpen,
       isReportsModalOpen: ui.isReportsModalOpen,
       setIsReportsModalOpen: ui.setIsReportsModalOpen,
+      activeReportsTab: ui.activeReportsTab,
+      setActiveReportsTab: ui.setActiveReportsTab,
+      isCalculationInfoOpen: ui.isCalculationInfoOpen,
+      setIsCalculationInfoOpen: ui.setIsCalculationInfoOpen,
       searchQuery: ui.searchQuery,
       setSearchQuery: ui.setSearchQuery,
       showMyVehiclesOnly: ui.showMyVehiclesOnly,

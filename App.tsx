@@ -5,7 +5,8 @@ import { VehicleProvider, useVehicles } from './src/context/VehicleContext';
 import { UIProvider } from './src/context/UIContext';
 import { LoginScreen } from './src/components/auth/LoginScreen';
 import { Header } from './src/components/layout/Header';
-import { SearchBarRow, SegmentedTabs } from './src/components/layout/RoleSwitcher';
+import { SearchBarRow } from './src/components/layout/SearchBarRow';
+import { SegmentedTabs } from './src/components/layout/SegmentedTabs';
 import { FloorPlan2D } from './src/components/supervisor/FloorPlan2D';
 import { TechnicianStationView } from './src/components/technician/TechnicianStationView';
 import { AdvisorInspectionView } from './src/components/advisor/AdvisorInspectionView';
@@ -141,13 +142,13 @@ const AppContent: React.FC = () => {
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.surface} />
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <Header />
+        <SegmentedTabs />
         {isReportsModalOpen ? (
           <View style={styles.reportsContainer}>
             <ServiceReportsModal />
           </View>
         ) : (
           <>
-            <SegmentedTabs />
             <SearchBarRow />
             <View
               style={styles.mainContent}

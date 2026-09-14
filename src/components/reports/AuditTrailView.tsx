@@ -34,6 +34,7 @@ import { AuditLogEntry, AuditActionType, AuditActionCategory } from '../../types
 import { DateFilterPreset, getDatePresetRangeDescription } from '../../utils/reportExportUtils';
 import { LicensePlate } from '../shared/LicensePlate';
 import { EmptyStateCard } from '../shared/EmptyStateCard';
+import { ThemeDatePicker } from '../shared/ThemeDatePicker';
 
 const AUDIT_PAGE_SIZE = 25;
 
@@ -43,7 +44,6 @@ const DATE_PRESETS: { id: DateFilterPreset; label: string }[] = [
   { id: '7days', label: 'Last 7 Days' },
   { id: 'month', label: 'This Month' },
   { id: '3months', label: 'Last 3 Months' },
-  { id: 'custom', label: 'Custom Date' },
 ];
 
 const ACTION_CATEGORIES: { id: AuditActionCategory; label: string; iconLabel: string }[] = [
@@ -58,40 +58,42 @@ const ACTION_CATEGORIES: { id: AuditActionCategory; label: string; iconLabel: st
   { id: 'users', label: 'User Roles', iconLabel: '👤' },
 ];
 
-const getActionConfig = (action: string) => {
+import { ThemeColors } from '../../constants/theme';
+
+const getActionConfig = (action: string, colors: ThemeColors) => {
   switch (action) {
     case 'VEHICLE_CREATED':
-      return { label: 'Vehicle Intake / Checked In', color: '#10b981', bg: 'rgba(16, 185, 129, 0.12)' };
+      return { label: 'Vehicle Intake / Checked In', color: colors.success, bg: colors.successDim };
     case 'PLATE_MODIFIED':
-      return { label: 'License Plate Modified', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.12)' };
+      return { label: 'License Plate Modified', color: colors.warning, bg: colors.warningDim };
     case 'REMARKS_MODIFIED':
-      return { label: 'Remarks / Notes Edited', color: '#38bdf8', bg: 'rgba(56, 189, 248, 0.12)' };
+      return { label: 'Remarks / Notes Edited', color: colors.primaryLight, bg: colors.primaryDim };
     case 'HOLD_OVERRIDE_PAUSED':
-      return { label: 'Hold Overridden (Paused)', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.12)' };
+      return { label: 'Hold Overridden (Paused)', color: colors.danger, bg: colors.dangerDim };
     case 'HOLD_OVERRIDE_RESUMED':
-      return { label: 'Hold Overridden (Resumed)', color: '#10b981', bg: 'rgba(16, 185, 129, 0.12)' };
+      return { label: 'Hold Overridden (Resumed)', color: colors.success, bg: colors.successDim };
     case 'URGENCY_MODIFIED':
-      return { label: 'Priority / Urgency Changed', color: '#a855f7', bg: 'rgba(168, 85, 247, 0.12)' };
+      return { label: 'Priority / Urgency Changed', color: colors.purple, bg: colors.purpleDim };
     case 'BAY_TRANSFERRED':
     case 'SECTION_TRANSFER':
-      return { label: 'Bay / Zone Relocation', color: '#06b6d4', bg: 'rgba(6, 182, 212, 0.12)' };
+      return { label: 'Bay / Zone Relocation', color: colors.primaryCyan, bg: colors.primaryDim };
     case 'TECH_REASSIGNED':
-      return { label: 'Mechanic Reassigned', color: '#fb923c', bg: 'rgba(251, 146, 60, 0.12)' };
+      return { label: 'Mechanic Reassigned', color: colors.warningLight, bg: colors.warningDim };
     case 'TASK_COMPLETED':
-      return { label: 'Task Check-off Completed', color: '#14b8a6', bg: 'rgba(20, 184, 166, 0.12)' };
+      return { label: 'Task Check-off Completed', color: colors.bayAlignment, bg: colors.bayAlignmentDim };
     case 'JOB_COMPLETED':
-      return { label: 'Job Sheet Completed', color: '#22c55e', bg: 'rgba(34, 197, 94, 0.12)' };
+      return { label: 'Job Sheet Completed', color: colors.success, bg: colors.successDim };
     case 'DELETE_VEHICLE':
-      return { label: 'Vehicle Record Deleted', color: '#f43f5e', bg: 'rgba(244, 63, 94, 0.12)' };
+      return { label: 'Vehicle Record Deleted', color: colors.danger, bg: colors.dangerDim };
     case 'USER_ROLE_CHANGED':
-      return { label: 'User Role Modified', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.12)' };
+      return { label: 'User Role Modified', color: colors.purpleLight, bg: colors.purpleDim };
     case 'BOOKING_TOGGLED':
     case 'BOOKING_METADATA_MODIFIED':
-      return { label: 'Prior Booking Toggled', color: '#6366f1', bg: 'rgba(99, 102, 241, 0.12)' };
+      return { label: 'Prior Booking Toggled', color: colors.bayHoist, bg: colors.bayHoistDim };
     case 'ADDITIONAL_REPAIRS_TOGGLED':
-      return { label: 'Additional Repairs Flagged', color: '#ec4899', bg: 'rgba(236, 72, 153, 0.12)' };
+      return { label: 'Additional Repairs Flagged', color: colors.dangerLight, bg: colors.dangerDim };
     default:
-      return { label: action.replace(/_/g, ' '), color: '#94a3b8', bg: 'rgba(148, 163, 184, 0.12)' };
+      return { label: action.replace(/_/g, ' '), color: colors.textMuted, bg: colors.surfaceOverlay };
   }
 };
 
@@ -100,7 +102,8 @@ export const AuditTrailView: React.FC = () => {
   const { availableBranches } = useAuth();
 
   const [datePreset, setDatePreset] = useState<DateFilterPreset>('today');
-  const [customDate, setCustomDate] = useState<string>('');
+  const [customDate, setCustomDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [customEndDate, setCustomEndDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [branchFilter, setBranchFilter] = useState<string>('all');
   const [actionCategory, setActionCategory] = useState<AuditActionCategory>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -111,34 +114,74 @@ export const AuditTrailView: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [page, setPage] = useState<number>(0);
 
-  // Compute ISO dates from datePreset
-  const { startDate, endDate } = useMemo(() => {
+  const handleSelectPreset = (presetId: DateFilterPreset) => {
     const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+
+    if (presetId === 'today') {
+      setCustomDate(todayStr);
+      setCustomEndDate(todayStr);
+    } else if (presetId === 'yesterday') {
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const yStr = yesterday.toISOString().split('T')[0];
+      setCustomDate(yStr);
+      setCustomEndDate(yStr);
+    } else if (presetId === '7days') {
+      const past7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      setCustomDate(past7.toISOString().split('T')[0]);
+      setCustomEndDate(todayStr);
+    } else if (presetId === 'month') {
+      const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      setCustomDate(firstOfMonth.toISOString().split('T')[0]);
+      setCustomEndDate(todayStr);
+    } else if (presetId === '3months') {
+      const past3Mo = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate());
+      setCustomDate(past3Mo.toISOString().split('T')[0]);
+      setCustomEndDate(todayStr);
+    }
+    setDatePreset(presetId);
+    setPage(0);
+  };
+
+  const handleCustomDateChange = (fromStr: string) => {
+    setCustomDate(fromStr);
+    setDatePreset('custom');
+    setPage(0);
+  };
+
+  const handleCustomEndDateChange = (toStr: string) => {
+    setCustomEndDate(toStr);
+    setDatePreset('custom');
+    setPage(0);
+  };
+
+  // Compute ISO dates from customDate and customEndDate
+  const { startDate, endDate } = useMemo(() => {
     let start: string | null = null;
     let end: string | null = null;
 
-    if (datePreset === 'today') {
-      start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-    } else if (datePreset === 'yesterday') {
-      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      start = new Date(startOfToday.getTime() - 24 * 60 * 60 * 1000).toISOString();
-      end = startOfToday.toISOString();
-    } else if (datePreset === '7days') {
-      start = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    } else if (datePreset === 'month') {
-      start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-    } else if (datePreset === '3months') {
-      start = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate()).toISOString();
-    } else if (datePreset === 'custom' && customDate.trim()) {
-      const parsed = new Date(customDate.trim());
-      if (!Number.isNaN(parsed.getTime())) {
-        start = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()).toISOString();
-        end = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate(), 23, 59, 59, 999).toISOString();
+    const startStr = customDate.trim();
+    const endStr = customEndDate.trim();
+
+    if (startStr) {
+      const parsedStart = new Date(startStr);
+      if (!Number.isNaN(parsedStart.getTime())) {
+        start = new Date(parsedStart.getFullYear(), parsedStart.getMonth(), parsedStart.getDate()).toISOString();
       }
     }
 
+    if (endStr) {
+      const parsedEnd = new Date(endStr);
+      if (!Number.isNaN(parsedEnd.getTime())) {
+        end = new Date(parsedEnd.getFullYear(), parsedEnd.getMonth(), parsedEnd.getDate(), 23, 59, 59, 999).toISOString();
+      }
+    } else if (start) {
+      const parsedStart = new Date(startStr);
+      end = new Date(parsedStart.getFullYear(), parsedStart.getMonth(), parsedStart.getDate(), 23, 59, 59, 999).toISOString();
+    }
+
     return { startDate: start, endDate: end };
-  }, [datePreset, customDate]);
+  }, [customDate, customEndDate]);
 
   const loadAuditLogs = useCallback(async () => {
     setIsLoading(true);
@@ -180,7 +223,7 @@ export const AuditTrailView: React.FC = () => {
   };
 
   const totalPages = Math.ceil(totalCount / AUDIT_PAGE_SIZE);
-  const dateRangeInfo = getDatePresetRangeDescription(datePreset, customDate);
+  const dateRangeInfo = getDatePresetRangeDescription(datePreset, customDate, customEndDate);
 
   return (
     <View style={styles.container}>
@@ -229,10 +272,7 @@ export const AuditTrailView: React.FC = () => {
                   styles.filterPill,
                   datePreset === p.id && { backgroundColor: colors.primaryDim, borderColor: colors.primary },
                 ]}
-                onPress={() => {
-                  setDatePreset(p.id);
-                  setPage(0);
-                }}
+                onPress={() => handleSelectPreset(p.id)}
               >
                 <Text
                   style={[
@@ -248,21 +288,26 @@ export const AuditTrailView: React.FC = () => {
           </View>
         </View>
 
-        {datePreset === 'custom' && (
-          <View style={styles.customDateRow}>
-            <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textSecondary }}>CUSTOM DATE:</Text>
-            <TextInput
-              style={[
-                styles.customDateInput,
-                { borderColor: colors.borderGlass, backgroundColor: isDark ? 'rgba(0,0,0,0.3)' : '#ffffff', color: colors.textPrimary },
-              ]}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor={colors.textMuted}
-              value={customDate}
-              onChangeText={setCustomDate}
-            />
-          </View>
-        )}
+        {/* Permanent Theme Date Pickers (From / To) */}
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 12, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.borderGlass }}>
+          <ThemeDatePicker
+            label="FROM:"
+            value={customDate}
+            onChange={handleCustomDateChange}
+            maxDate={customEndDate || undefined}
+          />
+
+          <ThemeDatePicker
+            label="TO:"
+            value={customEndDate}
+            onChange={handleCustomEndDateChange}
+            minDate={customDate || undefined}
+          />
+
+          <Text style={{ fontSize: 11, color: colors.textMuted }}>
+            (Click calendar icon or edit date directly)
+          </Text>
+        </View>
 
         {/* Branch & Search Bar */}
         <View style={styles.branchSearchRow}>
@@ -406,7 +451,7 @@ export const AuditTrailView: React.FC = () => {
       ) : (
         <View style={styles.listContainer}>
           {auditLogs.map(entry => {
-            const config = getActionConfig(entry.action);
+            const config = getActionConfig(entry.action, colors);
             const displayIso = entry.action_timestamp || entry.created_at;
             const dateObj = new Date(displayIso);
             const formattedTime = !Number.isNaN(dateObj.getTime())

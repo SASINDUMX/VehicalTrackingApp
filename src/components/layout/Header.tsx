@@ -5,23 +5,14 @@ import { useAuth } from '../../context/AuthContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { chimeService } from '../../lib/chime';
 import { hapticService } from '../../lib/haptics';
-import { LogOut, User, Volume2, VolumeX, Shield, Smartphone, Sun, Moon, Monitor, FileText, ChevronLeft, Building2, ChevronDown, MapPin, CloudOff, RefreshCw } from 'lucide-react-native';
+import { User, FileText, ChevronLeft, ChevronDown, MapPin, CloudOff, RefreshCw } from 'lucide-react-native';
 import { useTheme } from '../../context/ThemeContext';
+import { getCurrentActiveBreak } from '../../utils/workshopHoursUtils';
+import { BranchSelectorSheet } from './BranchSelectorSheet';
+import { BreakAlertBanner } from './BreakAlertBanner';
+import { UserProfileMenu } from './UserProfileMenu';
 
 const appLogo = require('../../../assets/icon.png');
-
-import { getCurrentActiveBreak } from '../../utils/workshopHoursUtils';
-import { APP_TERMINOLOGY } from '../../constants/terminology';
-
-const getHeaderRoleBadge = (role: string, section?: string): string => {
-  if (role === 'super_admin') {
-    return 'Super Admin · HQ';
-  }
-  if (role === 'foreman' && section) {
-    return `Foreman · ${section.toUpperCase()}`;
-  }
-  return (APP_TERMINOLOGY.roles as any)[role]?.badge || role;
-};
 
 export const Header: React.FC = () => {
   const {
@@ -192,16 +183,16 @@ export const Header: React.FC = () => {
                 style={[
                   styles.branchPill,
                   {
-                    backgroundColor: isDark ? 'rgba(56, 189, 248, 0.12)' : '#e0f2fe',
-                    borderColor: isDark ? 'rgba(56, 189, 248, 0.3)' : '#bae6fd',
+                    backgroundColor: colors.primaryDim,
+                    borderColor: colors.primaryBorder,
                   },
                 ]}
               >
-                <MapPin size={9} color={isDark ? '#38bdf8' : '#0284c7'} />
-                <Text style={[styles.branchPillText, { color: isDark ? '#38bdf8' : '#0284c7' }]}>
+                <MapPin size={9} color={isDark ? colors.primaryLight : colors.primary} />
+                <Text style={[styles.branchPillText, { color: isDark ? colors.primaryLight : colors.primary }]}>
                   {activeBranchCode}
                 </Text>
-                {canSwitchBranch && <ChevronDown size={9} color={isDark ? '#38bdf8' : '#0284c7'} />}
+                {canSwitchBranch && <ChevronDown size={9} color={isDark ? colors.primaryLight : colors.primary} />}
               </TouchableOpacity>
               <Text style={[styles.brandSub, { color: colors.textMuted }]} numberOfLines={1}>{timeStr}</Text>
             </View>
@@ -218,12 +209,8 @@ export const Header: React.FC = () => {
               style={[
                 styles.outboxBadge,
                 {
-                  backgroundColor: isOutboxSyncing
-                    ? (isDark ? 'rgba(56, 189, 248, 0.15)' : '#e0f2fe')
-                    : (isDark ? 'rgba(245, 158, 11, 0.15)' : '#fef3c7'),
-                  borderColor: isOutboxSyncing
-                    ? (isDark ? 'rgba(56, 189, 248, 0.4)' : '#7dd3fc')
-                    : (isDark ? 'rgba(245, 158, 11, 0.4)' : '#fcd34d'),
+                  backgroundColor: isOutboxSyncing ? colors.primaryDim : colors.warningDim,
+                  borderColor: isOutboxSyncing ? colors.primaryBorder : colors.warning,
                 }
               ]}
               onPress={() => drainOutbox()}
@@ -232,15 +219,15 @@ export const Header: React.FC = () => {
             >
               {isOutboxSyncing ? (
                 <>
-                  <RefreshCw size={11} color={isDark ? '#38bdf8' : '#0284c7'} />
-                  <Text style={[styles.outboxBadgeText, { color: isDark ? '#38bdf8' : '#0284c7' }]}>
+                  <RefreshCw size={11} color={isDark ? colors.primaryLight : colors.primary} />
+                  <Text style={[styles.outboxBadgeText, { color: isDark ? colors.primaryLight : colors.primary }]}>
                     Syncing {outboxPendingCount}...
                   </Text>
                 </>
               ) : (
                 <>
-                  <CloudOff size={11} color={isDark ? '#fbbf24' : '#d97706'} />
-                  <Text style={[styles.outboxBadgeText, { color: isDark ? '#fbbf24' : '#d97706' }]}>
+                  <CloudOff size={11} color={colors.warningLight} />
+                  <Text style={[styles.outboxBadgeText, { color: colors.warningLight }]}>
                     {outboxPendingCount} Queued
                   </Text>
                 </>
@@ -299,254 +286,52 @@ export const Header: React.FC = () => {
           </TouchableOpacity>
 
           {/* Profile Dropdown Popover */}
-          {isMenuOpen && (
-            <View style={[styles.dropdownPopover, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderGlassBright }]}>
-              {/* User Identity Info */}
-              <View style={styles.dropdownUserHeader}>
-                <View style={[styles.dropdownAvatarLarge, { backgroundColor: colors.primaryDim, borderColor: colors.primaryBorder }]}>
-                  <User size={22} color={colors.primaryLight} />
-                </View>
-                <View style={styles.dropdownTextGroup}>
-                  <Text style={[styles.dropdownDisplayName, { color: colors.textPrimary }]}>{displayName}</Text>
-                  <Text style={[styles.dropdownEmail, { color: colors.textMuted }]} numberOfLines={1}>{user?.email || 'authenticated user'}</Text>
-                  <View style={[styles.dropdownRoleChip, { backgroundColor: colors.primaryDim }]}>
-                    <Shield size={10} color={colors.primaryLight} />
-                    <Text style={[styles.dropdownRoleText, { color: colors.primaryLight }]}>{getHeaderRoleBadge(currentRole, section)}</Text>
-                  </View>
-                </View>
-              </View>
-
-              <View style={[styles.dropdownDivider, { backgroundColor: colors.borderGlass }]} />
-
-              {/* Branch info row (always visible) */}
-              <TouchableOpacity
-                style={styles.dropdownItem}
-                onPress={() => {
-                  if (canSwitchBranch) {
-                    setIsMenuOpen(false);
-                    setIsBranchSwitcherOpen(true);
-                  }
-                }}
-                activeOpacity={canSwitchBranch ? 0.7 : 1}
-              >
-                <Building2 size={16} color={colors.primaryLight} />
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.dropdownItemText, { color: colors.textPrimary }]} numberOfLines={1}>
-                    {activeBranchName}
-                  </Text>
-                  {canSwitchBranch && (
-                    <Text style={{ fontSize: 10, color: colors.textMuted, marginTop: 1 }}>Tap to switch branch</Text>
-                  )}
-                </View>
-                {canSwitchBranch && <ChevronDown size={14} color={colors.textMuted} />}
-              </TouchableOpacity>
-
-              <View style={[styles.dropdownDivider, { backgroundColor: colors.borderGlass }]} />
-
-              {/* Theme Toggle Option with tiny Auto button on the right */}
-              <View style={styles.dropdownThemeRow}>
-                <TouchableOpacity
-                  style={styles.dropdownThemeLeft}
-                  onPress={toggleTheme}
-                  activeOpacity={0.7}
-                >
-                  {isDark ? (
-                    <>
-                      <Moon size={16} color={colors.purpleLight} />
-                      <Text style={[styles.dropdownItemText, { color: colors.purpleLight }]}>
-                        Theme: Dark
-                      </Text>
-                    </>
-                  ) : (
-                    <>
-                      <Sun size={16} color={colors.warning} />
-                      <Text style={[styles.dropdownItemText, { color: colors.warning }]}>
-                        Theme: Light
-                      </Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-
-                {/* Tiny Auto Button on Right */}
-                <TouchableOpacity
-                  style={[
-                    styles.tinyAutoBtn,
-                    {
-                      backgroundColor: themeMode === 'system'
-                        ? colors.primaryDim
-                        : (isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)'),
-                      borderColor: themeMode === 'system' ? colors.primary : colors.borderGlass,
-                    }
-                  ]}
-                  onPress={() => setThemeMode(themeMode === 'system' ? (isDark ? 'dark' : 'light') : 'system')}
-                  activeOpacity={0.7}
-                >
-                  <Monitor size={11} color={themeMode === 'system' ? colors.primaryLight : colors.textMuted} />
-                  <Text style={[
-                    styles.tinyAutoText,
-                    {
-                      color: themeMode === 'system' ? colors.primaryLight : colors.textMuted,
-                      fontWeight: themeMode === 'system' ? '800' : '600'
-                    }
-                  ]}>
-                    Auto
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Sound & Chime Toggle Option */}
-              <TouchableOpacity style={styles.dropdownItem} onPress={toggleAudio}>
-                {isAudioMuted ? (
-                  <>
-                    <VolumeX size={16} color={colors.textMuted} />
-                    <Text style={[styles.dropdownItemText, { color: colors.textMuted }]}>Audio Chimes: Muted</Text>
-                  </>
-                ) : (
-                  <>
-                    <Volume2 size={16} color={colors.primaryLight} />
-                    <Text style={[styles.dropdownItemText, { color: colors.primaryLight }]}>Audio Chimes: Enabled</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-
-              {/* Haptic Vibration Toggle Option */}
-              <TouchableOpacity style={styles.dropdownItem} onPress={toggleHaptics}>
-                {isHapticsMuted ? (
-                  <>
-                    <Smartphone size={16} color={colors.textMuted} />
-                    <Text style={[styles.dropdownItemText, { color: colors.textMuted }]}>Haptic Feedback: Disabled</Text>
-                  </>
-                ) : (
-                  <>
-                    <Smartphone size={16} color={colors.primaryLight} />
-                    <Text style={[styles.dropdownItemText, { color: colors.primaryLight }]}>Haptic Feedback: Enabled</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-
-              {/* Service Reports Toggle Option */}
-              <TouchableOpacity
-                style={styles.dropdownItem}
-                onPress={() => {
-                  setIsMenuOpen(false);
-                  setIsReportsModalOpen(!isReportsModalOpen);
-                }}
-              >
-                {isReportsModalOpen ? (
-                  <>
-                    <ChevronLeft size={16} color={colors.primaryLight} />
-                    <Text style={[styles.dropdownItemText, { color: colors.textPrimary }]}>Back to Bays</Text>
-                  </>
-                ) : (
-                  <>
-                    <FileText size={16} color={colors.primaryLight} />
-                    <Text style={[styles.dropdownItemText, { color: colors.textPrimary }]}>Service Reports & Exports</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-
-              {/* Offline Actions Outbox Status in Dropdown */}
-              {outboxPendingCount > 0 && (
-                <TouchableOpacity
-                  style={[styles.dropdownItem, { backgroundColor: isDark ? 'rgba(245, 158, 11, 0.08)' : '#fffbeb' }]}
-                  onPress={() => {
-                    drainOutbox();
-                  }}
-                  disabled={isOutboxSyncing}
-                  activeOpacity={0.7}
-                >
-                  {isOutboxSyncing ? (
-                    <>
-                      <RefreshCw size={16} color={colors.primaryLight} />
-                      <Text style={[styles.dropdownItemText, { color: colors.primaryLight }]}>
-                        Syncing {outboxPendingCount} offline actions...
-                      </Text>
-                    </>
-                  ) : (
-                    <>
-                      <CloudOff size={16} color={colors.warning} />
-                      <Text style={[styles.dropdownItemText, { color: colors.warning }]}>
-                        Sync {outboxPendingCount} Offline Action{outboxPendingCount > 1 ? 's' : ''} Now
-                      </Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              )}
-
-              <View style={[styles.dropdownDivider, { backgroundColor: colors.borderGlass }]} />
-
-              {/* Sign Out Option */}
-              <TouchableOpacity
-                style={[styles.dropdownItem, styles.dropdownSignOutItem]}
-                onPress={() => {
-                  setIsMenuOpen(false);
-                  signOut();
-                }}
-              >
-                <LogOut size={16} color={colors.danger} />
-                <Text style={[styles.dropdownSignOutText, { color: colors.danger }]}>Sign Out</Text>
-              </TouchableOpacity>
-            </View>
-          )}
+          <UserProfileMenu
+            isOpen={isMenuOpen}
+            onClose={() => setIsMenuOpen(false)}
+            displayName={displayName}
+            userEmail={user?.email}
+            currentRole={currentRole}
+            section={section}
+            canSwitchBranch={canSwitchBranch}
+            activeBranchName={activeBranchName}
+            onOpenBranchSwitcher={() => {
+              setIsMenuOpen(false);
+              setIsBranchSwitcherOpen(true);
+            }}
+            isDark={isDark}
+            themeMode={themeMode}
+            setThemeMode={setThemeMode}
+            toggleTheme={toggleTheme}
+            isAudioMuted={isAudioMuted}
+            toggleAudio={toggleAudio}
+            isHapticsMuted={isHapticsMuted}
+            toggleHaptics={toggleHaptics}
+            isReportsModalOpen={isReportsModalOpen}
+            onToggleReports={() => setIsReportsModalOpen(!isReportsModalOpen)}
+            outboxPendingCount={outboxPendingCount}
+            isOutboxSyncing={isOutboxSyncing}
+            onDrainOutbox={drainOutbox}
+            onSignOut={() => {
+              setIsMenuOpen(false);
+              signOut();
+            }}
+          />
         </View>
       </View>
 
       {/* Slender Single-Line Shift Break Strip (Directly Beneath Header) */}
-      {activeBreak && (
-        <View style={[styles.breakStrip, { backgroundColor: 'rgba(245, 158, 11, 0.1)', borderBottomWidth: 1, borderBottomColor: '#f59e0b' }]}>
-          <Text style={[styles.breakStripText, { color: '#fbbf24' }]} numberOfLines={1}>
-            {activeBreak.name.toUpperCase()} BREAK: (UNTIL {activeBreak.endStr}) · TIMERS PAUSED
-          </Text>
-        </View>
-      )}
+      <BreakAlertBanner activeBreak={activeBreak} />
 
       {/* Branch Switcher Sheet — Super Admin only */}
-      {isBranchSwitcherOpen && canSwitchBranch && (
-        <TouchableOpacity
-          style={styles.branchOverlay}
-          activeOpacity={1}
-          onPress={() => setIsBranchSwitcherOpen(false)}
-        >
-          <TouchableOpacity
-            activeOpacity={1}
-            style={[styles.branchSheet, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderGlassBright }]}
-          >
-            <View style={styles.branchSheetHeader}>
-              <Building2 size={16} color={colors.primaryLight} />
-              <Text style={[styles.branchSheetTitle, { color: colors.textPrimary }]}>Switch Branch</Text>
-            </View>
-            <View style={[styles.dropdownDivider, { backgroundColor: colors.borderGlass }]} />
-            {availableBranches.map(branch => {
-              const isActive = branch.id === activeBranchCode.toLowerCase() ||
-                availableBranches.find(b => b.code === activeBranchCode)?.id === branch.id;
-              return (
-                <TouchableOpacity
-                  key={branch.id}
-                  style={[
-                    styles.branchOption,
-                    isActive && { backgroundColor: colors.primaryDim, borderRadius: 8 }
-                  ]}
-                  onPress={() => {
-                    switchBranch(branch.id);
-                    setIsBranchSwitcherOpen(false);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <MapPin size={14} color={isActive ? colors.primaryLight : colors.textMuted} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.dropdownItemText, { color: isActive ? colors.primaryLight : colors.textPrimary }]}>
-                      {branch.name}
-                    </Text>
-                    <Text style={{ fontSize: 10, color: colors.textMuted }}>{branch.city} · {branch.code}</Text>
-                  </View>
-                  {isActive && (
-                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primaryLight }} />
-                  )}
-                </TouchableOpacity>
-              );
-            })}
-          </TouchableOpacity>
-        </TouchableOpacity>
+      {canSwitchBranch && (
+        <BranchSelectorSheet
+          isOpen={isBranchSwitcherOpen}
+          onClose={() => setIsBranchSwitcherOpen(false)}
+          availableBranches={availableBranches}
+          activeBranchCode={activeBranchCode}
+          onSelectBranch={switchBranch}
+        />
       )}
     </>
   );
@@ -649,20 +434,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0.2,
   },
-  breakStrip: {
-    paddingVertical: 4,
-    paddingHorizontal: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-    zIndex: 99,
-  },
-  breakStripText: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.6,
-    textAlign: 'center',
-  },
   rightGroup: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -705,173 +476,6 @@ const styles = StyleSheet.create({
     height: 12,
     borderRadius: 6,
     backgroundColor: '#10b981',
-  },
-  dropdownPopover: {
-    position: 'absolute',
-    top: 48,
-    right: 0,
-    width: 260,
-    backgroundColor: '#111827',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
-    padding: 12,
-    gap: 8,
-    ...(Platform.OS === 'web'
-      ? ({ boxShadow: '0px 8px 16px rgba(0, 0, 0, 0.5)' } as any)
-      : {
-          shadowColor: '#000000',
-          shadowOffset: { width: 0, height: 8 },
-          shadowOpacity: 0.5,
-          shadowRadius: 16,
-          elevation: 12,
-        }),
-    zIndex: 999,
-  },
-  dropdownUserHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 4,
-  },
-  dropdownAvatarLarge: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: 'rgba(14, 165, 233, 0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(14, 165, 233, 0.3)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dropdownTextGroup: {
-    flex: 1,
-    gap: 2,
-  },
-  dropdownDisplayName: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  dropdownEmail: {
-    color: '#94a3b8',
-    fontSize: 11,
-  },
-  dropdownRoleChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(14, 165, 233, 0.12)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    marginTop: 2,
-  },
-  dropdownRoleText: {
-    color: '#38bdf8',
-    fontSize: 9,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
-  dropdownDivider: {
-    height: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    marginVertical: 2,
-  },
-  dropdownItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-  },
-  dropdownItemText: {
-    color: '#cbd5e1',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  dropdownThemeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-  },
-  dropdownThemeLeft: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 6,
-  },
-  tinyAutoBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    borderWidth: 1,
-  },
-  tinyAutoText: {
-    fontSize: 11,
-  },
-  dropdownSignOutItem: {
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-  },
-  dropdownSignOutText: {
-    color: '#ef4444',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  branchOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    zIndex: 998,
-    justifyContent: 'flex-start',
-    alignItems: 'flex-start',
-    paddingTop: 60,
-    paddingLeft: 12,
-  },
-  branchSheet: {
-    width: 300,
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 12,
-    gap: 4,
-    ...(Platform.OS === 'web'
-      ? ({ boxShadow: '0px 8px 24px rgba(0,0,0,0.6)' } as any)
-      : {
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 8 },
-          shadowOpacity: 0.6,
-          shadowRadius: 20,
-          elevation: 16,
-        }),
-  },
-  branchSheetHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 4,
-    paddingHorizontal: 4,
-  },
-  branchSheetTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  branchOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
   },
   outboxBadge: {
     flexDirection: 'row',

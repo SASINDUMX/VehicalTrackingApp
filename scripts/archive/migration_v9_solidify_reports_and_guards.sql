@@ -131,8 +131,13 @@ BEGIN
     v.status,
     v.current_zone,
     v.is_finished,
+    v.is_paused,
+    v.paused_at,
+    v.pause_reason,
     v.is_booking,
     v.has_additional_repairs,
+    v.is_urgent,
+    v.urgent_note,
     v.technician_name,
     v.assigned_tech,
     v.remarks,
@@ -159,11 +164,12 @@ BEGIN
     'inProgressCount', COUNT(*) FILTER (WHERE is_finished = FALSE AND current_zone != 'inspection')::INT,
     'bookingCount', COUNT(*) FILTER (WHERE is_booking = TRUE)::INT,
     'additionalRepairsCount', COUNT(*) FILTER (WHERE has_additional_repairs = TRUE)::INT,
+    'onHoldCount', COUNT(*) FILTER (WHERE is_paused = TRUE OR status = 'on_hold')::INT,
     'totalBreakSeconds', COALESCE(SUM(total_break_seconds), 0)::INT
   ) INTO v_summary
   FROM temp_filtered_vehicles;
 
-  -- 3. Bay Velocities (Benchmark excludes vehicles with additional repairs)
+  -- 3. Bay Velocities (Benchmark excludes vehicles with additional repairs or on hold)
   WITH bay_stats AS (
     SELECT
       sl.to_zone,
@@ -175,6 +181,8 @@ BEGIN
     INNER JOIN temp_filtered_vehicles fv ON fv.id = sl.vehicle_id
     WHERE sl.exited_at IS NOT NULL
       AND fv.has_additional_repairs = FALSE
+      AND fv.is_paused = FALSE
+      AND fv.status != 'on_hold'
       AND sl.to_zone IN ('workshop', 'alignment', 'hoist')
     GROUP BY sl.to_zone
   )
@@ -243,13 +251,14 @@ BEGIN
   task_summaries AS (
     SELECT
       vehicle_id,
+      COUNT(*) FILTER (WHERE is_completed = TRUE)::INT AS tasks_completed_count,
+      COUNT(*)::INT AS tasks_total_count,
       string_agg(
         task_name || ' (by ' || COALESCE(completed_by, 'Tech') || ')', 
         '; ' ORDER BY completed_at
-      ) AS completed_tasks_str
+      ) FILTER (WHERE is_completed = TRUE) AS completed_tasks_str
     FROM vehicle_tasks
     WHERE vehicle_id IN (SELECT id FROM temp_filtered_vehicles)
-      AND is_completed = TRUE
     GROUP BY vehicle_id
   )
   SELECT jsonb_agg(
@@ -260,8 +269,13 @@ BEGIN
       'current_zone', fv.current_zone,
       'is_finished', fv.is_finished,
       'is_effective_done', (fv.is_finished = TRUE OR fv.current_zone = 'inspection'),
+      'is_paused', COALESCE(fv.is_paused, FALSE),
+      'pause_reason', fv.pause_reason,
+      'is_on_hold', (COALESCE(fv.is_paused, FALSE) = TRUE OR fv.status = 'on_hold'),
       'is_booking', fv.is_booking,
       'has_additional_repairs', fv.has_additional_repairs,
+      'is_urgent', COALESCE(fv.is_urgent, FALSE),
+      'urgent_note', fv.urgent_note,
       'technician_name', fv.technician_name,
       'assigned_tech', fv.assigned_tech,
       'remarks', fv.remarks,
@@ -269,7 +283,7 @@ BEGIN
       'created_at', fv.created_at,
       'effective_completed_at', fv.effective_completed_at,
       'gross_tat_seconds', COALESCE(
-        fv.gross_tat_seconds,
+        NULLIF(fv.gross_tat_seconds, 0),
         GREATEST(0, EXTRACT(EPOCH FROM (COALESCE(fv.effective_completed_at, NOW()) - COALESCE(fv.intake_at, fv.created_at)))::INT)
       ),
       'net_tat_seconds', COALESCE(fv.net_tat_seconds, 0),
@@ -285,7 +299,9 @@ BEGIN
       'hoist_idle', COALESCE(vba.hs_idle, 0),
       'hoist_active', COALESCE(vba.hs_active, 0),
       'hoist_break', COALESCE(vba.hs_break, 0),
-      'completed_tasks_str', COALESCE(ts.completed_tasks_str, 'None')
+      'completed_tasks_str', COALESCE(ts.completed_tasks_str, 'None'),
+      'tasks_completed_count', COALESCE(ts.tasks_completed_count, 0),
+      'tasks_total_count', COALESCE(ts.tasks_total_count, 0)
     ) ORDER BY fv.intake_at DESC
   ) INTO v_records
   FROM temp_filtered_vehicles fv

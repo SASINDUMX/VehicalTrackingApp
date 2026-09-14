@@ -21,6 +21,7 @@ export interface ReportKPIs {
   inProgressCount: number;
   bookingCount: number;
   additionalRepairsCount: number;
+  onHoldCount?: number;
   washingBay?: BayKPI;
   workshopBay: BayKPI;
   alignmentBay: BayKPI;
@@ -36,6 +37,9 @@ export interface ServerReportRecord {
   current_zone: BayZone;
   is_finished: boolean;
   is_effective_done: boolean;
+  is_paused?: boolean;
+  pause_reason?: string | null;
+  is_on_hold?: boolean;
   is_booking: boolean;
   has_additional_repairs: boolean;
   technician_name: string | null;
@@ -59,6 +63,10 @@ export interface ServerReportRecord {
   hoist_active: number;
   hoist_break: number;
   completed_tasks_str: string;
+  tasks_completed_count?: number;
+  tasks_total_count?: number;
+  is_urgent?: boolean;
+  urgent_note?: string | null;
 }
 
 export type DateFilterPreset = 'today' | 'yesterday' | '7days' | 'month' | '3months' | 'custom';
@@ -85,7 +93,7 @@ export const formatDuration = (totalSeconds: number): string => {
  */
 export const getVehicleEffectiveCompletion = (v: Vehicle): { isEffectiveDone: boolean; effectiveCompletionDate: Date | null } => {
   // Dispatched to inspection zone marks the definitive end of all vehicle time calculations
-  const inspLog = v.stage_logs.find(l => l.to_zone === 'inspection');
+  const inspLog = (v.stage_logs || []).find(l => l.to_zone === 'inspection');
   if (inspLog?.entered_at) {
     const d = new Date(inspLog.entered_at);
     if (!Number.isNaN(d.getTime())) {
@@ -240,8 +248,9 @@ export const calculateReportKPIs = (filteredVehicles: Vehicle[]): ReportKPIs => 
   let completed = 0;
   let bookingCount = 0;
   let additionalRepairsCount = 0;
+  let onHoldCount = 0;
 
-  // Bay telemetry accumulators (Excludes additional repairs from standard benchmark velocity)
+  // Bay telemetry accumulators (Excludes additional repairs & on-hold vehicles from standard benchmark velocity)
   let workshopVehicles = 0;
   let workshopActive = 0;
   let workshopIdle = 0;
@@ -262,14 +271,16 @@ export const calculateReportKPIs = (filteredVehicles: Vehicle[]): ReportKPIs => 
     if (isEffectiveDone) completed++;
     if (v.is_booking) bookingCount++;
     if (v.has_additional_repairs) additionalRepairsCount++;
+    const isHold = Boolean(v.is_paused || v.status === 'on_hold');
+    if (isHold) onHoldCount++;
 
     const start = new Date(v.intake_at || v.created_at);
     const end = effectiveCompletionDate ? effectiveCompletionDate : new Date();
     const { breakSeconds } = getBreakOverlap(start, end);
     totalBreaks += breakSeconds;
 
-    // RULE 4: Vehicles flagged with additional repairs are excluded from the benchmark average stay time
-    const isExcludedFromAverage = Boolean(v.has_additional_repairs);
+    // RULE: Vehicles flagged with additional repairs OR on hold/major repairs are excluded from benchmark averages
+    const isExcludedFromAverage = Boolean(v.has_additional_repairs || isHold);
 
     // Workshop Bay (Only count officially completed AND dispatched vehicles)
     const workshopTiming = getStageTimingForZone(v, 'workshop');
@@ -305,6 +316,7 @@ export const calculateReportKPIs = (filteredVehicles: Vehicle[]): ReportKPIs => 
     inProgressCount: filteredVehicles.length - completed,
     bookingCount,
     additionalRepairsCount,
+    onHoldCount,
     workshopBay: {
       zone: 'workshop',
       name: 'General Service',
@@ -343,7 +355,7 @@ export const calculateReportKPIs = (filteredVehicles: Vehicle[]): ReportKPIs => 
 };
 
 export const getStageSecondsForZone = (v: Vehicle, zone: BayZone): number => {
-  const logs = v.stage_logs.filter(l => l.to_zone === zone);
+  const logs = (v.stage_logs || []).filter(l => l.to_zone === zone);
   let total = 0;
   logs.forEach(l => {
     if (l.duration_seconds && l.duration_seconds > 0) {
@@ -374,7 +386,7 @@ export interface BayTelemetry {
 }
 
 export const getStageTimingForZone = (v: Vehicle, zone: BayZone): BayTelemetry => {
-  const logs = v.stage_logs.filter(l => l.to_zone === zone);
+  const logs = (v.stage_logs || []).filter(l => l.to_zone === zone);
   let queueInSec = 0;
   let activeSec = 0;
   let queueOutSec = 0;
@@ -385,7 +397,8 @@ export const getStageTimingForZone = (v: Vehicle, zone: BayZone): BayTelemetry =
 
   // Find task corresponding to this zone to get completion status and work_completed_at
   const bayTaskType = getTaskTypeForBay(zone);
-  const currentTask = v.tasks.find(t => t.task_type === bayTaskType && t.is_required) || v.tasks.find(t => t.task_type === bayTaskType);
+  const tasks = v.tasks || [];
+  const currentTask = tasks.find(t => t.task_type === bayTaskType && t.is_required) || tasks.find(t => t.task_type === bayTaskType);
   const isCompleted = Boolean(currentTask?.is_completed);
   const workCompletedAt = currentTask?.is_completed ? currentTask.completed_at : null;
 
@@ -432,11 +445,12 @@ export const getVehicleIdleAndActiveTotals = (v: Vehicle): { totalIdleSec: numbe
 
   // Filter strictly to working bays ('workshop' | 'alignment' | 'hoist').
   // The 'inspection' zone represents the post-service completion stage and is never counted as bay idle/active time.
-  const workingBayLogs = v.stage_logs.filter(l => l.to_zone === 'workshop' || l.to_zone === 'alignment' || l.to_zone === 'hoist');
+  const workingBayLogs = (v.stage_logs || []).filter(l => l.to_zone === 'workshop' || l.to_zone === 'alignment' || l.to_zone === 'hoist');
 
   workingBayLogs.forEach(l => {
     const bayTaskType = getTaskTypeForBay(l.to_zone);
-    const currentTask = v.tasks.find(t => t.task_type === bayTaskType && t.is_required) || v.tasks.find(t => t.task_type === bayTaskType);
+    const tasks = v.tasks || [];
+    const currentTask = tasks.find(t => t.task_type === bayTaskType && t.is_required) || tasks.find(t => t.task_type === bayTaskType);
     const workCompletedAt = currentTask?.is_completed ? currentTask.completed_at : null;
 
     const timing = getStageTiming(
@@ -468,14 +482,21 @@ export const exportServiceLogsToCSV = (
     return `"${str}"`;
   };
 
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Colombo' }).replace(/-/g, ''); // YYYYMMDD
+  const timeParts = now.toLocaleTimeString('en-GB', { timeZone: 'Asia/Colombo', hour12: false }).replace(/:/g, ''); // HHMMSS
+  const batchRefId = `UML-RPT-${dateStr}-${timeParts}-V${vehicles.length}`;
+
   const rows: string[] = [];
   // Title & Metadata
   rows.push(`"UNITED MOTORS - VEHICLE SERVICE LOGS REPORT"`);
-  rows.push(`"Generated At: ${new Date().toLocaleString()}"`);
+  rows.push(`"Batch Reference: ${batchRefId}"`);
+  rows.push(`"Generated At: ${now.toLocaleString('en-US', { timeZone: 'Asia/Colombo' })}"`);
   rows.push(`"Applied Filters: ${datePresetLabel}"`);
   rows.push(`"Total Records: ${vehicles.length}"`);
   if (kpis) {
-    rows.push(`"Summary: ${kpis.completedCount ?? 0} Completed, ${kpis.inProgressCount ?? 0} In Progress"`);
+    const onHoldTxt = kpis.onHoldCount !== undefined ? `, ${kpis.onHoldCount} On Hold` : '';
+    rows.push(`"Summary: ${kpis.completedCount ?? 0} Completed, ${kpis.inProgressCount ?? 0} In Progress, ${kpis.bookingCount ?? 0} Bookings${onHoldTxt}"`);
     rows.push(`"Bay Velocity - Workshop: Bay Gross Avg Stay Time ${formatDuration(kpis.workshopBay?.avgStageSec ?? 0)}, Bay Avg Active Time ${formatDuration(kpis.workshopBay?.avgActiveSec ?? 0)} (${kpis.workshopBay?.vehicleCount ?? 0} vehicles) | Alignment: Bay Gross Avg Stay Time ${formatDuration(kpis.alignmentBay?.avgStageSec ?? 0)}, Bay Avg Active Time ${formatDuration(kpis.alignmentBay?.avgActiveSec ?? 0)} (${kpis.alignmentBay?.vehicleCount ?? 0} vehicles) | Hoist: Bay Gross Avg Stay Time ${formatDuration(kpis.hoistBay?.avgStageSec ?? 0)}, Bay Avg Active Time ${formatDuration(kpis.hoistBay?.avgActiveSec ?? 0)} (${kpis.hoistBay?.vehicleCount ?? 0} vehicles)"`);
   }
   rows.push(''); // Empty line
@@ -571,8 +592,16 @@ export const exportServiceLogsToCSV = (
 
     if (isServerRecord) {
       const rec = v as ServerReportRecord;
-      statusLabel = rec.is_effective_done ? 'DONE' : (rec.current_zone === 'workshop' ? 'GENERAL' : rec.current_zone.toUpperCase());
-      stationLabel = rec.is_finished ? 'Delivered' : (rec.is_effective_done ? 'Inspection' : (rec.current_zone === 'workshop' ? 'General' : rec.current_zone.toUpperCase()));
+      statusLabel = (rec.is_paused || rec.status === 'on_hold')
+        ? 'ON HOLD'
+        : rec.is_effective_done
+          ? 'DONE'
+          : (rec.current_zone === 'workshop' ? 'GENERAL' : rec.current_zone.toUpperCase());
+      stationLabel = rec.is_finished
+        ? 'Delivered'
+        : (rec.is_paused || rec.status === 'on_hold')
+          ? 'On Hold'
+          : (rec.is_effective_done ? 'Inspection' : (rec.current_zone === 'workshop' ? 'General' : rec.current_zone.toUpperCase()));
       
       const start = new Date(rec.intake_at || rec.created_at);
       if (!Number.isNaN(start.getTime())) {
@@ -587,7 +616,9 @@ export const exportServiceLogsToCSV = (
         }
       }
 
-      grossSec = rec.gross_tat_seconds;
+      grossSec = rec.gross_tat_seconds > 0
+        ? rec.gross_tat_seconds
+        : Math.max(0, Math.floor(((rec.effective_completed_at ? new Date(rec.effective_completed_at).getTime() : Date.now()) - start.getTime()) / 1000));
       totalActiveSec = rec.total_active_sec;
       totalIdleSec = rec.total_idle_sec;
       breakSeconds = rec.total_break_seconds;
@@ -600,7 +631,17 @@ export const exportServiceLogsToCSV = (
       hsIdle = rec.hoist_idle;
       hsActive = rec.hoist_active;
       hsBreak = rec.hoist_break;
-      completedTasksStr = rec.completed_tasks_str;
+      let taskSummaryStr = '0/0';
+      if (rec.tasks_total_count !== undefined && rec.tasks_total_count > 0) {
+        taskSummaryStr = `${rec.tasks_completed_count ?? 0}/${rec.tasks_total_count}`;
+      } else if (rec.completed_tasks_str && rec.completed_tasks_str !== 'None') {
+        const count = rec.completed_tasks_str.split(';').length;
+        taskSummaryStr = `${count}/${count}`;
+      }
+      completedTasksStr = taskSummaryStr;
+      if (rec.is_urgent) {
+        remarks = rec.urgent_note ? `[URGENT: ${rec.urgent_note}] ${remarks}` : `[URGENT] ${remarks}`;
+      }
     } else {
       const { isEffectiveDone, effectiveCompletionDate } = getVehicleEffectiveCompletion(v);
       const start = new Date(v.intake_at || v.created_at);
@@ -625,13 +666,21 @@ export const exportServiceLogsToCSV = (
       hsActive = hoistTiming.activeSec;
       hsBreak = hoistTiming.breakSec;
 
-      completedTasksStr = (v.tasks || [])
-        .filter((t: any) => t.is_completed)
-        .map((t: any) => `${t.task_name} (by ${t.completed_by || 'Tech'})`)
-        .join('; ');
+      const completedTasks = (v.tasks || []).filter((t: any) => t.is_completed).length;
+      const totalTasks = (v.tasks || []).filter((t: any) => t.is_required).length;
+      completedTasksStr = `${completedTasks}/${totalTasks}`;
 
-      statusLabel = isEffectiveDone ? 'DONE' : (v.current_zone === 'workshop' ? 'GENERAL' : v.current_zone.toUpperCase());
-      stationLabel = v.is_finished ? 'Delivered' : (isEffectiveDone ? 'Inspection' : (v.current_zone === 'workshop' ? 'General' : v.current_zone.toUpperCase()));
+      const isHold = Boolean(v.is_paused || v.status === 'on_hold');
+      statusLabel = isHold
+        ? 'ON HOLD'
+        : isEffectiveDone
+          ? 'DONE'
+          : (v.current_zone === 'workshop' ? 'GENERAL' : v.current_zone.toUpperCase());
+      stationLabel = v.is_finished
+        ? 'Delivered'
+        : isHold
+          ? 'On Hold'
+          : (isEffectiveDone ? 'Inspection' : (v.current_zone === 'workshop' ? 'General' : v.current_zone.toUpperCase()));
       if (!Number.isNaN(start.getTime())) {
         intakeDateStr = start.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Colombo' });
         intakeTimeStr = start.toLocaleTimeString('en-US', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit', hour12: true });
@@ -695,6 +744,28 @@ export const exportServiceLogsToCSV = (
   }
 };
 
+export const REPORT_THEME_COLORS = {
+  primary: '#0284c7',
+  primaryLight: '#0369a1',
+  primaryBg: '#e0f2fe',
+  success: '#15803d',
+  successBg: '#dcfce7',
+  warning: '#f59e0b',
+  warningLight: '#b45309',
+  warningBg: '#fef3c7',
+  warningAccent: '#fbbf24',
+  danger: '#b91c1c',
+  dangerBg: '#fee2e2',
+  textPrimary: '#0f172a',
+  textSecondary: '#475569',
+  textMuted: '#64748b',
+  border: '#e2e8f0',
+  borderLight: '#f1f5f9',
+  cardBg: '#f8fafc',
+  alignmentBg: '#ecfdf5',
+  alignmentColor: '#047857',
+} as const;
+
 /**
  * Generates an executive PDF report with Two-Tier Grouped Headers and printable styles.
  */
@@ -705,14 +776,19 @@ export const exportServiceLogsToPDF = (
 ) => {
   if (Platform.OS !== 'web' || typeof window === 'undefined') return;
 
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Colombo' }).replace(/-/g, ''); // YYYYMMDD
+  const timeParts = now.toLocaleTimeString('en-GB', { timeZone: 'Asia/Colombo', hour12: false }).replace(/:/g, ''); // HHMMSS
+  const batchRefId = `UML-RPT-${dateStr}-${timeParts}-V${vehicles.length}`;
+
   const tableRowsHtml = vehicles.map((v: any, i) => {
     const isServerRecord = 'total_idle_sec' in v && 'workshop_idle' in v;
 
     let vehicleNo = v.vehicle_no;
     let isEffectiveDone = false;
     let statusLabel = '';
-    let statusBg = '#e0f2fe';
-    let statusColor = '#0369a1';
+    let statusBg: string = REPORT_THEME_COLORS.primaryBg;
+    let statusColor: string = REPORT_THEME_COLORS.primaryLight;
     let intakeDateStr = '--';
     let intakeTimeStr = '--:--';
     let finishedStr = 'In Progress';
@@ -725,13 +801,32 @@ export const exportServiceLogsToPDF = (
     let hsIdle = 0, hsActive = 0, hsBreak = 0;
     let taskProgressStr = '';
     let techName = v.technician_name || null;
+    let remarks = v.remarks ? String(v.remarks).trim() : '';
+    let isUrgent = false;
+    let urgentNote: string | null = null;
 
     if (isServerRecord) {
       const rec = v as ServerReportRecord;
-      isEffectiveDone = rec.is_effective_done;
-      statusLabel = isEffectiveDone ? 'DONE' : (rec.current_zone === 'workshop' ? 'GENERAL' : rec.current_zone.toUpperCase());
-      statusBg = isEffectiveDone ? '#dcfce7' : rec.current_zone === 'workshop' ? '#e0f2fe' : rec.current_zone === 'alignment' ? '#ecfdf5' : '#fef3c7';
-      statusColor = isEffectiveDone ? '#15803d' : rec.current_zone === 'workshop' ? '#0369a1' : rec.current_zone === 'alignment' ? '#047857' : '#b45309';
+      const isHold = Boolean(rec.is_paused || rec.status === 'on_hold');
+      statusLabel = isHold ? 'ON HOLD' : isEffectiveDone ? 'DONE' : (rec.current_zone === 'workshop' ? 'GENERAL' : rec.current_zone.toUpperCase());
+      statusBg = isHold
+        ? REPORT_THEME_COLORS.warningBg
+        : isEffectiveDone
+        ? REPORT_THEME_COLORS.successBg
+        : rec.current_zone === 'workshop'
+        ? REPORT_THEME_COLORS.primaryBg
+        : rec.current_zone === 'alignment'
+        ? REPORT_THEME_COLORS.alignmentBg
+        : REPORT_THEME_COLORS.warningBg;
+      statusColor = isHold
+        ? REPORT_THEME_COLORS.warningLight
+        : isEffectiveDone
+        ? REPORT_THEME_COLORS.success
+        : rec.current_zone === 'workshop'
+        ? REPORT_THEME_COLORS.primaryLight
+        : rec.current_zone === 'alignment'
+        ? REPORT_THEME_COLORS.alignmentColor
+        : REPORT_THEME_COLORS.warningLight;
 
       const start = new Date(rec.intake_at || rec.created_at);
       if (!Number.isNaN(start.getTime())) {
@@ -746,7 +841,9 @@ export const exportServiceLogsToPDF = (
         }
       }
 
-      grossSec = rec.gross_tat_seconds;
+      grossSec = rec.gross_tat_seconds > 0
+        ? rec.gross_tat_seconds
+        : Math.max(0, Math.floor(((rec.effective_completed_at ? new Date(rec.effective_completed_at).getTime() : Date.now()) - start.getTime()) / 1000));
       totalActiveSec = rec.total_active_sec;
       totalIdleSec = rec.total_idle_sec;
       breakSeconds = rec.total_break_seconds;
@@ -759,7 +856,14 @@ export const exportServiceLogsToPDF = (
       hsIdle = rec.hoist_idle;
       hsActive = rec.hoist_active;
       hsBreak = rec.hoist_break;
-      taskProgressStr = rec.completed_tasks_str !== 'None' ? rec.completed_tasks_str : 'Standard';
+      if (rec.tasks_total_count !== undefined && rec.tasks_total_count > 0) {
+        taskProgressStr = `${rec.tasks_completed_count ?? 0}/${rec.tasks_total_count}`;
+      } else if (rec.completed_tasks_str && rec.completed_tasks_str !== 'None') {
+        const count = rec.completed_tasks_str.split(';').length;
+        taskProgressStr = `${count}/${count}`;
+      } else {
+        taskProgressStr = '0/0';
+      }
     } else {
       const eff = getVehicleEffectiveCompletion(v);
       isEffectiveDone = eff.isEffectiveDone;
@@ -787,11 +891,28 @@ export const exportServiceLogsToPDF = (
 
       const completedTasksCount = (v.tasks || []).filter((t: any) => t.is_completed).length;
       const totalTasksCount = (v.tasks || []).filter((t: any) => t.is_required).length;
-      taskProgressStr = `${completedTasksCount}/${totalTasksCount} done`;
+      taskProgressStr = `${completedTasksCount}/${totalTasksCount}`;
 
-      statusLabel = isEffectiveDone ? 'DONE' : (v.current_zone === 'workshop' ? 'GENERAL' : v.current_zone.toUpperCase());
-      statusBg = isEffectiveDone ? '#dcfce7' : v.current_zone === 'workshop' ? '#e0f2fe' : v.current_zone === 'alignment' ? '#ecfdf5' : '#fef3c7';
-      statusColor = isEffectiveDone ? '#15803d' : v.current_zone === 'workshop' ? '#0369a1' : v.current_zone === 'alignment' ? '#047857' : '#b45309';
+      const isHold = Boolean(v.is_paused || v.status === 'on_hold');
+      statusLabel = isHold ? 'ON HOLD' : isEffectiveDone ? 'DONE' : (v.current_zone === 'workshop' ? 'GENERAL' : v.current_zone.toUpperCase());
+      statusBg = isHold
+        ? REPORT_THEME_COLORS.warningBg
+        : isEffectiveDone
+        ? REPORT_THEME_COLORS.successBg
+        : v.current_zone === 'workshop'
+        ? REPORT_THEME_COLORS.primaryBg
+        : v.current_zone === 'alignment'
+        ? REPORT_THEME_COLORS.alignmentBg
+        : REPORT_THEME_COLORS.warningBg;
+      statusColor = isHold
+        ? REPORT_THEME_COLORS.warningLight
+        : isEffectiveDone
+        ? REPORT_THEME_COLORS.success
+        : v.current_zone === 'workshop'
+        ? REPORT_THEME_COLORS.primaryLight
+        : v.current_zone === 'alignment'
+        ? REPORT_THEME_COLORS.alignmentColor
+        : REPORT_THEME_COLORS.warningLight;
 
       if (!Number.isNaN(start.getTime())) {
         intakeDateStr = start.toLocaleDateString('en-US', { day: '2-digit', month: 'short', timeZone: 'Asia/Colombo' });
@@ -873,6 +994,10 @@ export const exportServiceLogsToPDF = (
         <td style="padding: 8px 10px; font-size: 11px; font-weight: 700; color: #0f172a; border-bottom: 1px solid #e2e8f0;">
           ${taskProgressStr}
         </td>
+        <td style="padding: 8px 10px; font-size: 11px; color: #475569; border-bottom: 1px solid #e2e8f0;">
+          ${isUrgent ? `<span style="display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 9px; font-weight: 800; background: #fee2e2; color: #b91c1c; margin-right: 4px;">URGENT${urgentNote ? `: ${urgentNote}` : ''}</span>` : ''}
+          <span>${remarks || '-'}</span>
+        </td>
       </tr>
     `;
   }).join('');
@@ -891,16 +1016,21 @@ export const exportServiceLogsToPDF = (
           .brand-sub { font-size: 12px; color: #64748b; margin-top: 2px; }
           .meta-box { text-align: right; font-size: 11px; color: #64748b; }
           .meta-highlight { font-weight: 700; color: #0f172a; }
+          .batch-badge { display: inline-block; font-family: monospace; font-size: 10px; font-weight: 700; background: #e0f2fe; color: #0369a1; padding: 2px 6px; border-radius: 4px; margin-top: 3px; letter-spacing: 0.5px; }
           .kpi-row { display: flex; gap: 12px; margin-bottom: 18px; }
           .kpi-card { flex: 1; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px; }
           .kpi-label { font-size: 10px; font-weight: 800; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px; }
           .kpi-val { font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 4px; }
           .table-container { width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 10px; }
+          .table-container thead { display: table-header-group; }
+          .table-container tr { page-break-inside: avoid; break-inside: avoid; }
           .table-container td { font-weight: 700; }
           .th-top { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
           .th-sub { font-size: 8.5px; font-weight: 700; text-transform: uppercase; }
-          .footer-sign { display: flex; justify-content: flex-end; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748b; }
+          .report-closing-block { page-break-inside: avoid; break-inside: avoid; margin-top: 28px; }
+          .footer-sign { display: flex; justify-content: flex-end; padding-top: 10px; font-size: 11px; color: #64748b; }
           .sign-line { width: 220px; border-top: 1px dashed #94a3b8; margin-top: 35px; text-align: center; padding-top: 6px; font-weight: 600; }
+          .policy-footnote { margin-top: 20px; padding-top: 8px; border-top: 1px solid #f1f5f9; font-size: 8px; color: #94a3b8; line-height: 1.4; display: flex; justify-content: space-between; align-items: center; }
         </style>
       </head>
       <body>
@@ -910,7 +1040,8 @@ export const exportServiceLogsToPDF = (
             <div class="brand-sub">Workshop Service & Telemetry Audit Log Report</div>
           </div>
           <div class="meta-box">
-            <div>Report Filter: <span class="meta-highlight">${datePresetLabel}</span></div>
+            <div>Batch Ref: <span class="batch-badge">${batchRefId}</span></div>
+            <div style="margin-top: 3px;">Report Filter: <span class="meta-highlight">${datePresetLabel}</span></div>
             <div>Generated: <span class="meta-highlight">${new Date().toLocaleString()}</span></div>
             <div>Total Vehicles: <span class="meta-highlight">${vehicles.length}</span></div>
           </div>
@@ -918,17 +1049,22 @@ export const exportServiceLogsToPDF = (
 
         <div class="kpi-row">
           <div class="kpi-card">
-            <div class="kpi-label" style="color: #0284c7;">Status</div>
+            <div class="kpi-label" style="color: #0284c7;">Status & Bookings</div>
             <div style="margin-top: 4px;">
-              <div style="font-size: 14px; font-weight: 900; color: #0284c7;">${kpis.inProgressCount}</div>
-              <div style="font-size: 8px; font-weight: 700; color: #64748b; letter-spacing: 0.3px;">ACTIVE IN PROGRESS</div>
+              <div style="font-size: 14px; font-weight: 900; color: #0284c7;">${kpis.inProgressCount} <span style="font-size: 9px; font-weight: 700; color: #64748b;">ACTIVE</span></div>
             </div>
-            <div style="margin-top: 4px; padding-top: 4px; border-top: 1px solid #e2e8f0;">
-              <div style="font-size: 12px; font-weight: 800; color: #16a34a;">${kpis.completedCount}</div>
-              <div style="font-size: 8px; font-weight: 700; color: #64748b; letter-spacing: 0.3px;">COMPLETED JOBS</div>
+            <div style="margin-top: 4px; padding-top: 4px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <div style="font-size: 12px; font-weight: 800; color: #16a34a;">${kpis.completedCount}</div>
+                <div style="font-size: 8px; font-weight: 700; color: #64748b; letter-spacing: 0.3px;">COMPLETED</div>
+              </div>
+              <div style="text-align: right;">
+                <div style="font-size: 12px; font-weight: 800; color: #0284c7;">${kpis.bookingCount ?? 0}</div>
+                <div style="font-size: 8px; font-weight: 700; color: #64748b; letter-spacing: 0.3px;">BOOKINGS</div>
+              </div>
             </div>
             <div style="margin-top: 4px; padding-top: 4px; border-top: 1px solid #e2e8f0; font-size: 8.5px; font-weight: 700; color: #64748b; text-align: center;">
-              ${kpis.totalVehicles ?? 0} total vehicles
+              ${kpis.totalVehicles ?? 0} total vehicles${(kpis.onHoldCount ?? 0) > 0 ? ` · ${kpis.onHoldCount} on hold` : ''}
             </div>
           </div>
           <div class="kpi-card">
@@ -990,7 +1126,8 @@ export const exportServiceLogsToPDF = (
               <th colspan="3" style="padding: 6px; text-align: center; background: #0369a1; border-right: 1px solid #334155;">GENERAL SERVICE</th>
               <th colspan="3" style="padding: 6px; text-align: center; background: #047857; border-right: 1px solid #334155;">WHEEL ALIGNMENT</th>
               <th colspan="3" style="padding: 6px; text-align: center; background: #b45309; border-right: 1px solid #334155;">HOIST SERVICE</th>
-              <th rowspan="2" style="padding: 8px 6px; text-align: left;">Tasks</th>
+              <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Tasks</th>
+              <th rowspan="2" style="padding: 8px 6px; text-align: left;">Remarks / Priority</th>
             </tr>
             <tr style="background: #1e293b; color: #94a3b8;">
               <!-- General Service -->
@@ -1012,16 +1149,22 @@ export const exportServiceLogsToPDF = (
           </tbody>
         </table>
 
-        <!-- Operational Audit Legend -->
-        <div style="margin-top: 14px; padding: 10px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 9.5px; color: #475569; line-height: 1.5;">
-          <div><strong style="color: #0f172a;">Audit & Calculation Policy:</strong></div>
-          <div>• <strong>Bay Gross Avg Stay Time:</strong> Working bay occupancy (Active Labor + Idle Time) strictly for vehicles completed and dispatched to the next station. Undispatched/in-progress stages are excluded to protect average accuracy. Scheduled breaks (morning/afternoon tea, lunch) are deducted.</div>
-          <div>• <strong>Bay Avg Active Time:</strong> Pure hands-on labor duration by assigned technicians on completed & dispatched stages.</div>
-        </div>
+        <!-- Final Page Report Closing Block (Sign-off & Footnote) -->
+        <div class="report-closing-block">
+          <div class="footer-sign">
+            <div>
+              <div class="sign-line">Assistant General Manager</div>
+            </div>
+          </div>
 
-        <div class="footer-sign">
-          <div>
-            <div class="sign-line">Workshop General Manager</div>
+          <!-- Document Footnote & Batch Identifier -->
+          <div class="policy-footnote">
+            <div style="flex: 1; padding-right: 20px;">
+              <span style="font-weight: 700; color: #64748b;">Policy Footnote:</span> Bay Gross Stay Time measures completed & dispatched bay occupancy minus scheduled shift breaks (tea & lunch). Pure hands-on labor duration is recorded under Net Active Time. Jobs flagged with Additional Repairs or placed On Hold for major repairs are strictly excluded from standard bay speed benchmarks.
+            </div>
+            <div style="font-family: monospace; font-size: 8.5px; font-weight: 700; color: #64748b; white-space: nowrap;">
+              Ref: ${batchRefId} · End of Report
+            </div>
           </div>
         </div>
 
