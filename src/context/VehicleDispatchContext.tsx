@@ -112,17 +112,65 @@ export const VehicleDispatchProvider: React.FC<{ children: ReactNode }> = ({ chi
     return res;
   }, [debouncedRefetch]);
 
-  // Auto-drain when online
+  // Auto-drain when connection is restored, tab becomes visible/focused, or via retry interval
   useEffect(() => {
+    const triggerDrainIfPending = () => {
+      if (outboxService.getPendingCount() > 0) {
+        drainOutbox();
+      }
+    };
+
+    // 1. Initial check on mount
+    triggerDrainIfPending();
+
+    // 2. Subscribe to queue changes: set up periodic retry interval if items are pending
+    let retryTimer: any = null;
+    const updateRetryInterval = (pendingCount: number) => {
+      if (pendingCount > 0 && !retryTimer) {
+        retryTimer = setInterval(() => {
+          triggerDrainIfPending();
+        }, 12000); // Check and retry every 12 seconds while items are pending
+      } else if (pendingCount === 0 && retryTimer) {
+        clearInterval(retryTimer);
+        retryTimer = null;
+      }
+    };
+
+    const unsubscribe = outboxService.subscribe((count) => {
+      updateRetryInterval(count);
+    });
+
+    // 3. Web lifecycle listeners for connection recovery and focus/visibility return
     if (typeof window !== 'undefined') {
-      const handleOnline = () => {
-        if (outboxService.getPendingCount() > 0) {
-          drainOutbox();
+      const handleOnline = () => triggerDrainIfPending();
+      const handleVisibilityChange = () => {
+        if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+          triggerDrainIfPending();
         }
       };
+      const handleFocus = () => triggerDrainIfPending();
+
       window.addEventListener('online', handleOnline);
-      return () => window.removeEventListener('online', handleOnline);
+      window.addEventListener('focus', handleFocus);
+      if (typeof document !== 'undefined') {
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+      }
+
+      return () => {
+        unsubscribe();
+        if (retryTimer) clearInterval(retryTimer);
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('focus', handleFocus);
+        if (typeof document !== 'undefined') {
+          document.removeEventListener('visibilitychange', handleVisibilityChange);
+        }
+      };
     }
+
+    return () => {
+      unsubscribe();
+      if (retryTimer) clearInterval(retryTimer);
+    };
   }, [drainOutbox]);
 
   // 1. ADD VEHICLE

@@ -21,6 +21,8 @@ export interface VehicleContextType extends VehicleStateContextType, VehicleDisp
   setActiveReportsTab: (tab: 'kpi' | 'audit') => void;
   isCalculationInfoOpen: boolean;
   setIsCalculationInfoOpen: (open: boolean) => void;
+  reportsRefreshTrigger: number;
+  triggerReportsRefresh: () => void;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   showMyVehiclesOnly: boolean;
@@ -78,6 +80,8 @@ export const useVehicles = (): VehicleContextType => {
       setActiveReportsTab: ui.setActiveReportsTab,
       isCalculationInfoOpen: ui.isCalculationInfoOpen,
       setIsCalculationInfoOpen: ui.setIsCalculationInfoOpen,
+      reportsRefreshTrigger: ui.reportsRefreshTrigger,
+      triggerReportsRefresh: ui.triggerReportsRefresh,
       searchQuery: ui.searchQuery,
       setSearchQuery: ui.setSearchQuery,
       showMyVehiclesOnly: ui.showMyVehiclesOnly,

@@ -23,6 +23,8 @@ export interface UIContextType {
   setActiveReportsTab: (tab: 'kpi' | 'audit') => void;
   isCalculationInfoOpen: boolean;
   setIsCalculationInfoOpen: (open: boolean) => void;
+  reportsRefreshTrigger: number;
+  triggerReportsRefresh: () => void;
 
   // Search Query
   searchQuery: string;
@@ -51,9 +53,14 @@ export const UIProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [isReportsModalOpen, setIsReportsModalOpen] = useState<boolean>(false);
   const [activeReportsTab, setActiveReportsTab] = useState<'kpi' | 'audit'>('kpi');
   const [isCalculationInfoOpen, setIsCalculationInfoOpen] = useState<boolean>(false);
+  const [reportsRefreshTrigger, setReportsRefreshTrigger] = useState<number>(0);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [showMyVehiclesOnly, setShowMyVehiclesOnly] = useState<boolean>(false);
   const [vehicleNoteModalData, setVehicleNoteModalData] = useState<VehicleNoteModalData | null>(null);
+
+  const triggerReportsRefresh = useCallback(() => {
+    setReportsRefreshTrigger(prev => prev + 1);
+  }, []);
 
   const showVehicleNotes = useCallback((data: VehicleNoteModalData) => {
     try { hapticService.triggerLightHaptic(); } catch { /* ignore */ }
@@ -85,6 +92,8 @@ export const UIProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
         setActiveReportsTab,
         isCalculationInfoOpen,
         setIsCalculationInfoOpen,
+        reportsRefreshTrigger,
+        triggerReportsRefresh,
         searchQuery,
         setSearchQuery,
         showMyVehiclesOnly,

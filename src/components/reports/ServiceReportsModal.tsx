@@ -45,6 +45,7 @@ export const ServiceReportsModal: React.FC = () => {
     activeReportsTab,
     isCalculationInfoOpen,
     setIsCalculationInfoOpen,
+    reportsRefreshTrigger,
   } = useVehicles();
   const { colors, isDark } = useTheme();
   const { canViewAuditLogs } = usePermissions();
@@ -187,7 +188,7 @@ export const ServiceReportsModal: React.FC = () => {
     return () => {
       isCancelled = true;
     };
-  }, [customDate, customEndDate, statusPreset, fetchHistoricalVehicles, datePreset]);
+  }, [customDate, customEndDate, statusPreset, fetchHistoricalVehicles, datePreset, reportsRefreshTrigger]);
 
   const filteredVehicles = useMemo(() => {
     if (serverRecords) {
