@@ -44,13 +44,15 @@ export const computeVehicleBayStatus = (
   // Dispatch is unlocked after START WORK, or immediately if this bay has no required task (orphan/bypassed bay)
   const isCanDispatch = canTransferVehicle && (!isTaskRequiredForBay || !isStageIdle) && !isDispatching;
 
-  // Multi-Pass Routing: Hoist and Workshop should ALWAYS remain available for time-sharing transfers
-  // even if their initial checklist item was marked completed in pass 1.
-  const canShowAlignmentBtn = activeBay !== 'alignment' && (!isAlignmentDone || isAlignmentRequired);
-  const canShowHoistBtn = activeBay !== 'hoist';
-  const canShowWorkshopBtn = activeBay !== 'workshop';
-  const canShowAdvisorBtn = activeBay !== 'inspection' && !vehicle.is_finished;
-  const hasAnyDispatchBtn = canShowAlignmentBtn || canShowHoistBtn || canShowWorkshopBtn || canShowAdvisorBtn;
+  // Dispatch buttons: only show stations that are required for this vehicle's job order.
+  // Multi-Pass Routing: once a task is started/completed, the button remains visible for
+  // re-entry (e.g. vehicle returns to workshop after alignment). Alignment retains this
+  // same multi-pass logic. Workshop/Hoist now require the task to be in the job order.
+  const canShowAlignmentBtn = activeBay !== 'alignment' && isAlignmentRequired && (!isAlignmentDone || isAlignmentRequired);
+  const canShowHoistBtn     = activeBay !== 'hoist'     && isHoistRequired;
+  const canShowWorkshopBtn  = activeBay !== 'workshop'  && isWorkshopRequired;
+  const canShowAdvisorBtn   = activeBay !== 'inspection' && !vehicle.is_finished;
+  const hasAnyDispatchBtn   = canShowAlignmentBtn || canShowHoistBtn || canShowWorkshopBtn || canShowAdvisorBtn;
 
   return {
     isCurrentTaskDone,

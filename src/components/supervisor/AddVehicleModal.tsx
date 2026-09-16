@@ -31,6 +31,7 @@ export const AddVehicleModal: React.FC = () => {
   const [hasAdditionalRepairs, setHasAdditionalRepairs] = useState<boolean>(false);
   const [isUrgent, setIsUrgent] = useState<boolean>(false);
   const [urgentNote, setUrgentNote] = useState<string>('');
+  const [technicianName, setTechnicianName] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   if (!isAddModalOpen) return null;
@@ -73,13 +74,14 @@ export const AddVehicleModal: React.FC = () => {
         remarks,
         isUrgent,
         urgentNote,
-        null,
+        technicianName.trim() || null,
         isBooking,
         hasAdditionalRepairs
       );
       setIsAddModalOpen(false);
       setVehicleNo('');
       setRemarks('');
+      setTechnicianName('');
       setIsBooking(false);
       setHasAdditionalRepairs(false);
       setIsUrgent(false);
@@ -268,6 +270,26 @@ export const AddVehicleModal: React.FC = () => {
                 onChangeText={setRemarks}
                 multiline
                 numberOfLines={2}
+              />
+            </View>
+
+            {/* Technician Name */}
+            <View style={styles.formGroup}>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>ASSIGNED TECHNICIAN (OPTIONAL):</Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)',
+                    borderColor: colors.borderGlass,
+                    color: colors.textPrimary,
+                  }
+                ]}
+                placeholder="e.g. Kasun, Nimal (leave blank to assign later)"
+                placeholderTextColor={colors.textMuted}
+                value={technicianName}
+                onChangeText={setTechnicianName}
+                autoCapitalize="words"
               />
             </View>
 

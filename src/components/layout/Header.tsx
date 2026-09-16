@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { chimeService } from '../../lib/chime';
 import { hapticService } from '../../lib/haptics';
-import { User, FileText, ChevronLeft, ChevronDown, MapPin, CloudOff, RefreshCw } from 'lucide-react-native';
+import { User, FileText, ChevronLeft, ChevronDown, MapPin, RefreshCw } from 'lucide-react-native';
 import { useTheme } from '../../context/ThemeContext';
 import { getCurrentActiveBreak } from '../../utils/workshopHoursUtils';
 import { BranchSelectorSheet } from './BranchSelectorSheet';
@@ -18,6 +18,7 @@ export const Header: React.FC = () => {
   const {
     isReportsModalOpen,
     setIsReportsModalOpen,
+    triggerReportsRefresh,
     isRealtimeConnected,
     outboxPendingCount,
     isOutboxSyncing,
@@ -37,28 +38,59 @@ export const Header: React.FC = () => {
   // Pulse Animation for live indicator
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
-  // Spin Animation for manual refresh button
+  // Spin Animation for manual refresh & outbox sync
   const [isRefreshing, setIsRefreshing] = useState(false);
   const spinAnim = useRef(new Animated.Value(0)).current;
 
-  const handleRefresh = async () => {
-    if (isRefreshing) return;
-    setIsRefreshing(true);
-    Animated.timing(spinAnim, {
-      toValue: 1,
-      duration: 650,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: Platform.OS !== 'web',
-    }).start(() => {
+  // Continuous spin loop when background outbox sync is in progress
+  useEffect(() => {
+    let loopAnim: Animated.CompositeAnimation | null = null;
+    if (isOutboxSyncing) {
+      loopAnim = Animated.loop(
+        Animated.timing(spinAnim, {
+          toValue: 1,
+          duration: 750,
+          easing: Easing.linear,
+          useNativeDriver: Platform.OS !== 'web',
+        })
+      );
+      loopAnim.start();
+    } else if (!isRefreshing) {
       spinAnim.setValue(0);
-    });
+    }
+    return () => {
+      if (loopAnim) {
+        loopAnim.stop();
+      }
+    };
+  }, [isOutboxSyncing, isRefreshing, spinAnim]);
+
+  const handleRefresh = async () => {
+    if (isRefreshing || isOutboxSyncing) return;
+    setIsRefreshing(true);
+    if (!isOutboxSyncing) {
+      Animated.timing(spinAnim, {
+        toValue: 1,
+        duration: 650,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: Platform.OS !== 'web',
+      }).start(() => {
+        if (!isOutboxSyncing) spinAnim.setValue(0);
+      });
+    }
 
     try {
+      if (outboxPendingCount > 0 && drainOutbox) {
+        await drainOutbox();
+      }
+      if (isReportsModalOpen && triggerReportsRefresh) {
+        triggerReportsRefresh();
+      }
       if (refreshVehicles) {
         await refreshVehicles();
       }
     } catch (err) {
-      console.warn('Manual refresh failed:', err);
+      console.warn('Manual refresh/sync failed:', err);
     } finally {
       setIsRefreshing(false);
     }
@@ -203,55 +235,59 @@ export const Header: React.FC = () => {
           style={styles.rightGroup}
           {...(Platform.OS === 'web' ? ({ id: 'profile-menu-container' } as any) : {})}
         >
-          {/* Offline Outbox Queue Status Indicator */}
-          {outboxPendingCount > 0 && (
-            <TouchableOpacity
-              style={[
-                styles.outboxBadge,
-                {
-                  backgroundColor: isOutboxSyncing ? colors.primaryDim : colors.warningDim,
-                  borderColor: isOutboxSyncing ? colors.primaryBorder : colors.warning,
-                }
-              ]}
-              onPress={() => drainOutbox()}
-              disabled={isOutboxSyncing}
-              activeOpacity={0.7}
-            >
-              {isOutboxSyncing ? (
-                <>
-                  <RefreshCw size={11} color={isDark ? colors.primaryLight : colors.primary} />
-                  <Text style={[styles.outboxBadgeText, { color: isDark ? colors.primaryLight : colors.primary }]}>
-                    Syncing {outboxPendingCount}...
-                  </Text>
-                </>
-              ) : (
-                <>
-                  <CloudOff size={11} color={colors.warningLight} />
-                  <Text style={[styles.outboxBadgeText, { color: colors.warningLight }]}>
-                    {outboxPendingCount} Queued
-                  </Text>
-                </>
-              )}
-            </TouchableOpacity>
-          )}
-
-          {/* Manual Refresh Button (Square squircle matching profile) */}
+          {/* Unified Refresh & Offline Sync Button */}
           <TouchableOpacity
             style={[
               styles.squareIconBtn,
               {
-                backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)',
-                borderColor: colors.borderGlass,
+                backgroundColor: outboxPendingCount > 0
+                  ? (isDark ? 'rgba(245, 158, 11, 0.12)' : '#fef3c7')
+                  : (isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)'),
+                borderColor: outboxPendingCount > 0
+                  ? colors.warning
+                  : (isRefreshing || isOutboxSyncing ? colors.primary : colors.borderGlass),
               },
-              isRefreshing && { borderColor: colors.primary },
             ]}
             onPress={handleRefresh}
             activeOpacity={0.7}
-            disabled={isRefreshing}
+            disabled={isRefreshing || isOutboxSyncing}
+            {...(Platform.OS === 'web'
+              ? ({
+                  title: outboxPendingCount > 0
+                    ? `${outboxPendingCount} action(s) queued for sync. Click to sync and refresh.`
+                    : 'Refresh workshop telemetry',
+                } as any)
+              : {})}
           >
             <Animated.View style={{ transform: [{ rotate: spinRotate }] }}>
-              <RefreshCw size={14} color={isRefreshing ? colors.primaryLight : colors.textSecondary} />
+              <RefreshCw
+                size={14}
+                color={
+                  outboxPendingCount > 0
+                    ? colors.warning
+                    : isRefreshing || isOutboxSyncing
+                    ? colors.primaryLight
+                    : colors.textSecondary
+                }
+              />
             </Animated.View>
+
+            {/* Offline Pending Actions Badge */}
+            {outboxPendingCount > 0 && (
+              <View
+                style={[
+                  styles.syncBadge,
+                  {
+                    backgroundColor: isOutboxSyncing ? colors.primary : colors.warning,
+                    borderColor: isDark ? '#0f172a' : '#ffffff',
+                  },
+                ]}
+              >
+                <Text style={styles.syncBadgeText}>
+                  {outboxPendingCount > 99 ? '99+' : outboxPendingCount}
+                </Text>
+              </View>
+            )}
           </TouchableOpacity>
 
           {/* Reports / Back Toggle Button (Square squircle matching profile) */}
@@ -477,18 +513,22 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: '#10b981',
   },
-  outboxBadge: {
-    flexDirection: 'row',
+  syncBadge: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
     alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    borderWidth: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+    borderWidth: 1.5,
   },
-  outboxBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.3,
+  syncBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#ffffff',
+    lineHeight: 11,
   },
 });

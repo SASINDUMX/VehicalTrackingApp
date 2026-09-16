@@ -29,6 +29,7 @@ import {
 } from 'lucide-react-native';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
+import { useUI } from '../../context/UIContext';
 import { auditService } from '../../services/auditService';
 import { AuditLogEntry, AuditActionType, AuditActionCategory } from '../../types/audit';
 import { DateFilterPreset, getDatePresetRangeDescription } from '../../utils/reportExportUtils';
@@ -100,6 +101,7 @@ const getActionConfig = (action: string, colors: ThemeColors) => {
 export const AuditTrailView: React.FC = () => {
   const { colors, isDark } = useTheme();
   const { availableBranches } = useAuth();
+  const { reportsRefreshTrigger } = useUI();
 
   const [datePreset, setDatePreset] = useState<DateFilterPreset>('today');
   const [customDate, setCustomDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
@@ -208,7 +210,7 @@ export const AuditTrailView: React.FC = () => {
 
   useEffect(() => {
     loadAuditLogs();
-  }, [loadAuditLogs]);
+  }, [loadAuditLogs, reportsRefreshTrigger]);
 
   const handleSearchSubmit = () => {
     setPage(0);
