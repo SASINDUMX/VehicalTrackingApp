@@ -37,21 +37,22 @@ export const computeVehicleBayStatus = (
   const isAlignmentRequired = requiredTaskTypes.includes('wheel_alignment');
   const isWorkshopRequired = requiredTaskTypes.includes('general_service');
 
-  const isWorkshopDone = Boolean(vehicle.tasks.find(t => t.task_type === 'general_service')?.is_completed);
-  const isHoistDone = Boolean(vehicle.tasks.find(t => t.task_type === 'hoist_service')?.is_completed);
-  const isAlignmentDone = Boolean(vehicle.tasks.find(t => t.task_type === 'wheel_alignment')?.is_completed);
-
   // Dispatch is unlocked after START WORK, or immediately if this bay has no required task (orphan/bypassed bay)
   const isCanDispatch = canTransferVehicle && (!isTaskRequiredForBay || !isStageIdle) && !isDispatching;
 
   // Dispatch buttons: only show stations that are required for this vehicle's job order.
   // Multi-Pass Routing: once a task is started/completed, the button remains visible for
-  // re-entry (e.g. vehicle returns to workshop after alignment). Alignment retains this
-  // same multi-pass logic. Workshop/Hoist now require the task to be in the job order.
-  const canShowAlignmentBtn = activeBay !== 'alignment' && isAlignmentRequired && (!isAlignmentDone || isAlignmentRequired);
+  // re-entry (e.g. vehicle returns to workshop after alignment).
+  const canShowAlignmentBtn = activeBay !== 'alignment' && isAlignmentRequired;
   const canShowHoistBtn     = activeBay !== 'hoist'     && isHoistRequired;
   const canShowWorkshopBtn  = activeBay !== 'workshop'  && isWorkshopRequired;
-  const canShowAdvisorBtn   = activeBay !== 'inspection' && !vehicle.is_finished;
+
+  // Advisor button: Only available once all other required bay tasks are completed.
+  // (The current bay's task auto-completes upon dispatch to inspection).
+  const remainingOtherTasks = vehicle.tasks.filter(
+    t => t.is_required && !t.is_completed && APP_TERMINOLOGY.tasks[t.task_type]?.stationId !== activeBay
+  );
+  const canShowAdvisorBtn   = activeBay !== 'inspection' && !vehicle.is_finished && remainingOtherTasks.length === 0;
   const hasAnyDispatchBtn   = canShowAlignmentBtn || canShowHoistBtn || canShowWorkshopBtn || canShowAdvisorBtn;
 
   return {

@@ -506,7 +506,12 @@ export const VehicleDispatchProvider: React.FC<{ children: ReactNode }> = ({ chi
       );
 
       try {
-        await vehicleService.toggleTask(taskId, nextCompleted, completedBy);
+        await vehicleService.toggleTask(
+          taskId,
+          nextCompleted,
+          completedBy,
+          targetTask ? { vehicleId, taskType: targetTask.task_type } : undefined
+        );
       } catch (err) {
         if (isNetworkOrOfflineError(err)) {
           console.warn('[VehicleDispatchContext] Offline: Enqueued toggleTask to outbox');
