@@ -47,12 +47,8 @@ export const computeVehicleBayStatus = (
   const canShowHoistBtn     = activeBay !== 'hoist'     && isHoistRequired;
   const canShowWorkshopBtn  = activeBay !== 'workshop'  && isWorkshopRequired;
 
-  // Advisor button: Only available once all other required bay tasks are completed.
-  // (The current bay's task auto-completes upon dispatch to inspection).
-  const remainingOtherTasks = vehicle.tasks.filter(
-    t => t.is_required && !t.is_completed && APP_TERMINOLOGY.tasks[t.task_type]?.stationId !== activeBay
-  );
-  const canShowAdvisorBtn   = activeBay !== 'inspection' && !vehicle.is_finished && remainingOtherTasks.length === 0;
+  // Final Inspection is always available from working bays so vehicles can proceed to inspection
+  const canShowAdvisorBtn   = activeBay !== 'inspection' && !vehicle.is_finished;
   const hasAnyDispatchBtn   = canShowAlignmentBtn || canShowHoistBtn || canShowWorkshopBtn || canShowAdvisorBtn;
 
   return {
