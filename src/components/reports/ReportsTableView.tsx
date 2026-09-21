@@ -10,6 +10,7 @@ import { Vehicle } from '../../types/vehicle';
 import {
   ServerReportRecord,
   formatDuration,
+  formatFirstInTime,
   getStageTimingForZone,
   getVehicleIdleAndActiveTotals,
   getVehicleEffectiveCompletion,
@@ -158,6 +159,9 @@ export const ReportsTableView: React.FC<ReportsTableViewProps> = ({
               <View style={styles.colTime} />
               <View style={styles.colTime} />
               {/* General Service sub-headers */}
+              <Text style={[styles.thSubCell, styles.colSubBay, { color: colors.primaryLight }]}>
+                FIRST IN
+              </Text>
               <Text style={[styles.thSubCell, styles.colSubBay, { color: colors.warning }]}>
                 IDLE
               </Text>
@@ -168,6 +172,9 @@ export const ReportsTableView: React.FC<ReportsTableViewProps> = ({
                 BREAKS
               </Text>
               {/* Wheel Alignment sub-headers */}
+              <Text style={[styles.thSubCell, styles.colSubBay, { color: colors.primaryLight }]}>
+                FIRST IN
+              </Text>
               <Text style={[styles.thSubCell, styles.colSubBay, { color: colors.warning }]}>
                 IDLE
               </Text>
@@ -178,6 +185,9 @@ export const ReportsTableView: React.FC<ReportsTableViewProps> = ({
                 BREAKS
               </Text>
               {/* Hoist Service sub-headers */}
+              <Text style={[styles.thSubCell, styles.colSubBay, { color: colors.primaryLight }]}>
+                FIRST IN
+              </Text>
               <Text style={[styles.thSubCell, styles.colSubBay, { color: colors.warning }]}>
                 IDLE
               </Text>
@@ -203,12 +213,15 @@ export const ReportsTableView: React.FC<ReportsTableViewProps> = ({
               let activeWorkSec = 0;
               let totalIdleSec = 0;
               let breakSeconds = 0;
+              let wsFirstIn: string | null = null;
               let wsIdle = 0,
                 wsActive = 0,
                 wsBreak = 0;
+              let alFirstIn: string | null = null;
               let alIdle = 0,
                 alActive = 0,
                 alBreak = 0;
+              let hsFirstIn: string | null = null;
               let hsIdle = 0,
                 hsActive = 0,
                 hsBreak = 0;
@@ -260,12 +273,15 @@ export const ReportsTableView: React.FC<ReportsTableViewProps> = ({
                 activeWorkSec = rec.total_active_sec;
                 totalIdleSec = rec.total_idle_sec;
                 breakSeconds = rec.total_break_seconds;
+                wsFirstIn = rec.workshop_first_in || null;
                 wsIdle = rec.workshop_idle;
                 wsActive = rec.workshop_active;
                 wsBreak = rec.workshop_break;
+                alFirstIn = rec.alignment_first_in || null;
                 alIdle = rec.alignment_idle;
                 alActive = rec.alignment_active;
                 alBreak = rec.alignment_break;
+                hsFirstIn = rec.hoist_first_in || null;
                 hsIdle = rec.hoist_idle;
                 hsActive = rec.hoist_active;
                 hsBreak = rec.hoist_break;
@@ -318,12 +334,15 @@ export const ReportsTableView: React.FC<ReportsTableViewProps> = ({
                 const workshopTiming = getStageTimingForZone(v, 'workshop');
                 const alignmentTiming = getStageTimingForZone(v, 'alignment');
                 const hoistTiming = getStageTimingForZone(v, 'hoist');
+                wsFirstIn = workshopTiming.firstIn;
                 wsIdle = workshopTiming.idleSec;
                 wsActive = workshopTiming.activeSec;
                 wsBreak = workshopTiming.breakSec;
+                alFirstIn = alignmentTiming.firstIn;
                 alIdle = alignmentTiming.idleSec;
                 alActive = alignmentTiming.activeSec;
                 alBreak = alignmentTiming.breakSec;
+                hsFirstIn = hoistTiming.firstIn;
                 hsIdle = hoistTiming.idleSec;
                 hsActive = hoistTiming.activeSec;
                 hsBreak = hoistTiming.breakSec;
@@ -427,7 +446,16 @@ export const ReportsTableView: React.FC<ReportsTableViewProps> = ({
                   >
                     {breakSeconds > 0 ? formatDuration(breakSeconds) : '-'}
                   </Text>
-                  {/* General Workshop (Idle / Active / Breaks) */}
+                  {/* General Workshop (First In / Idle / Active / Breaks) */}
+                  <Text
+                    style={[
+                      styles.tdText,
+                      styles.colSubBay,
+                      { color: colors.textSecondary, fontWeight: '600' },
+                    ]}
+                  >
+                    {formatFirstInTime(wsFirstIn)}
+                  </Text>
                   <Text style={[styles.tdText, styles.colSubBay, { color: colors.warning }]}>
                     {wsIdle > 0 ? formatDuration(wsIdle) : '-'}
                   </Text>
@@ -460,7 +488,16 @@ export const ReportsTableView: React.FC<ReportsTableViewProps> = ({
                   >
                     {wsBreak > 0 ? formatDuration(wsBreak) : '-'}
                   </Text>
-                  {/* Wheel Alignment (Idle / Active / Breaks) */}
+                  {/* Wheel Alignment (First In / Idle / Active / Breaks) */}
+                  <Text
+                    style={[
+                      styles.tdText,
+                      styles.colSubBay,
+                      { color: colors.textSecondary, fontWeight: '600' },
+                    ]}
+                  >
+                    {formatFirstInTime(alFirstIn)}
+                  </Text>
                   <Text style={[styles.tdText, styles.colSubBay, { color: colors.warning }]}>
                     {alIdle > 0 ? formatDuration(alIdle) : '-'}
                   </Text>
@@ -493,7 +530,16 @@ export const ReportsTableView: React.FC<ReportsTableViewProps> = ({
                   >
                     {alBreak > 0 ? formatDuration(alBreak) : '-'}
                   </Text>
-                  {/* Hoist Service (Idle / Active / Breaks) */}
+                  {/* Hoist Service (First In / Idle / Active / Breaks) */}
+                  <Text
+                    style={[
+                      styles.tdText,
+                      styles.colSubBay,
+                      { color: colors.textSecondary, fontWeight: '600' },
+                    ]}
+                  >
+                    {formatFirstInTime(hsFirstIn)}
+                  </Text>
                   <Text style={[styles.tdText, styles.colSubBay, { color: colors.warning }]}>
                     {hsIdle > 0 ? formatDuration(hsIdle) : '-'}
                   </Text>
@@ -604,7 +650,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   thGroupHeader: {
-    width: 210,
+    width: 280,
     alignItems: 'center',
     justifyContent: 'center',
     borderLeftWidth: 1,

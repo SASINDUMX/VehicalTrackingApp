@@ -1,5 +1,6 @@
 import { supabase, isSupabaseConnected } from '../lib/supabase';
 import { Vehicle, VehicleTask, StageLog, BayZone, TaskType } from '../types/vehicle';
+import { deduplicateTasks } from '../utils/vehicleUtils';
 
 /**
  * Standardized Selective Projection according to Rule 5.5:
@@ -213,7 +214,7 @@ export const vehicleService = {
       gross_tat_seconds: Number(v.gross_tat_seconds) || 0,
       net_tat_seconds: Number(v.net_tat_seconds) || 0,
       total_break_seconds: Number(v.total_break_seconds) || 0,
-      tasks: (v.tasks || []) as VehicleTask[],
+      tasks: deduplicateTasks((v.tasks || []) as VehicleTask[]),
       stage_logs: sortedLogs,
     };
   },
@@ -262,7 +263,7 @@ export const vehicleService = {
 
     return dbVehicles.map((v: any) => ({
       ...this._mapRawVehicle(v),
-      tasks: taskMap.get(v.id) || [],
+      tasks: deduplicateTasks(taskMap.get(v.id) || []),
       stage_logs: logMap.get(v.id) || [],
     }));
   },
@@ -846,18 +847,50 @@ export const vehicleService = {
 
   /**
    * Toggles task completion state with RPC + direct table fallback.
+   * If taskId is an optimistic synthetic string ('task-...'), resolves the real DB task using fallback metadata.
    */
-  async toggleTask(taskId: string, isCompleted: boolean, completedBy?: string): Promise<void> {
+  async toggleTask(
+    taskId: string,
+    isCompleted: boolean,
+    completedBy?: string,
+    fallback?: { vehicleId: string; taskType: TaskType }
+  ): Promise<void> {
     const client = supabase;
     if (!client || !isSupabaseConnected) return;
 
-    const { error } = await client.rpc('toggle_task_completion', {
-      p_task_id: taskId,
-      p_is_completed: isCompleted,
-    });
+    let resolvedTaskId = taskId;
+    if (taskId.startsWith('task-') && fallback) {
+      const { data: dbTask } = await client
+        .from('vehicle_tasks')
+        .select('id')
+        .eq('vehicle_id', fallback.vehicleId)
+        .eq('task_type', fallback.taskType)
+        .maybeSingle();
 
-    if (error) {
-      console.warn('[vehicleService] RPC toggle_task_completion fallback:', error.message);
+      if (dbTask?.id) {
+        resolvedTaskId = dbTask.id;
+      }
+    }
+
+    if (!resolvedTaskId.startsWith('task-')) {
+      const { error } = await client.rpc('toggle_task_completion', {
+        p_task_id: resolvedTaskId,
+        p_is_completed: isCompleted,
+      });
+
+      if (error) {
+        console.warn('[vehicleService] RPC toggle_task_completion fallback:', error.message);
+        const { error: directErr } = await client
+          .from('vehicle_tasks')
+          .update({
+            is_completed: isCompleted,
+            completed_at: isCompleted ? new Date().toISOString() : null,
+            completed_by: isCompleted ? (completedBy || 'Technician') : null,
+          })
+          .eq('id', resolvedTaskId);
+        if (directErr) throw directErr;
+      }
+    } else if (fallback) {
       const { error: directErr } = await client
         .from('vehicle_tasks')
         .update({
@@ -865,7 +898,8 @@ export const vehicleService = {
           completed_at: isCompleted ? new Date().toISOString() : null,
           completed_by: isCompleted ? (completedBy || 'Technician') : null,
         })
-        .eq('id', taskId);
+        .eq('vehicle_id', fallback.vehicleId)
+        .eq('task_type', fallback.taskType);
       if (directErr) throw directErr;
     }
   },

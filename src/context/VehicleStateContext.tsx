@@ -7,6 +7,7 @@ import { outboxService } from '../services/outboxService';
 import { chimeService } from '../lib/chime';
 import { hapticService } from '../lib/haptics';
 import { useAuth } from './AuthContext';
+import { deduplicateTasks } from '../utils/vehicleUtils';
 
 export interface VehicleStateContextType {
   vehicles: Vehicle[];
@@ -247,16 +248,34 @@ export const VehicleStateProvider: React.FC<{ children: ReactNode }> = ({ childr
           prev.map(v => {
             if (v.id !== taskData.vehicle_id) return v;
             if (eventType === 'INSERT') {
-              if (v.tasks.some(t => t.id === taskData.id)) return v;
-              return { ...v, tasks: [...v.tasks, taskData] };
+              // Reconcile optimistic tasks (with temporary 'task-' ID or matching task_type)
+              const existingIdx = v.tasks.findIndex(
+                t => t.id === taskData.id || t.task_type === taskData.task_type
+              );
+              let newTasks: VehicleTask[];
+              if (existingIdx !== -1) {
+                newTasks = [...v.tasks];
+                const existing = newTasks[existingIdx];
+                newTasks[existingIdx] = {
+                  ...existing,
+                  ...taskData,
+                  is_completed: typeof taskData.is_completed === 'boolean' ? taskData.is_completed : existing.is_completed,
+                  completed_at: taskData.completed_at !== undefined ? taskData.completed_at : existing.completed_at,
+                  completed_by: taskData.completed_by !== undefined ? taskData.completed_by : existing.completed_by,
+                };
+              } else {
+                newTasks = [...v.tasks, taskData];
+              }
+              return { ...v, tasks: deduplicateTasks(newTasks) };
             }
             if (eventType === 'DELETE') {
               return { ...v, tasks: v.tasks.filter(t => t.id !== taskData.id) };
             }
             const updatedTasks = v.tasks.map(t => {
-              if (t.id !== taskData.id) return t;
+              if (t.id !== taskData.id && t.task_type !== taskData.task_type) return t;
               return {
                 ...t,
+                id: taskData.id || t.id,
                 is_completed: typeof taskData.is_completed === 'boolean' ? taskData.is_completed : t.is_completed,
                 completed_at: taskData.completed_at !== undefined ? taskData.completed_at : t.completed_at,
                 completed_by: taskData.completed_by !== undefined ? taskData.completed_by : t.completed_by,
@@ -265,7 +284,7 @@ export const VehicleStateProvider: React.FC<{ children: ReactNode }> = ({ childr
                 task_type: taskData.task_type || t.task_type,
               };
             });
-            return { ...v, tasks: updatedTasks };
+            return { ...v, tasks: deduplicateTasks(updatedTasks) };
           })
         );
       },

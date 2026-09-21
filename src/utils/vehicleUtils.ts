@@ -15,6 +15,41 @@ export const calculateJobSheetProgress = (tasks: VehicleTask[] = []): ProgressRe
   return { completedCount, totalRequired, percent };
 };
 
+/**
+ * Deduplicates vehicle tasks by task_type, prioritizing authoritative DB records (with UUIDs)
+ * over temporary optimistic records (with 'task-' prefix), and preserving completion state.
+ */
+export const deduplicateTasks = (tasks: VehicleTask[] = []): VehicleTask[] => {
+  const map = new Map<string, VehicleTask>();
+  for (const t of tasks) {
+    if (!t || !t.task_type) continue;
+    const existing = map.get(t.task_type);
+    if (!existing) {
+      map.set(t.task_type, t);
+    } else {
+      const isExistingOptimistic = Boolean(existing.id && existing.id.startsWith('task-'));
+      const isNewOptimistic = Boolean(t.id && t.id.startsWith('task-'));
+      if (isExistingOptimistic && !isNewOptimistic) {
+        map.set(t.task_type, {
+          ...t,
+          is_completed: existing.is_completed || t.is_completed,
+          completed_at: t.completed_at || existing.completed_at,
+          completed_by: t.completed_by || existing.completed_by,
+        });
+      } else {
+        map.set(t.task_type, {
+          ...existing,
+          ...t,
+          is_completed: existing.is_completed || t.is_completed,
+          completed_at: existing.completed_at || t.completed_at,
+          completed_by: existing.completed_by || t.completed_by,
+        });
+      }
+    }
+  }
+  return Array.from(map.values());
+};
+
 export const getTaskTypeForBay = (zone: BayZone): TaskType => {
   switch (zone) {
     case "workshop": return "general_service";
