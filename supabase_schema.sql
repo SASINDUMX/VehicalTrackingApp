@@ -1221,6 +1221,7 @@ BEGIN
   WITH vehicle_bay_aggregates AS (
     SELECT
       vehicle_id,
+      MIN(CASE WHEN to_zone = 'workshop' THEN entered_at END) AS ws_first_in,
       COALESCE(SUM(CASE WHEN to_zone = 'workshop' THEN 
         CASE 
           WHEN exited_at IS NOT NULL THEN idle_seconds
@@ -1241,6 +1242,7 @@ BEGIN
 
       COALESCE(SUM(CASE WHEN to_zone = 'workshop' THEN break_seconds END), 0)::INT AS ws_break,
 
+      MIN(CASE WHEN to_zone = 'alignment' THEN entered_at END) AS al_first_in,
       COALESCE(SUM(CASE WHEN to_zone = 'alignment' THEN 
         CASE 
           WHEN exited_at IS NOT NULL THEN idle_seconds
@@ -1261,6 +1263,7 @@ BEGIN
 
       COALESCE(SUM(CASE WHEN to_zone = 'alignment' THEN break_seconds END), 0)::INT AS al_break,
 
+      MIN(CASE WHEN to_zone = 'hoist' THEN entered_at END) AS hs_first_in,
       COALESCE(SUM(CASE WHEN to_zone = 'hoist' THEN 
         CASE 
           WHEN exited_at IS NOT NULL THEN idle_seconds
@@ -1350,12 +1353,15 @@ BEGIN
       'total_break_seconds', COALESCE(vba.total_stage_breaks_sec, fv.total_break_seconds, 0),
       'total_idle_sec', COALESCE(vba.total_idle_sec, 0),
       'total_active_sec', COALESCE(vba.total_active_sec, 0),
+      'workshop_first_in', vba.ws_first_in,
       'workshop_idle', COALESCE(vba.ws_idle, 0),
       'workshop_active', COALESCE(vba.ws_active, 0),
       'workshop_break', COALESCE(vba.ws_break, 0),
+      'alignment_first_in', vba.al_first_in,
       'alignment_idle', COALESCE(vba.al_idle, 0),
       'alignment_active', COALESCE(vba.al_active, 0),
       'alignment_break', COALESCE(vba.al_break, 0),
+      'hoist_first_in', vba.hs_first_in,
       'hoist_idle', COALESCE(vba.hs_idle, 0),
       'hoist_active', COALESCE(vba.hs_active, 0),
       'hoist_break', COALESCE(vba.hs_break, 0),

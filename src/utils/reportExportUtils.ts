@@ -53,12 +53,15 @@ export interface ServerReportRecord {
   total_break_seconds: number;
   total_idle_sec: number;
   total_active_sec: number;
+  workshop_first_in?: string | null;
   workshop_idle: number;
   workshop_active: number;
   workshop_break: number;
+  alignment_first_in?: string | null;
   alignment_idle: number;
   alignment_active: number;
   alignment_break: number;
+  hoist_first_in?: string | null;
   hoist_idle: number;
   hoist_active: number;
   hoist_break: number;
@@ -82,6 +85,18 @@ export const formatDuration = (totalSeconds: number): string => {
     return `${hours}h ${minutes < 10 ? '0' : ''}${minutes}m ${seconds < 10 ? '0' : ''}${seconds}s`;
   }
   return `${minutes}m ${seconds < 10 ? '0' : ''}${seconds}s`;
+};
+
+export const formatFirstInTime = (isoString?: string | null): string => {
+  if (!isoString) return '-';
+  const d = new Date(isoString);
+  if (Number.isNaN(d.getTime())) return '-';
+  return d.toLocaleTimeString('en-US', {
+    timeZone: 'Asia/Colombo',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  });
 };
 
 /**
@@ -374,6 +389,7 @@ export const getStageSecondsForZone = (v: Vehicle, zone: BayZone): number => {
 };
 
 export interface BayTelemetry {
+  firstIn: string | null;
   queueInSec: number;
   activeSec: number;
   queueOutSec: number;
@@ -387,6 +403,17 @@ export interface BayTelemetry {
 
 export const getStageTimingForZone = (v: Vehicle, zone: BayZone): BayTelemetry => {
   const logs = (v.stage_logs || []).filter(l => l.to_zone === zone);
+  let firstIn: string | null = null;
+  if (logs.length > 0) {
+    const validLogs = logs.filter(l => l.entered_at);
+    if (validLogs.length > 0) {
+      const earliest = validLogs.reduce((min, l) =>
+        new Date(l.entered_at!).getTime() < new Date(min.entered_at!).getTime() ? l : min
+      );
+      firstIn = earliest.entered_at;
+    }
+  }
+
   let queueInSec = 0;
   let activeSec = 0;
   let queueOutSec = 0;
@@ -436,7 +463,7 @@ export const getStageTimingForZone = (v: Vehicle, zone: BayZone): BayTelemetry =
   const isDispatched = hasClosedLog || (logs.length > 0 && v.current_zone !== zone);
   const isCompletedAndDispatched = isCompleted && isDispatched;
 
-  return { queueInSec, activeSec, queueOutSec, idleSec, breakSec, totalSec, isDispatched, isCompleted, isCompletedAndDispatched };
+  return { firstIn, queueInSec, activeSec, queueOutSec, idleSec, breakSec, totalSec, isDispatched, isCompleted, isCompletedAndDispatched };
 };
 
 export const getVehicleIdleAndActiveTotals = (v: Vehicle): { totalIdleSec: number; totalActiveSec: number } => {
@@ -518,10 +545,13 @@ export const exportServiceLogsToCSV = (
     'GENERAL SERVICE',
     '',
     '',
+    '',
     'WHEEL ALIGNMENT',
     '',
     '',
+    '',
     'HOIST SERVICE',
+    '',
     '',
     '',
     'AUDIT DETAILS',
@@ -545,14 +575,17 @@ export const exportServiceLogsToCSV = (
     'Total Idle Time',
     'Total Shift Breaks',
     // General Service
+    'First In',
     'Idle',
     'Active',
     'Breaks',
     // Wheel Alignment
+    'First In',
     'Idle',
     'Active',
     'Breaks',
     // Hoist Service
+    'First In',
     'Idle',
     'Active',
     'Breaks',
@@ -582,8 +615,11 @@ export const exportServiceLogsToCSV = (
     let totalActiveSec = 0;
     let totalIdleSec = 0;
     let breakSeconds = 0;
+    let wsFirstIn: string | null = null;
     let wsIdle = 0, wsActive = 0, wsBreak = 0;
+    let alFirstIn: string | null = null;
     let alIdle = 0, alActive = 0, alBreak = 0;
+    let hsFirstIn: string | null = null;
     let hsIdle = 0, hsActive = 0, hsBreak = 0;
     let completedTasksStr = '';
     let techName = v.technician_name || '-';
@@ -622,12 +658,15 @@ export const exportServiceLogsToCSV = (
       totalActiveSec = rec.total_active_sec;
       totalIdleSec = rec.total_idle_sec;
       breakSeconds = rec.total_break_seconds;
+      wsFirstIn = rec.workshop_first_in || null;
       wsIdle = rec.workshop_idle;
       wsActive = rec.workshop_active;
       wsBreak = rec.workshop_break;
+      alFirstIn = rec.alignment_first_in || null;
       alIdle = rec.alignment_idle;
       alActive = rec.alignment_active;
       alBreak = rec.alignment_break;
+      hsFirstIn = rec.hoist_first_in || null;
       hsIdle = rec.hoist_idle;
       hsActive = rec.hoist_active;
       hsBreak = rec.hoist_break;
@@ -656,12 +695,15 @@ export const exportServiceLogsToCSV = (
       const workshopTiming = getStageTimingForZone(v, 'workshop');
       const alignmentTiming = getStageTimingForZone(v, 'alignment');
       const hoistTiming = getStageTimingForZone(v, 'hoist');
+      wsFirstIn = workshopTiming.firstIn;
       wsIdle = workshopTiming.idleSec;
       wsActive = workshopTiming.activeSec;
       wsBreak = workshopTiming.breakSec;
+      alFirstIn = alignmentTiming.firstIn;
       alIdle = alignmentTiming.idleSec;
       alActive = alignmentTiming.activeSec;
       alBreak = alignmentTiming.breakSec;
+      hsFirstIn = hoistTiming.firstIn;
       hsIdle = hoistTiming.idleSec;
       hsActive = hoistTiming.activeSec;
       hsBreak = hoistTiming.breakSec;
@@ -701,15 +743,18 @@ export const exportServiceLogsToCSV = (
       escapeCSV(formatDuration(totalActiveSec)),
       escapeCSV(formatDuration(totalIdleSec)),
       escapeCSV(formatDuration(breakSeconds)),
-      // General Service (Idle | Active | Breaks)
+      // General Service (First In | Idle | Active | Breaks)
+      escapeCSV(formatFirstInTime(wsFirstIn)),
       escapeCSV(formatDuration(wsIdle)),
       escapeCSV(formatDuration(wsActive)),
       escapeCSV(wsBreak > 0 ? formatDuration(wsBreak) : '-'),
-      // Wheel Alignment (Idle | Active | Breaks)
+      // Wheel Alignment (First In | Idle | Active | Breaks)
+      escapeCSV(formatFirstInTime(alFirstIn)),
       escapeCSV(formatDuration(alIdle)),
       escapeCSV(formatDuration(alActive)),
       escapeCSV(alBreak > 0 ? formatDuration(alBreak) : '-'),
-      // Hoist Service (Idle | Active | Breaks)
+      // Hoist Service (First In | Idle | Active | Breaks)
+      escapeCSV(formatFirstInTime(hsFirstIn)),
       escapeCSV(formatDuration(hsIdle)),
       escapeCSV(formatDuration(hsActive)),
       escapeCSV(hsBreak > 0 ? formatDuration(hsBreak) : '-'),
@@ -796,8 +841,11 @@ export const exportServiceLogsToPDF = (
     let totalActiveSec = 0;
     let totalIdleSec = 0;
     let breakSeconds = 0;
+    let wsFirstIn: string | null = null;
     let wsIdle = 0, wsActive = 0, wsBreak = 0;
+    let alFirstIn: string | null = null;
     let alIdle = 0, alActive = 0, alBreak = 0;
+    let hsFirstIn: string | null = null;
     let hsIdle = 0, hsActive = 0, hsBreak = 0;
     let taskProgressStr = '';
     let techName = v.technician_name || null;
@@ -847,12 +895,15 @@ export const exportServiceLogsToPDF = (
       totalActiveSec = rec.total_active_sec;
       totalIdleSec = rec.total_idle_sec;
       breakSeconds = rec.total_break_seconds;
+      wsFirstIn = rec.workshop_first_in || null;
       wsIdle = rec.workshop_idle;
       wsActive = rec.workshop_active;
       wsBreak = rec.workshop_break;
+      alFirstIn = rec.alignment_first_in || null;
       alIdle = rec.alignment_idle;
       alActive = rec.alignment_active;
       alBreak = rec.alignment_break;
+      hsFirstIn = rec.hoist_first_in || null;
       hsIdle = rec.hoist_idle;
       hsActive = rec.hoist_active;
       hsBreak = rec.hoist_break;
@@ -879,12 +930,15 @@ export const exportServiceLogsToPDF = (
       const workshopTiming = getStageTimingForZone(v, 'workshop');
       const alignmentTiming = getStageTimingForZone(v, 'alignment');
       const hoistTiming = getStageTimingForZone(v, 'hoist');
+      wsFirstIn = workshopTiming.firstIn;
       wsIdle = workshopTiming.idleSec;
       wsActive = workshopTiming.activeSec;
       wsBreak = workshopTiming.breakSec;
+      alFirstIn = alignmentTiming.firstIn;
       alIdle = alignmentTiming.idleSec;
       alActive = alignmentTiming.activeSec;
       alBreak = alignmentTiming.breakSec;
+      hsFirstIn = hoistTiming.firstIn;
       hsIdle = hoistTiming.idleSec;
       hsActive = hoistTiming.activeSec;
       hsBreak = hoistTiming.breakSec;
@@ -962,6 +1016,9 @@ export const exportServiceLogsToPDF = (
           ${breakSeconds > 0 ? formatDuration(breakSeconds) : '-'}
         </td>
         <!-- General Workshop -->
+        <td style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #38bdf8; text-align: center; border-bottom: 1px solid #e2e8f0;">
+          ${formatFirstInTime(wsFirstIn)}
+        </td>
         <td style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #f59e0b; text-align: center; border-bottom: 1px solid #e2e8f0;">
           ${wsIdle > 0 ? formatDuration(wsIdle) : '-'}
         </td>
@@ -972,6 +1029,9 @@ export const exportServiceLogsToPDF = (
           ${wsBreak > 0 ? formatDuration(wsBreak) : '-'}
         </td>
         <!-- Wheel Alignment -->
+        <td style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #34d399; text-align: center; border-bottom: 1px solid #e2e8f0;">
+          ${formatFirstInTime(alFirstIn)}
+        </td>
         <td style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #f59e0b; text-align: center; border-bottom: 1px solid #e2e8f0;">
           ${alIdle > 0 ? formatDuration(alIdle) : '-'}
         </td>
@@ -982,6 +1042,9 @@ export const exportServiceLogsToPDF = (
           ${alBreak > 0 ? formatDuration(alBreak) : '-'}
         </td>
         <!-- Hoist Service -->
+        <td style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #fbbf24; text-align: center; border-bottom: 1px solid #e2e8f0;">
+          ${formatFirstInTime(hsFirstIn)}
+        </td>
         <td style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #f59e0b; text-align: center; border-bottom: 1px solid #e2e8f0;">
           ${hsIdle > 0 ? formatDuration(hsIdle) : '-'}
         </td>
@@ -1123,22 +1186,25 @@ export const exportServiceLogsToPDF = (
               <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Net Active</th>
               <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Total Idle</th>
               <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Breaks</th>
-              <th colspan="3" style="padding: 6px; text-align: center; background: #0369a1; border-right: 1px solid #334155;">GENERAL SERVICE</th>
-              <th colspan="3" style="padding: 6px; text-align: center; background: #047857; border-right: 1px solid #334155;">WHEEL ALIGNMENT</th>
-              <th colspan="3" style="padding: 6px; text-align: center; background: #b45309; border-right: 1px solid #334155;">HOIST SERVICE</th>
+              <th colspan="4" style="padding: 6px; text-align: center; background: #0369a1; border-right: 1px solid #334155;">GENERAL SERVICE</th>
+              <th colspan="4" style="padding: 6px; text-align: center; background: #047857; border-right: 1px solid #334155;">WHEEL ALIGNMENT</th>
+              <th colspan="4" style="padding: 6px; text-align: center; background: #b45309; border-right: 1px solid #334155;">HOIST SERVICE</th>
               <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Tasks</th>
               <th rowspan="2" style="padding: 8px 6px; text-align: left;">Remarks / Priority</th>
             </tr>
             <tr style="background: #1e293b; color: #94a3b8;">
               <!-- General Service -->
+              <th style="padding: 4px; text-align: center; font-size: 8.5px; color: #38bdf8; border-right: 1px solid #334155;">First In</th>
               <th style="padding: 4px; text-align: center; font-size: 8.5px; color: #f59e0b; border-right: 1px solid #334155;">Idle</th>
               <th style="padding: 4px; text-align: center; font-size: 8.5px; color: #0284c7; border-right: 1px solid #334155;">Active</th>
               <th style="padding: 4px; text-align: center; font-size: 8.5px; color: #fbbf24; border-right: 1px solid #334155;">Breaks</th>
               <!-- Wheel Alignment -->
+              <th style="padding: 4px; text-align: center; font-size: 8.5px; color: #34d399; border-right: 1px solid #334155;">First In</th>
               <th style="padding: 4px; text-align: center; font-size: 8.5px; color: #f59e0b; border-right: 1px solid #334155;">Idle</th>
               <th style="padding: 4px; text-align: center; font-size: 8.5px; color: #0284c7; border-right: 1px solid #334155;">Active</th>
               <th style="padding: 4px; text-align: center; font-size: 8.5px; color: #fbbf24; border-right: 1px solid #334155;">Breaks</th>
               <!-- Hoist Service -->
+              <th style="padding: 4px; text-align: center; font-size: 8.5px; color: #fbbf24; border-right: 1px solid #334155;">First In</th>
               <th style="padding: 4px; text-align: center; font-size: 8.5px; color: #f59e0b; border-right: 1px solid #334155;">Idle</th>
               <th style="padding: 4px; text-align: center; font-size: 8.5px; color: #0284c7; border-right: 1px solid #334155;">Active</th>
               <th style="padding: 4px; text-align: center; font-size: 8.5px; color: #fbbf24; border-right: 1px solid #334155;">Breaks</th>

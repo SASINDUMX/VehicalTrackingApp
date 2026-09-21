@@ -1,0 +1,290 @@
+-- ==============================================================================
+-- UPDATE SERVICE REPORT DATA RPC (Adding First In Columns for Bays)
+-- Run this in your Supabase SQL Editor: https://supabase.com/dashboard/project/eeoyfrhmgarocecphcky/sql
+-- ==============================================================================
+
+CREATE OR REPLACE FUNCTION public.get_service_report_data(
+  p_start_date TIMESTAMPTZ DEFAULT NULL,
+  p_end_date TIMESTAMPTZ DEFAULT NULL,
+  p_branch_id VARCHAR(50) DEFAULT NULL,
+  p_status TEXT DEFAULT 'all'
+)
+RETURNS JSONB AS $$
+DECLARE
+  v_summary JSONB;
+  v_workshop_bay JSONB;
+  v_alignment_bay JSONB;
+  v_hoist_bay JSONB;
+  v_records JSONB;
+BEGIN
+  -- 1. Create temporary filtered vehicles table
+  CREATE TEMP TABLE temp_filtered_vehicles ON COMMIT DROP AS
+  SELECT 
+    v.id,
+    v.vehicle_no,
+    v.status,
+    v.current_zone,
+    v.is_finished,
+    v.is_paused,
+    v.paused_at,
+    v.pause_reason,
+    v.is_booking,
+    v.has_additional_repairs,
+    v.is_urgent,
+    v.urgent_note,
+    v.technician_name,
+    v.assigned_tech,
+    v.remarks,
+    v.intake_at,
+    v.created_at,
+    COALESCE(v.effective_completed_at, v.completed_at) AS effective_completed_at,
+    v.gross_tat_seconds,
+    v.net_tat_seconds,
+    v.total_break_seconds
+  FROM public.vehicles v
+  WHERE (p_branch_id IS NULL OR v.branch_id = p_branch_id)
+    AND (p_start_date IS NULL OR v.intake_at >= p_start_date)
+    AND (p_end_date IS NULL OR v.intake_at <= p_end_date)
+    AND (
+      p_status = 'all'
+      OR (p_status = 'completed' AND (v.is_finished = TRUE OR v.current_zone = 'inspection' OR v.effective_completed_at IS NOT NULL))
+      OR (p_status = 'in_progress' AND v.is_finished = FALSE AND v.current_zone != 'inspection' AND v.effective_completed_at IS NULL)
+    );
+
+  -- 2. Summary Counts and Breakdown
+  SELECT jsonb_build_object(
+    'totalVehicles', COUNT(*)::INT,
+    'completedCount', COUNT(*) FILTER (WHERE is_finished = TRUE OR current_zone = 'inspection' OR effective_completed_at IS NOT NULL)::INT,
+    'inProgressCount', COUNT(*) FILTER (WHERE is_finished = FALSE AND current_zone != 'inspection' AND effective_completed_at IS NULL)::INT,
+    'bookingCount', COUNT(*) FILTER (WHERE is_booking = TRUE)::INT,
+    'additionalRepairsCount', COUNT(*) FILTER (WHERE has_additional_repairs = TRUE)::INT,
+    'onHoldCount', COUNT(*) FILTER (WHERE is_paused = TRUE OR status = 'on_hold')::INT,
+    'totalBreakSeconds', COALESCE(SUM(total_break_seconds), 0)::INT
+  ) INTO v_summary
+  FROM temp_filtered_vehicles;
+
+  -- 3. Bay Velocities (Benchmark averages exclude vehicles with additional repairs or on hold)
+  WITH bay_stats AS (
+    SELECT
+      sl.to_zone,
+      COUNT(DISTINCT sl.vehicle_id)::INT AS vehicle_count,
+      COALESCE(SUM(sl.active_seconds), 0)::INT AS total_active_sec,
+      COALESCE(SUM(sl.idle_seconds), 0)::INT AS total_idle_sec,
+      COALESCE(SUM(sl.duration_seconds), 0)::INT AS total_stage_sec
+    FROM public.stage_logs sl
+    INNER JOIN temp_filtered_vehicles fv ON fv.id = sl.vehicle_id
+    WHERE sl.exited_at IS NOT NULL
+      AND fv.has_additional_repairs = FALSE
+      AND fv.is_paused = FALSE
+      AND fv.status != 'on_hold'
+      AND sl.to_zone IN ('workshop', 'alignment', 'hoist')
+    GROUP BY sl.to_zone
+  )
+  SELECT
+    COALESCE((
+      SELECT jsonb_build_object(
+        'zone', 'workshop',
+        'name', 'General Service',
+        'vehicleCount', vehicle_count,
+        'totalActiveSec', total_active_sec,
+        'avgActiveSec', CASE WHEN vehicle_count > 0 THEN ROUND(total_active_sec::NUMERIC / vehicle_count) ELSE 0 END,
+        'totalIdleSec', total_idle_sec,
+        'avgIdleSec', CASE WHEN vehicle_count > 0 THEN ROUND(total_idle_sec::NUMERIC / vehicle_count) ELSE 0 END,
+        'totalStageSec', total_stage_sec,
+        'avgStageSec', CASE WHEN vehicle_count > 0 THEN ROUND(total_stage_sec::NUMERIC / vehicle_count) ELSE 0 END
+      ) FROM bay_stats WHERE to_zone = 'workshop'
+    ), jsonb_build_object('zone', 'workshop', 'name', 'General Service', 'vehicleCount', 0, 'totalActiveSec', 0, 'avgActiveSec', 0, 'totalIdleSec', 0, 'avgIdleSec', 0, 'totalStageSec', 0, 'avgStageSec', 0)),
+    COALESCE((
+      SELECT jsonb_build_object(
+        'zone', 'alignment',
+        'name', 'Wheel Alignment',
+        'vehicleCount', vehicle_count,
+        'totalActiveSec', total_active_sec,
+        'avgActiveSec', CASE WHEN vehicle_count > 0 THEN ROUND(total_active_sec::NUMERIC / vehicle_count) ELSE 0 END,
+        'totalIdleSec', total_idle_sec,
+        'avgIdleSec', CASE WHEN vehicle_count > 0 THEN ROUND(total_idle_sec::NUMERIC / vehicle_count) ELSE 0 END,
+        'totalStageSec', total_stage_sec,
+        'avgStageSec', CASE WHEN vehicle_count > 0 THEN ROUND(total_stage_sec::NUMERIC / vehicle_count) ELSE 0 END
+      ) FROM bay_stats WHERE to_zone = 'alignment'
+    ), jsonb_build_object('zone', 'alignment', 'name', 'Wheel Alignment', 'vehicleCount', 0, 'totalActiveSec', 0, 'avgActiveSec', 0, 'totalIdleSec', 0, 'avgIdleSec', 0, 'totalStageSec', 0, 'avgStageSec', 0)),
+    COALESCE((
+      SELECT jsonb_build_object(
+        'zone', 'hoist',
+        'name', 'Hoist Service',
+        'vehicleCount', vehicle_count,
+        'totalActiveSec', total_active_sec,
+        'avgActiveSec', CASE WHEN vehicle_count > 0 THEN ROUND(total_active_sec::NUMERIC / vehicle_count) ELSE 0 END,
+        'totalIdleSec', total_idle_sec,
+        'avgIdleSec', CASE WHEN vehicle_count > 0 THEN ROUND(total_idle_sec::NUMERIC / vehicle_count) ELSE 0 END,
+        'totalStageSec', total_stage_sec,
+        'avgStageSec', CASE WHEN vehicle_count > 0 THEN ROUND(total_stage_sec::NUMERIC / vehicle_count) ELSE 0 END
+      ) FROM bay_stats WHERE to_zone = 'hoist'
+    ), jsonb_build_object('zone', 'hoist', 'name', 'Hoist Service', 'vehicleCount', 0, 'totalActiveSec', 0, 'avgActiveSec', 0, 'totalIdleSec', 0, 'avgIdleSec', 0, 'totalStageSec', 0, 'avgStageSec', 0))
+  INTO v_workshop_bay, v_alignment_bay, v_hoist_bay;
+
+  -- 4. Pre-Calculated Vehicle Records with Dynamic Bay Telemetry Aggregations
+  WITH vehicle_bay_aggregates AS (
+    SELECT
+      vehicle_id,
+      MIN(CASE WHEN to_zone = 'workshop' THEN entered_at END) AS ws_first_in,
+      COALESCE(SUM(CASE WHEN to_zone = 'workshop' THEN 
+        CASE 
+          WHEN exited_at IS NOT NULL THEN idle_seconds
+          WHEN work_started_at IS NULL THEN GREATEST(0, EXTRACT(EPOCH FROM (NOW() - entered_at))::INT)
+          WHEN work_completed_at IS NOT NULL THEN GREATEST(0, EXTRACT(EPOCH FROM (work_started_at - entered_at))::INT) + GREATEST(0, EXTRACT(EPOCH FROM (NOW() - work_completed_at))::INT)
+          ELSE GREATEST(0, EXTRACT(EPOCH FROM (work_started_at - entered_at))::INT)
+        END 
+      END), 0)::INT AS ws_idle,
+
+      COALESCE(SUM(CASE WHEN to_zone = 'workshop' THEN 
+        CASE 
+          WHEN exited_at IS NOT NULL THEN active_seconds
+          WHEN work_started_at IS NULL THEN 0
+          WHEN work_completed_at IS NOT NULL THEN GREATEST(0, EXTRACT(EPOCH FROM (work_completed_at - work_started_at))::INT)
+          ELSE GREATEST(0, EXTRACT(EPOCH FROM (NOW() - work_started_at))::INT)
+        END 
+      END), 0)::INT AS ws_active,
+
+      COALESCE(SUM(CASE WHEN to_zone = 'workshop' THEN break_seconds END), 0)::INT AS ws_break,
+
+      MIN(CASE WHEN to_zone = 'alignment' THEN entered_at END) AS al_first_in,
+      COALESCE(SUM(CASE WHEN to_zone = 'alignment' THEN 
+        CASE 
+          WHEN exited_at IS NOT NULL THEN idle_seconds
+          WHEN work_started_at IS NULL THEN GREATEST(0, EXTRACT(EPOCH FROM (NOW() - entered_at))::INT)
+          WHEN work_completed_at IS NOT NULL THEN GREATEST(0, EXTRACT(EPOCH FROM (work_started_at - entered_at))::INT) + GREATEST(0, EXTRACT(EPOCH FROM (NOW() - work_completed_at))::INT)
+          ELSE GREATEST(0, EXTRACT(EPOCH FROM (work_started_at - entered_at))::INT)
+        END 
+      END), 0)::INT AS al_idle,
+
+      COALESCE(SUM(CASE WHEN to_zone = 'alignment' THEN 
+        CASE 
+          WHEN exited_at IS NOT NULL THEN active_seconds
+          WHEN work_started_at IS NULL THEN 0
+          WHEN work_completed_at IS NOT NULL THEN GREATEST(0, EXTRACT(EPOCH FROM (work_completed_at - work_started_at))::INT)
+          ELSE GREATEST(0, EXTRACT(EPOCH FROM (NOW() - work_started_at))::INT)
+        END 
+      END), 0)::INT AS al_active,
+
+      COALESCE(SUM(CASE WHEN to_zone = 'alignment' THEN break_seconds END), 0)::INT AS al_break,
+
+      MIN(CASE WHEN to_zone = 'hoist' THEN entered_at END) AS hs_first_in,
+      COALESCE(SUM(CASE WHEN to_zone = 'hoist' THEN 
+        CASE 
+          WHEN exited_at IS NOT NULL THEN idle_seconds
+          WHEN work_started_at IS NULL THEN GREATEST(0, EXTRACT(EPOCH FROM (NOW() - entered_at))::INT)
+          WHEN work_completed_at IS NOT NULL THEN GREATEST(0, EXTRACT(EPOCH FROM (work_started_at - entered_at))::INT) + GREATEST(0, EXTRACT(EPOCH FROM (NOW() - work_completed_at))::INT)
+          ELSE GREATEST(0, EXTRACT(EPOCH FROM (work_started_at - entered_at))::INT)
+        END 
+      END), 0)::INT AS hs_idle,
+
+      COALESCE(SUM(CASE WHEN to_zone = 'hoist' THEN 
+        CASE 
+          WHEN exited_at IS NOT NULL THEN active_seconds
+          WHEN work_started_at IS NULL THEN 0
+          WHEN work_completed_at IS NOT NULL THEN GREATEST(0, EXTRACT(EPOCH FROM (work_completed_at - work_started_at))::INT)
+          ELSE GREATEST(0, EXTRACT(EPOCH FROM (NOW() - work_started_at))::INT)
+        END 
+      END), 0)::INT AS hs_active,
+
+      COALESCE(SUM(CASE WHEN to_zone = 'hoist' THEN break_seconds END), 0)::INT AS hs_break,
+
+      COALESCE(SUM(
+        CASE 
+          WHEN exited_at IS NOT NULL THEN idle_seconds
+          WHEN work_started_at IS NULL THEN GREATEST(0, EXTRACT(EPOCH FROM (NOW() - entered_at))::INT)
+          WHEN work_completed_at IS NOT NULL THEN GREATEST(0, EXTRACT(EPOCH FROM (work_started_at - entered_at))::INT) + GREATEST(0, EXTRACT(EPOCH FROM (NOW() - work_completed_at))::INT)
+          ELSE GREATEST(0, EXTRACT(EPOCH FROM (work_started_at - entered_at))::INT)
+        END
+      ), 0)::INT AS total_idle_sec,
+
+      COALESCE(SUM(
+        CASE 
+          WHEN exited_at IS NOT NULL THEN active_seconds
+          WHEN work_started_at IS NULL THEN 0
+          WHEN work_completed_at IS NOT NULL THEN GREATEST(0, EXTRACT(EPOCH FROM (work_completed_at - work_started_at))::INT)
+          ELSE GREATEST(0, EXTRACT(EPOCH FROM (NOW() - work_started_at))::INT)
+        END
+      ), 0)::INT AS total_active_sec,
+
+      COALESCE(SUM(break_seconds), 0)::INT AS total_stage_breaks_sec
+    FROM public.stage_logs
+    WHERE vehicle_id IN (SELECT id FROM temp_filtered_vehicles)
+      AND to_zone IN ('workshop', 'alignment', 'hoist')
+    GROUP BY vehicle_id
+  ),
+  task_summaries AS (
+    SELECT
+      vehicle_id,
+      COUNT(*) FILTER (WHERE is_completed = TRUE)::INT AS tasks_completed_count,
+      COUNT(*)::INT AS tasks_total_count,
+      COALESCE(
+        string_agg(
+          task_name || ' (by ' || COALESCE(completed_by, 'Tech') || ')', 
+          '; ' ORDER BY completed_at
+        ) FILTER (WHERE is_completed = TRUE),
+        'None'
+      ) AS completed_tasks_str
+    FROM public.vehicle_tasks
+    WHERE vehicle_id IN (SELECT id FROM temp_filtered_vehicles)
+    GROUP BY vehicle_id
+  )
+  SELECT jsonb_agg(
+    jsonb_build_object(
+      'id', fv.id,
+      'vehicle_no', fv.vehicle_no,
+      'status', fv.status,
+      'current_zone', fv.current_zone,
+      'is_finished', fv.is_finished,
+      'is_effective_done', (fv.is_finished = TRUE OR fv.current_zone = 'inspection' OR fv.effective_completed_at IS NOT NULL),
+      'is_paused', COALESCE(fv.is_paused, FALSE),
+      'pause_reason', fv.pause_reason,
+      'is_on_hold', (COALESCE(fv.is_paused, FALSE) = TRUE OR fv.status = 'on_hold'),
+      'is_booking', fv.is_booking,
+      'has_additional_repairs', fv.has_additional_repairs,
+      'is_urgent', COALESCE(fv.is_urgent, FALSE),
+      'urgent_note', fv.urgent_note,
+      'technician_name', fv.technician_name,
+      'assigned_tech', fv.assigned_tech,
+      'remarks', fv.remarks,
+      'intake_at', fv.intake_at,
+      'created_at', fv.created_at,
+      'effective_completed_at', fv.effective_completed_at,
+      'gross_tat_seconds', COALESCE(
+        NULLIF(fv.gross_tat_seconds, 0),
+        GREATEST(0, EXTRACT(EPOCH FROM (COALESCE(fv.effective_completed_at, NOW()) - COALESCE(fv.intake_at, fv.created_at)))::INT)
+      ),
+      'net_tat_seconds', COALESCE(fv.net_tat_seconds, 0),
+      'total_break_seconds', COALESCE(vba.total_stage_breaks_sec, fv.total_break_seconds, 0),
+      'total_idle_sec', COALESCE(vba.total_idle_sec, 0),
+      'total_active_sec', COALESCE(vba.total_active_sec, 0),
+      'workshop_first_in', vba.ws_first_in,
+      'workshop_idle', COALESCE(vba.ws_idle, 0),
+      'workshop_active', COALESCE(vba.ws_active, 0),
+      'workshop_break', COALESCE(vba.ws_break, 0),
+      'alignment_first_in', vba.al_first_in,
+      'alignment_idle', COALESCE(vba.al_idle, 0),
+      'alignment_active', COALESCE(vba.al_active, 0),
+      'alignment_break', COALESCE(vba.al_break, 0),
+      'hoist_first_in', vba.hs_first_in,
+      'hoist_idle', COALESCE(vba.hs_idle, 0),
+      'hoist_active', COALESCE(vba.hs_active, 0),
+      'hoist_break', COALESCE(vba.hs_break, 0),
+      'completed_tasks_str', COALESCE(ts.completed_tasks_str, 'None'),
+      'tasks_completed_count', COALESCE(ts.tasks_completed_count, 0),
+      'tasks_total_count', COALESCE(ts.tasks_total_count, 0)
+    ) ORDER BY fv.intake_at DESC
+  ) INTO v_records
+  FROM temp_filtered_vehicles fv
+  LEFT JOIN vehicle_bay_aggregates vba ON vba.vehicle_id = fv.id
+  LEFT JOIN task_summaries ts ON ts.vehicle_id = fv.id;
+
+  RETURN jsonb_build_object(
+    'summary', v_summary,
+    'workshopBay', v_workshop_bay,
+    'alignmentBay', v_alignment_bay,
+    'hoistBay', v_hoist_bay,
+    'records', COALESCE(v_records, '[]'::jsonb)
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
