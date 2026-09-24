@@ -13,9 +13,18 @@ export const useAdvisorInspection = () => {
   };
 
   const readyVehicles = useMemo(() => {
+    const slDateStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Colombo' });
+    const startOfToday = new Date(`${slDateStr}T00:00:00+05:30`);
+
     return vehicles.filter(v => {
       const isReady = v.current_zone === "inspection" && !v.is_finished;
-      return isReady && matchesVehicleSearch(v.vehicle_no, searchQuery);
+      if (!isReady) return false;
+      const d = new Date(v.intake_at || v.created_at);
+      // Auto-clear: previous-day inspection vehicles are automatically rolled over
+      if (!Number.isNaN(d.getTime()) && d < startOfToday) {
+        return false;
+      }
+      return matchesVehicleSearch(v.vehicle_no, searchQuery);
     });
   }, [vehicles, searchQuery]);
 

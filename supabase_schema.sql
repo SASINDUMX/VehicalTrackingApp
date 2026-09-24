@@ -725,7 +725,59 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- C. Transfer Vehicle Zone (With Offline Timestamp & Inspection Re-entry Invalidation)
+-- B.1 Shift Break Overlap Deduction Function (Asia/Colombo UTC+05:30)
+CREATE OR REPLACE FUNCTION public.calculate_break_overlap_seconds(p_start TIMESTAMPTZ, p_end TIMESTAMPTZ)
+RETURNS INT AS $$
+DECLARE
+  v_total INT := 0;
+  v_day_start DATE;
+  v_day_end DATE;
+  v_curr_day DATE;
+  v_break_start TIMESTAMPTZ;
+  v_break_end TIMESTAMPTZ;
+  v_overlap_start TIMESTAMPTZ;
+  v_overlap_end TIMESTAMPTZ;
+BEGIN
+  IF p_start IS NULL OR p_end IS NULL OR p_end <= p_start THEN RETURN 0; END IF;
+  v_day_start := (p_start AT TIME ZONE 'Asia/Colombo')::DATE;
+  v_day_end := (p_end AT TIME ZONE 'Asia/Colombo')::DATE;
+  v_curr_day := v_day_start;
+
+  WHILE v_curr_day <= v_day_end LOOP
+    -- Morning Tea: 09:45 - 10:00
+    v_break_start := (v_curr_day || ' 09:45:00')::TIMESTAMP AT TIME ZONE 'Asia/Colombo';
+    v_break_end := (v_curr_day || ' 10:00:00')::TIMESTAMP AT TIME ZONE 'Asia/Colombo';
+    v_overlap_start := GREATEST(p_start, v_break_start);
+    v_overlap_end := LEAST(p_end, v_break_end);
+    IF v_overlap_end > v_overlap_start THEN
+      v_total := v_total + EXTRACT(EPOCH FROM (v_overlap_end - v_overlap_start))::INT;
+    END IF;
+
+    -- Lunch Break: 12:30 - 13:00
+    v_break_start := (v_curr_day || ' 12:30:00')::TIMESTAMP AT TIME ZONE 'Asia/Colombo';
+    v_break_end := (v_curr_day || ' 13:00:00')::TIMESTAMP AT TIME ZONE 'Asia/Colombo';
+    v_overlap_start := GREATEST(p_start, v_break_start);
+    v_overlap_end := LEAST(p_end, v_break_end);
+    IF v_overlap_end > v_overlap_start THEN
+      v_total := v_total + EXTRACT(EPOCH FROM (v_overlap_end - v_overlap_start))::INT;
+    END IF;
+
+    -- Evening Tea: 14:45 - 15:00
+    v_break_start := (v_curr_day || ' 14:45:00')::TIMESTAMP AT TIME ZONE 'Asia/Colombo';
+    v_break_end := (v_curr_day || ' 15:00:00')::TIMESTAMP AT TIME ZONE 'Asia/Colombo';
+    v_overlap_start := GREATEST(p_start, v_break_start);
+    v_overlap_end := LEAST(p_end, v_break_end);
+    IF v_overlap_end > v_overlap_start THEN
+      v_total := v_total + EXTRACT(EPOCH FROM (v_overlap_end - v_overlap_start))::INT;
+    END IF;
+
+    v_curr_day := v_curr_day + INTERVAL '1 day';
+  END LOOP;
+  RETURN v_total;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+-- C. Transfer Vehicle Zone (With Offline Timestamp, Break Calculation & Inspection Invalidation)
 CREATE OR REPLACE FUNCTION public.transfer_vehicle_zone(
   p_vehicle_id UUID,
   p_to_zone VARCHAR(50),
@@ -741,6 +793,7 @@ DECLARE
   v_duration INT;
   v_idle INT;
   v_active INT;
+  v_break INT;
   v_next_visit INT;
   v_now TIMESTAMPTZ := NOW();
 BEGIN
@@ -762,6 +815,7 @@ BEGIN
 
   IF v_old_log_id IS NOT NULL THEN
     v_duration := GREATEST(0, EXTRACT(EPOCH FROM (v_now - v_old_entered))::INT);
+    v_break := public.calculate_break_overlap_seconds(v_old_entered, v_now);
     IF v_old_started IS NOT NULL THEN
       IF v_old_completed IS NOT NULL THEN
         v_active := GREATEST(0, EXTRACT(EPOCH FROM (v_old_completed - v_old_started))::INT);
@@ -781,6 +835,7 @@ BEGIN
         duration_seconds = v_duration,
         idle_seconds = v_idle,
         active_seconds = v_active,
+        break_seconds = v_break,
         is_dispatched = TRUE
     WHERE id = v_old_log_id;
   END IF;
@@ -837,8 +892,11 @@ RETURNS JSONB AS $$
 DECLARE
   v_old_log_id UUID;
   v_old_entered TIMESTAMPTZ;
+  v_intake_at TIMESTAMPTZ;
   v_now TIMESTAMPTZ := NOW();
   v_duration INT;
+  v_break INT;
+  v_total_break INT;
 BEGIN
   SELECT id, entered_at INTO v_old_log_id, v_old_entered
   FROM public.stage_logs
@@ -848,19 +906,28 @@ BEGIN
 
   IF v_old_log_id IS NOT NULL THEN
     v_duration := GREATEST(0, EXTRACT(EPOCH FROM (v_now - v_old_entered))::INT);
+    v_break := public.calculate_break_overlap_seconds(v_old_entered, v_now);
     UPDATE public.stage_logs
     SET exited_at = v_now,
         duration_seconds = v_duration,
         idle_seconds = v_duration,
+        break_seconds = v_break,
         is_dispatched = TRUE
     WHERE id = v_old_log_id;
   END IF;
+
+  SELECT COALESCE(intake_at, created_at) INTO v_intake_at
+  FROM public.vehicles
+  WHERE id = p_vehicle_id;
+
+  v_total_break := public.calculate_break_overlap_seconds(COALESCE(v_intake_at, v_now), v_now);
 
   UPDATE public.vehicles
   SET current_zone = 'completed',
       is_finished = TRUE,
       completed_at = v_now,
       effective_completed_at = COALESCE(effective_completed_at, v_now),
+      total_break_seconds = v_total_break,
       status = 'finished',
       is_paused = FALSE,
       paused_at = NULL,
@@ -918,7 +985,7 @@ RETURNS JSONB AS $$
 DECLARE
   v_completed_count INT := 0;
   v_deleted_count INT := 0;
-  v_today_start TIMESTAMPTZ := DATE_TRUNC('day', NOW());
+  v_today_start TIMESTAMPTZ := (DATE_TRUNC('day', NOW() AT TIME ZONE 'Asia/Colombo') AT TIME ZONE 'Asia/Colombo');
 BEGIN
   -- 1. Complete stale vehicles sitting in inspection from previous days
   WITH completed_inspection AS (
@@ -928,11 +995,13 @@ BEGIN
         completed_at = NOW(),
         effective_completed_at = COALESCE(effective_completed_at, NOW()),
         status = 'finished',
+        is_paused = FALSE,
+        paused_at = NULL,
         updated_at = NOW()
     WHERE is_finished = FALSE
       AND current_zone = 'inspection'
-      AND branch_id = p_branch_id
-      AND intake_at < v_today_start
+      AND (p_branch_id IS NULL OR branch_id = p_branch_id)
+      AND COALESCE(intake_at, created_at) < v_today_start
     RETURNING id
   )
   SELECT COUNT(*) INTO v_completed_count FROM completed_inspection;
@@ -945,16 +1014,20 @@ BEGIN
       is_dispatched = TRUE
   WHERE vehicle_id IN (
     SELECT id FROM public.vehicles
-    WHERE is_finished = TRUE AND current_zone = 'completed' AND intake_at < v_today_start
+    WHERE is_finished = TRUE AND current_zone = 'completed' AND COALESCE(intake_at, created_at) < v_today_start
   ) AND exited_at IS NULL;
 
   -- 2. Delete out-of-scope unfinished vehicles in working bays from previous days
+  -- Protect vehicles that are paused, on_hold, or have additional repairs
   WITH deleted_bay AS (
     DELETE FROM public.vehicles
     WHERE is_finished = FALSE
       AND current_zone != 'inspection'
-      AND branch_id = p_branch_id
-      AND intake_at < v_today_start
+      AND (p_branch_id IS NULL OR branch_id = p_branch_id)
+      AND is_paused = FALSE
+      AND status != 'on_hold'
+      AND has_additional_repairs = FALSE
+      AND COALESCE(intake_at, created_at) < v_today_start
     RETURNING id
   )
   SELECT COUNT(*) INTO v_deleted_count FROM deleted_bay;
@@ -1011,7 +1084,12 @@ BEGIN
     COUNT(*) FILTER (WHERE is_finished = FALSE AND current_zone != 'inspection' AND effective_completed_at IS NULL),
     COUNT(*) FILTER (WHERE is_booking = TRUE),
     COUNT(*) FILTER (WHERE has_additional_repairs = TRUE),
-    COALESCE(SUM(total_break_seconds), 0)
+    COALESCE(SUM(
+      CASE 
+        WHEN total_break_seconds > 0 THEN total_break_seconds
+        ELSE public.calculate_break_overlap_seconds(COALESCE(intake_at, created_at), COALESCE(effective_completed_at, completed_at, NOW()))
+      END
+    ), 0)
   INTO 
     v_total_vehicles, v_completed_count, v_in_progress_count,
     v_booking_count, v_additional_repairs_count, v_total_break_sec
@@ -1154,7 +1232,12 @@ BEGIN
     'bookingCount', COUNT(*) FILTER (WHERE is_booking = TRUE)::INT,
     'additionalRepairsCount', COUNT(*) FILTER (WHERE has_additional_repairs = TRUE)::INT,
     'onHoldCount', COUNT(*) FILTER (WHERE is_paused = TRUE OR status = 'on_hold')::INT,
-    'totalBreakSeconds', COALESCE(SUM(total_break_seconds), 0)::INT
+    'totalBreakSeconds', COALESCE(SUM(
+      CASE 
+        WHEN total_break_seconds > 0 THEN total_break_seconds
+        ELSE public.calculate_break_overlap_seconds(COALESCE(intake_at, created_at), COALESCE(effective_completed_at, NOW()))
+      END
+    ), 0)::INT
   ) INTO v_summary
   FROM temp_filtered_vehicles;
 
@@ -1240,7 +1323,12 @@ BEGIN
         END 
       END), 0)::INT AS ws_active,
 
-      COALESCE(SUM(CASE WHEN to_zone = 'workshop' THEN break_seconds END), 0)::INT AS ws_break,
+      COALESCE(SUM(CASE WHEN to_zone = 'workshop' THEN 
+        CASE 
+          WHEN break_seconds > 0 THEN break_seconds 
+          ELSE public.calculate_break_overlap_seconds(entered_at, COALESCE(exited_at, NOW()))
+        END 
+      END), 0)::INT AS ws_break,
 
       MIN(CASE WHEN to_zone = 'alignment' THEN entered_at END) AS al_first_in,
       COALESCE(SUM(CASE WHEN to_zone = 'alignment' THEN 
@@ -1261,7 +1349,12 @@ BEGIN
         END 
       END), 0)::INT AS al_active,
 
-      COALESCE(SUM(CASE WHEN to_zone = 'alignment' THEN break_seconds END), 0)::INT AS al_break,
+      COALESCE(SUM(CASE WHEN to_zone = 'alignment' THEN 
+        CASE 
+          WHEN break_seconds > 0 THEN break_seconds 
+          ELSE public.calculate_break_overlap_seconds(entered_at, COALESCE(exited_at, NOW()))
+        END 
+      END), 0)::INT AS al_break,
 
       MIN(CASE WHEN to_zone = 'hoist' THEN entered_at END) AS hs_first_in,
       COALESCE(SUM(CASE WHEN to_zone = 'hoist' THEN 
@@ -1282,7 +1375,12 @@ BEGIN
         END 
       END), 0)::INT AS hs_active,
 
-      COALESCE(SUM(CASE WHEN to_zone = 'hoist' THEN break_seconds END), 0)::INT AS hs_break,
+      COALESCE(SUM(CASE WHEN to_zone = 'hoist' THEN 
+        CASE 
+          WHEN break_seconds > 0 THEN break_seconds 
+          ELSE public.calculate_break_overlap_seconds(entered_at, COALESCE(exited_at, NOW()))
+        END 
+      END), 0)::INT AS hs_break,
 
       COALESCE(SUM(
         CASE 
@@ -1302,7 +1400,12 @@ BEGIN
         END
       ), 0)::INT AS total_active_sec,
 
-      COALESCE(SUM(break_seconds), 0)::INT AS total_stage_breaks_sec
+      COALESCE(SUM(
+        CASE 
+          WHEN break_seconds > 0 THEN break_seconds 
+          ELSE public.calculate_break_overlap_seconds(entered_at, COALESCE(exited_at, NOW()))
+        END
+      ), 0)::INT AS total_stage_breaks_sec
     FROM public.stage_logs
     WHERE vehicle_id IN (SELECT id FROM temp_filtered_vehicles)
       AND to_zone IN ('workshop', 'alignment', 'hoist')
@@ -1350,7 +1453,14 @@ BEGIN
         GREATEST(0, EXTRACT(EPOCH FROM (COALESCE(fv.effective_completed_at, NOW()) - COALESCE(fv.intake_at, fv.created_at)))::INT)
       ),
       'net_tat_seconds', COALESCE(fv.net_tat_seconds, 0),
-      'total_break_seconds', COALESCE(vba.total_stage_breaks_sec, fv.total_break_seconds, 0),
+      'total_break_seconds', COALESCE(
+        NULLIF(vba.total_stage_breaks_sec, 0),
+        CASE 
+          WHEN fv.total_break_seconds > 0 THEN fv.total_break_seconds
+          ELSE public.calculate_break_overlap_seconds(COALESCE(fv.intake_at, fv.created_at), COALESCE(fv.effective_completed_at, NOW()))
+        END,
+        0
+      ),
       'total_idle_sec', COALESCE(vba.total_idle_sec, 0),
       'total_active_sec', COALESCE(vba.total_active_sec, 0),
       'workshop_first_in', vba.ws_first_in,
