@@ -272,19 +272,23 @@ export const ReportsTableView: React.FC<ReportsTableViewProps> = ({
                       );
                 activeWorkSec = rec.total_active_sec;
                 totalIdleSec = rec.total_idle_sec;
-                breakSeconds = rec.total_break_seconds;
                 wsFirstIn = rec.workshop_first_in || null;
                 wsIdle = rec.workshop_idle;
                 wsActive = rec.workshop_active;
-                wsBreak = rec.workshop_break;
+                wsBreak = rec.workshop_break > 0 ? rec.workshop_break : (v.stage_logs ? getStageTimingForZone(v, 'workshop').breakSec : 0);
                 alFirstIn = rec.alignment_first_in || null;
                 alIdle = rec.alignment_idle;
                 alActive = rec.alignment_active;
-                alBreak = rec.alignment_break;
+                alBreak = rec.alignment_break > 0 ? rec.alignment_break : (v.stage_logs ? getStageTimingForZone(v, 'alignment').breakSec : 0);
                 hsFirstIn = rec.hoist_first_in || null;
                 hsIdle = rec.hoist_idle;
                 hsActive = rec.hoist_active;
-                hsBreak = rec.hoist_break;
+                hsBreak = rec.hoist_break > 0 ? rec.hoist_break : (v.stage_logs ? getStageTimingForZone(v, 'hoist').breakSec : 0);
+                breakSeconds = rec.total_break_seconds > 0
+                  ? rec.total_break_seconds
+                  : (wsBreak + alBreak + hsBreak > 0
+                      ? (wsBreak + alBreak + hsBreak)
+                      : getBreakOverlap(start, rec.effective_completed_at ? new Date(rec.effective_completed_at) : new Date()).breakSeconds);
 
                 if (rec.tasks_total_count !== undefined && rec.tasks_total_count > 0) {
                   taskSummaryDisplay = `${rec.tasks_completed_count ?? 0}/${rec.tasks_total_count}`;

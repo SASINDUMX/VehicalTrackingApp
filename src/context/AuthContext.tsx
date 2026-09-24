@@ -114,36 +114,70 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return;
     }
 
+    let isMounted = true;
+    const safetyTimer = setTimeout(() => {
+      if (isMounted) {
+        console.warn('[AuthContext] Safety timeout reached, releasing isAuthLoading');
+        setIsAuthLoading(false);
+      }
+    }, 3500);
+
     // Fetch workplaces for the branch switcher (runs once on mount)
     fetchWorkplaces();
 
     // Check existing session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) {
-        setUser(session.user);
-        const profile = await fetchProfile(session.user.id);
-        setUserProfile(profile);
-        if (profile?.branch_id) setActiveBranchId(profile.branch_id);
-      }
-      setIsAuthLoading(false);
-    });
+    supabase.auth.getSession()
+      .then(async ({ data: { session } }) => {
+        if (!isMounted) return;
+        if (session?.user) {
+          setUser(session.user);
+          try {
+            const profile = await Promise.race([
+              fetchProfile(session.user.id),
+              new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500)),
+            ]);
+            if (isMounted && profile) {
+              setUserProfile(profile);
+              if (profile.branch_id) setActiveBranchId(profile.branch_id);
+            }
+          } catch (profileErr) {
+            console.warn('[AuthContext] Profile fetch error:', profileErr);
+          }
+        }
+      })
+      .catch((err) => {
+        console.warn('[AuthContext] getSession error:', err);
+      })
+      .finally(() => {
+        if (isMounted) {
+          clearTimeout(safetyTimer);
+          setIsAuthLoading(false);
+        }
+      });
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!isMounted) return;
       if (event === 'SIGNED_IN' && session?.user) {
         setUser(session.user);
         const profile = await fetchProfile(session.user.id);
-        setUserProfile(profile);
-        if (profile?.branch_id) setActiveBranchId(profile.branch_id);
+        if (isMounted) {
+          setUserProfile(profile);
+          if (profile?.branch_id) setActiveBranchId(profile.branch_id);
+        }
       } else if (event === 'SIGNED_OUT') {
-        setUser(null);
-        setUserProfile(null);
-        setActiveBranchId('orugodawatta_sec5');
-        profileMemoryCache.clear();
+        if (isMounted) {
+          setUser(null);
+          setUserProfile(null);
+          setActiveBranchId('orugodawatta_sec5');
+          profileMemoryCache.clear();
+        }
       }
     });
 
     return () => {
+      isMounted = false;
+      clearTimeout(safetyTimer);
       subscription.unsubscribe();
     };
   }, [fetchProfile, fetchWorkplaces]);

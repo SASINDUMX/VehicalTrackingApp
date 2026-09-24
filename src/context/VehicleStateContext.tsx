@@ -89,8 +89,14 @@ export const VehicleStateProvider: React.FC<{ children: ReactNode }> = ({ childr
 
   useEffect(() => {
     isMountedRef.current = true;
+    const safetyTimer = setTimeout(() => {
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
+    }, 3000);
     return () => {
       isMountedRef.current = false;
+      clearTimeout(safetyTimer);
       if (realtimeDebounceRef.current) clearTimeout(realtimeDebounceRef.current);
     };
   }, []);
@@ -101,7 +107,8 @@ export const VehicleStateProvider: React.FC<{ children: ReactNode }> = ({ childr
       if (isMountedRef.current) {
         setVehicles(prev => {
           const now = new Date();
-          const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          const slDateStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Colombo' });
+          const startOfToday = new Date(`${slDateStr}T00:00:00+05:30`);
           const cleaned = prev
             .map(v => {
               const d = new Date(v.intake_at || v.created_at);
@@ -111,6 +118,7 @@ export const VehicleStateProvider: React.FC<{ children: ReactNode }> = ({ childr
                     ...v,
                     current_zone: 'completed' as BayZone,
                     is_finished: true,
+                    status: 'finished',
                     completed_at: now.toISOString(),
                   };
                 }
@@ -337,25 +345,45 @@ export const VehicleStateProvider: React.FC<{ children: ReactNode }> = ({ childr
     return unsubscribe;
   }, [fetchSupabaseData, debouncedRefetch, activeBranchId]);
 
-  // Midnight Rollover
+  // Midnight Rollover & Day Boundary Reconciliation (Asia/Colombo UTC+05:30)
   useEffect(() => {
     let timer: NodeJS.Timeout;
     const scheduleMidnightRefresh = () => {
       const now = new Date();
-      const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 5);
+      const slDateStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Colombo' });
+      const todayMidnight = new Date(`${slDateStr}T00:00:05+05:30`);
+      const nextMidnight = new Date(todayMidnight.getTime() + 24 * 60 * 60 * 1000);
       const msUntilMidnight = Math.max(1000, nextMidnight.getTime() - now.getTime());
 
-      timer = setTimeout(() => {
+      timer = setTimeout(async () => {
+        try {
+          await vehicleService.reconcileDailyVehicles(activeBranchId);
+        } catch (err) {
+          console.warn('[VehicleStateContext] Midnight reconciliation error:', err);
+        }
         fetchSupabaseData(false);
         scheduleMidnightRefresh();
       }, msUntilMidnight);
     };
 
     scheduleMidnightRefresh();
+
+    const handleVisibilityDayCheck = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchSupabaseData(false);
+      }
+    };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityDayCheck);
+    }
+
     return () => {
       if (timer) clearTimeout(timer);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityDayCheck);
+      }
     };
-  }, [fetchSupabaseData]);
+  }, [fetchSupabaseData, activeBranchId]);
 
   const stateValue = useMemo<VehicleStateContextType>(
     () => ({

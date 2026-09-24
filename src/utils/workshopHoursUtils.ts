@@ -38,13 +38,18 @@ export const WORKSHOP_BREAKS: WorkshopBreak[] = [
   },
 ];
 
+// Explicit offset for Sri Lanka Standard Time (UTC+05:30)
+export const SRI_LANKA_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;
+
 /**
  * Returns the currently active workshop break if the given time falls within one.
+ * Uses exact Asia/Colombo (UTC+05:30) calendar time regardless of client device timezone.
  */
 export const getCurrentActiveBreak = (now: Date = new Date()): { name: string; endStr: string } | null => {
-  // Convert to Sri Lanka / Local hours & minutes
-  const hours = now.getHours();
-  const minutes = now.getMinutes();
+  const nowMs = now.getTime();
+  const slDate = new Date(nowMs + SRI_LANKA_OFFSET_MS);
+  const hours = slDate.getUTCHours();
+  const minutes = slDate.getUTCMinutes();
   const currentMinutes = hours * 60 + minutes;
 
   for (const b of WORKSHOP_BREAKS) {
@@ -65,6 +70,8 @@ export const getCurrentActiveBreak = (now: Date = new Date()): { name: string; e
 
 /**
  * Calculates total overlapping break seconds between two timestamps and returns the break names.
+ * Accurately calculates break windows according to Asia/Colombo (UTC+05:30) working hours
+ * regardless of the client machine or browser's configured timezone.
  */
 export const getBreakOverlap = (
   startTime: string | Date,
@@ -77,23 +84,25 @@ export const getBreakOverlap = (
     return { breakSeconds: 0, breakNames: [] };
   }
 
+  const startMs = start.getTime();
+  const endMs = end.getTime();
+
+  // Convert to Sri Lanka (UTC+05:30) calendar date boundaries
+  const startSL = new Date(startMs + SRI_LANKA_OFFSET_MS);
+  const endSL = new Date(endMs + SRI_LANKA_OFFSET_MS);
+
+  const startDayMs = Date.UTC(startSL.getUTCFullYear(), startSL.getUTCMonth(), startSL.getUTCDate());
+  const endDayMs = Date.UTC(endSL.getUTCFullYear(), endSL.getUTCMonth(), endSL.getUTCDate());
+
   let totalBreakSeconds = 0;
   const breakNamesSet = new Set<string>();
 
-  // Fast-Path: If both timestamps are on the exact same calendar day, calculate overlap in O(1)
-  const isSameCalendarDay =
-    start.getFullYear() === end.getFullYear() &&
-    start.getMonth() === end.getMonth() &&
-    start.getDate() === end.getDate();
-
-  if (isSameCalendarDay) {
-    const dayStartMs = new Date(start.getFullYear(), start.getMonth(), start.getDate()).getTime();
-    const startMs = start.getTime();
-    const endMs = end.getTime();
-
+  for (let day = startDayMs; day <= endDayMs; day += 86400000) {
+    // Day start in UTC milliseconds
+    const dayStartUTC = day - SRI_LANKA_OFFSET_MS;
     for (const b of WORKSHOP_BREAKS) {
-      const bStartMs = dayStartMs + (b.startHour * 3600 + b.startMinute * 60) * 1000;
-      const bEndMs = dayStartMs + (b.endHour * 3600 + b.endMinute * 60) * 1000;
+      const bStartMs = dayStartUTC + (b.startHour * 3600 + b.startMinute * 60) * 1000;
+      const bEndMs = dayStartUTC + (b.endHour * 3600 + b.endMinute * 60) * 1000;
 
       const oStart = Math.max(startMs, bStartMs);
       const oEnd = Math.min(endMs, bEndMs);
@@ -103,40 +112,6 @@ export const getBreakOverlap = (
         breakNamesSet.add(b.name);
       }
     }
-
-    return {
-      breakSeconds: totalBreakSeconds,
-      breakNames: Array.from(breakNamesSet),
-    };
-  }
-
-  // Fallback: Multi-day intervals iterate day by day
-  const currentDay = new Date(start);
-  currentDay.setHours(0, 0, 0, 0);
-
-  const endDay = new Date(end);
-  endDay.setHours(0, 0, 0, 0);
-
-  while (currentDay <= endDay) {
-    for (const b of WORKSHOP_BREAKS) {
-      const breakStart = new Date(currentDay);
-      breakStart.setHours(b.startHour, b.startMinute, 0, 0);
-
-      const breakEnd = new Date(currentDay);
-      breakEnd.setHours(b.endHour, b.endMinute, 0, 0);
-
-      // Check overlap between [start, end] and [breakStart, breakEnd]
-      const overlapStart = Math.max(start.getTime(), breakStart.getTime());
-      const overlapEnd = Math.min(end.getTime(), breakEnd.getTime());
-
-      if (overlapEnd > overlapStart) {
-        const overlapSec = Math.floor((overlapEnd - overlapStart) / 1000);
-        totalBreakSeconds += overlapSec;
-        breakNamesSet.add(b.name);
-      }
-    }
-    // Next day
-    currentDay.setDate(currentDay.getDate() + 1);
   }
 
   return {

@@ -1,6 +1,7 @@
 import { supabase, isSupabaseConnected } from '../lib/supabase';
 import { Vehicle, VehicleTask, StageLog, BayZone, TaskType } from '../types/vehicle';
 import { deduplicateTasks } from '../utils/vehicleUtils';
+import { getBreakOverlap } from '../utils/workshopHoursUtils';
 
 /**
  * Standardized Selective Projection according to Rule 5.5:
@@ -38,7 +39,7 @@ export const vehicleService = {
       const { data: rpcRes, error: rpcErr } = await client.rpc('reconcile_daily_vehicles', {
         p_branch_id: branchId,
       });
-      if (!rpcErr && rpcRes) {
+      if (!rpcErr && rpcRes && (Number(rpcRes.completed_count) > 0 || Number(rpcRes.deleted_count) > 0)) {
         return {
           completedCount: Number(rpcRes.completed_count || 0),
           deletedCount: Number(rpcRes.deleted_count || 0),
@@ -48,13 +49,14 @@ export const vehicleService = {
         console.warn('[vehicleService] RPC reconcile_daily_vehicles fallback:', rpcErr.message);
       }
 
-      // Direct fallback if RPC is not present
+      // Direct fallback: enforce Sri Lanka Standard Time day boundary (Asia/Colombo UTC+05:30)
       const now = new Date();
-      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const slDateStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Colombo' });
+      const startOfToday = new Date(`${slDateStr}T00:00:00+05:30`);
 
       const { data: unfinished, error } = await client
         .from('vehicles')
-        .select('id, vehicle_no, current_zone, intake_at, created_at')
+        .select('id, vehicle_no, current_zone, is_paused, status, has_additional_repairs, intake_at, created_at')
         .eq('is_finished', false)
         .eq('branch_id', branchId);
 
@@ -89,7 +91,7 @@ export const vehicleService = {
             const dur = Math.max(0, Math.floor((now.getTime() - entered) / 1000));
             return client
               .from('stage_logs')
-              .update({ exited_at: nowIso, duration_seconds: dur, idle_seconds: dur })
+              .update({ exited_at: nowIso, duration_seconds: dur, idle_seconds: dur, is_dispatched: true })
               .eq('id', l.id);
           });
           await Promise.all(logClosePromises);
@@ -101,7 +103,9 @@ export const vehicleService = {
           .update({
             current_zone: 'completed',
             is_finished: true,
+            status: 'finished',
             completed_at: nowIso,
+            effective_completed_at: nowIso,
             is_paused: false,
             paused_at: null,
           })
@@ -109,8 +113,10 @@ export const vehicleService = {
       }
 
       // 2. Delete out-of-scope unfinished vehicles in working bays from previous days in batch
-      // Child tables (stage_logs, vehicle_tasks) are automatically cleaned up via database ON DELETE CASCADE
-      const bayVehicles = stale.filter(v => v.current_zone !== 'inspection');
+      // Protect vehicles that are paused, on_hold, or have additional repairs
+      const bayVehicles = stale.filter(
+        v => v.current_zone !== 'inspection' && !v.is_paused && v.status !== 'on_hold' && !v.has_additional_repairs
+      );
       const bayIds = bayVehicles.map(v => v.id);
       if (bayIds.length > 0) {
         await client.from('vehicles').delete().in('id', bayIds);
@@ -131,6 +137,13 @@ export const vehicleService = {
   async fetchLiveVehicles(branchId?: string): Promise<Vehicle[]> {
     const client = supabase;
     if (!client || !isSupabaseConnected) return [];
+
+    // Reconcile stale overnight vehicles across day transitions
+    try {
+      await this.reconcileDailyVehicles(branchId);
+    } catch (e) {
+      console.warn('[vehicleService] Daily reconciliation note:', e);
+    }
 
     const cutoff48h = new Date(Date.now() - 48 * 3600 * 1000).toISOString();
     const liveFilter = `is_finished.eq.false,created_at.gte.${cutoff48h}`;
@@ -940,6 +953,7 @@ export const vehicleService = {
           ? (existingIdleSec ?? Math.max(0, Math.floor((new Date(workStartedAt).getTime() - entered) / 1000)))
           : duration;
         const active = workStartedAt ? Math.max(0, duration - idle) : 0;
+        const { breakSeconds } = getBreakOverlap(new Date(entered), new Date(now));
 
         const { error: updateErr } = await client
           .from('stage_logs')
@@ -948,7 +962,8 @@ export const vehicleService = {
             work_completed_at: now,
             duration_seconds: duration, 
             idle_seconds: idle,
-            active_seconds: active 
+            active_seconds: active,
+            break_seconds: breakSeconds
           })
           .eq('id', activeLogId);
         if (updateErr) throw updateErr;
@@ -969,6 +984,7 @@ export const vehicleService = {
             ? (existingIdleSec ?? activeLog.idle_seconds ?? Math.max(0, Math.floor((new Date(activeLog.work_started_at).getTime() - entered) / 1000)))
             : duration;
           const active = activeLog.work_started_at ? Math.max(0, duration - idle) : 0;
+          const { breakSeconds } = getBreakOverlap(new Date(entered), new Date(now));
           const { error: updateActiveErr } = await client
             .from('stage_logs')
             .update({ 
@@ -976,7 +992,8 @@ export const vehicleService = {
               work_completed_at: now,
               duration_seconds: duration, 
               idle_seconds: idle,
-              active_seconds: active 
+              active_seconds: active,
+              break_seconds: breakSeconds
             })
             .eq('id', activeLog.id);
           if (updateActiveErr) throw updateActiveErr;
@@ -1123,9 +1140,10 @@ export const vehicleService = {
         const idle = workStartedAt
           ? (existingIdleSec || Math.max(0, Math.floor((new Date(workStartedAt).getTime() - entered) / 1000)))
           : duration;
+        const { breakSeconds } = getBreakOverlap(new Date(entered), new Date(now));
         const { error: updateErr } = await client
           .from('stage_logs')
-          .update({ exited_at: now, duration_seconds: duration, idle_seconds: idle })
+          .update({ exited_at: now, duration_seconds: duration, idle_seconds: idle, break_seconds: breakSeconds })
           .eq('id', activeLogId);
         if (updateErr) throw updateErr;
       } else {
@@ -1144,9 +1162,10 @@ export const vehicleService = {
           const idle = activeLog.work_started_at
             ? (activeLog.idle_seconds || Math.max(0, Math.floor((new Date(activeLog.work_started_at).getTime() - entered) / 1000)))
             : duration;
+          const { breakSeconds } = getBreakOverlap(new Date(entered), new Date(now));
           const { error: updateActiveErr } = await client
             .from('stage_logs')
-            .update({ exited_at: now, duration_seconds: duration, idle_seconds: idle })
+            .update({ exited_at: now, duration_seconds: duration, idle_seconds: idle, break_seconds: breakSeconds })
             .eq('id', activeLog.id);
           if (updateActiveErr) throw updateActiveErr;
         }
@@ -1158,8 +1177,11 @@ export const vehicleService = {
           current_zone: 'completed',
           is_finished: true,
           completed_at: now,
+          effective_completed_at: now,
+          status: 'finished',
           is_paused: false,
           paused_at: null,
+          remarks: `Completed by Service Advisor (${advisorName})`,
         })
         .eq('id', vehicleId);
       if (directErr) throw directErr;
