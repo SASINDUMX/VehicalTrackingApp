@@ -171,15 +171,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     }, 3500);
 
-    // Fetch workplaces for the branch switcher (runs once on mount)
-    fetchWorkplaces();
-
     const client = supabase;
     // Check existing session
     client.auth.getSession()
       .then(async ({ data: { session } }) => {
         if (!isMounted) return;
         if (session?.user) {
+          // Fetch workplaces for the branch switcher only for authenticated sessions
+          fetchWorkplaces();
+
           // Verify with Supabase Auth server: only sign out if server explicitly returns 401/403 (revoked/expired)
           try {
             const { data: { user: verifiedUser }, error: verifyError } = await client.auth.getUser();
