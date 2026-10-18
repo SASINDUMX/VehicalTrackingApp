@@ -1109,9 +1109,43 @@ export const exportServiceLogsToPDF = (
         <meta charset="utf-8" />
         <title>${batchRefId}</title>
         <style>
-          @page { size: A4 landscape !important; margin: 6mm 8mm; }
+          @page {
+            size: A4 landscape !important;
+            margin: 6mm 8mm 12mm 8mm;
+            @bottom-left {
+              content: "UNITED MOTORS LANKA PLC — SERVICE AUDIT REPORT | BATCH: ${batchRefId}";
+              font-size: 8px;
+              font-weight: 700;
+              color: #64748b;
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            }
+            @bottom-right {
+              content: "Page " counter(page) " of " counter(pages);
+              font-size: 8.5px;
+              font-weight: 800;
+              color: #0284c7;
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            }
+          }
           @media print {
-            @page { size: A4 landscape !important; margin: 6mm 8mm; }
+            @page {
+              size: A4 landscape !important;
+              margin: 6mm 8mm 12mm 8mm;
+              @bottom-left {
+                content: "UNITED MOTORS LANKA PLC — SERVICE AUDIT REPORT | BATCH: ${batchRefId}";
+                font-size: 8px;
+                font-weight: 700;
+                color: #64748b;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+              }
+              @bottom-right {
+                content: "Page " counter(page) " of " counter(pages);
+                font-size: 8.5px;
+                font-weight: 800;
+                color: #0284c7;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+              }
+            }
             html, body {
               width: 100%;
               min-width: 280mm;
@@ -1227,7 +1261,7 @@ export const exportServiceLogsToPDF = (
         <table class="table-container">
           <thead style="display: table-header-group;">
             <tr class="running-batch-header" style="background: #0284c7; color: #ffffff;">
-              <th colspan="23" style="padding: 5px 10px; text-align: left; font-size: 9px; font-weight: 700; border: none; letter-spacing: 0.3px;">
+              <th colspan="25" style="padding: 5px 10px; text-align: left; font-size: 9px; font-weight: 700; border: none; letter-spacing: 0.3px;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                   <span>UNITED MOTORS LANKA PLC — SERVICE AUDIT REPORT</span>
                   <span style="font-family: monospace; font-size: 8.5px; font-weight: 800; background: rgba(255,255,255,0.25); padding: 2px 8px; border-radius: 4px;">
@@ -1275,6 +1309,16 @@ export const exportServiceLogsToPDF = (
           <tbody>
             ${tableRowsHtml}
           </tbody>
+          <tfoot style="display: table-footer-group;">
+            <tr style="background: #f8fafc;">
+              <td colspan="25" style="padding: 4px 10px; font-size: 8px; font-weight: 600; color: #64748b; border-top: 1px solid #cbd5e1; border-bottom: none;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <span>UNITED MOTORS LANKA PLC — Service & Telemetry Audit Log (${datePresetLabel})</span>
+                  <span style="font-family: monospace; font-size: 8px; color: #94a3b8;">Batch Ref: ${batchRefId}</span>
+                </div>
+              </td>
+            </tr>
+          </tfoot>
         </table>
 
         <!-- Final Page Report Closing Block (Sign-off & Footnote) -->
