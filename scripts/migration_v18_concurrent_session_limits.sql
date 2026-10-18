@@ -3,14 +3,31 @@
 -- ==============================================================================
 -- Description:
 -- Enforces strictly 1 active device session per user account at any given time.
--- When a user logs in on a new device, the database immediately expires all previous
--- sessions (setting not_after = NOW()) and revokes their refresh tokens.
---
--- Why not_after & revoked?
--- 1. 100% non-destructive and audit-friendly (preserves session history).
--- 2. GoTrue Auth natively respects not_after and revoked=true on token refresh.
--- 3. The older device receives 401 Unauthorized and returns to the login screen.
+-- When a user logs in on a new device:
+-- 1. Database trigger immediately expires all previous sessions (setting not_after = NOW())
+--    and revokes their refresh tokens in GoTrue Auth.
+-- 2. User profile records a unique active_session_token.
+-- 3. Supabase Realtime notifies all open tabs/devices to immediately evict stale sessions.
 -- ==============================================================================
+
+-- 1. Add active_session_token column to public.user_profiles
+ALTER TABLE public.user_profiles 
+ADD COLUMN IF NOT EXISTS active_session_token TEXT DEFAULT NULL;
+
+-- 2. Enable Realtime broadcast on user_profiles
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND tablename = 'user_profiles'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.user_profiles;
+  END IF;
+END $$;
+
+ALTER TABLE public.user_profiles REPLICA IDENTITY FULL;
+
+-- 3. Database session eviction trigger on auth.sessions
 
 CREATE OR REPLACE FUNCTION public.enforce_single_session_last_login_wins()
 RETURNS TRIGGER AS $$

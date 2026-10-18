@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, ReactNode } from 'react';
+import { Platform } from 'react-native';
 import { supabase, isSupabaseConnected } from '../lib/supabase';
 import { UserRole, ForemanSection } from '../types/vehicle';
 import { calculateTrialInfo, TrialInfo } from '../utils/trialUtils';
@@ -21,6 +22,7 @@ export interface UserProfile {
   theme_preference?: 'system' | 'dark' | 'light';
   is_trial?: boolean;
   trial_expires_at?: string | null;
+  active_session_token?: string | null;
 }
 
 interface AuthContextType {
@@ -76,10 +78,55 @@ const setCachedProfile = (profile: UserProfile | null) => {
 
 const profileMemoryCache = new Map<string, UserProfile>();
 
+const DEVICE_SESSION_KEY = 'um_device_session_token';
+
+const getDeviceSessionToken = (): string => {
+  try {
+    if (typeof window !== 'undefined') {
+      const sessionVal = window.sessionStorage?.getItem(DEVICE_SESSION_KEY);
+      if (sessionVal) return sessionVal;
+      const localVal = window.localStorage?.getItem(DEVICE_SESSION_KEY);
+      if (localVal) return localVal;
+    }
+  } catch (_) {}
+  return '';
+};
+
+const rotateDeviceSessionToken = (): string => {
+  const token = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  try {
+    if (typeof window !== 'undefined') {
+      window.sessionStorage?.setItem(DEVICE_SESSION_KEY, token);
+      window.localStorage?.setItem(DEVICE_SESSION_KEY, token);
+    }
+  } catch (_) {}
+  return token;
+};
+
+const setDeviceSessionToken = (token: string) => {
+  try {
+    if (typeof window !== 'undefined') {
+      window.sessionStorage?.setItem(DEVICE_SESSION_KEY, token);
+      window.localStorage?.setItem(DEVICE_SESSION_KEY, token);
+    }
+  } catch (_) {}
+};
+
+const clearDeviceSessionToken = () => {
+  try {
+    if (typeof window !== 'undefined') {
+      window.sessionStorage?.removeItem(DEVICE_SESSION_KEY);
+      window.localStorage?.removeItem(DEVICE_SESSION_KEY);
+    }
+  } catch (_) {}
+};
+
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<any | null>(null);
   const [userProfile, setUserProfileState] = useState<UserProfile | null>(() => getCachedProfile());
   const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
+  const currentSessionTokenRef = useRef<string | null>(null);
+  const isEvictingRef = useRef<boolean>(false);
 
   const setUserProfile = useCallback((profile: UserProfile | null) => {
     setUserProfileState(profile);
@@ -157,6 +204,46 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return fetchPromise;
   }, []);
 
+  const signOut = useCallback(async () => {
+    try {
+      if (supabase) {
+        // scope: 'local' cleans up local storage immediately without throwing 403 if remote session was deleted
+        await supabase.auth.signOut({ scope: 'local' });
+      }
+    } catch (err) {
+      console.warn('[AuthContext] Remote signOut error (clearing local state):', err);
+    } finally {
+      setUser(null);
+      setUserProfile(null);
+      setActiveBranchId('orugodawatta_sec5');
+      profileMemoryCache.clear();
+      currentSessionTokenRef.current = null;
+      clearDeviceSessionToken();
+      if (typeof window !== 'undefined' && window.localStorage) {
+        // Purge any lingering supabase auth keys from storage
+        Object.keys(window.localStorage).forEach(key => {
+          if (key.startsWith('sb-') || key.includes('auth-token')) {
+            window.localStorage.removeItem(key);
+          }
+        });
+      }
+    }
+  }, [setUserProfile]);
+
+  const evictSession = useCallback(async (reasonMessage: string) => {
+    if (isEvictingRef.current) return;
+    isEvictingRef.current = true;
+    try {
+      console.warn('[AuthContext] Evicting session:', reasonMessage);
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        window.alert(reasonMessage);
+      }
+      await signOut();
+    } finally {
+      isEvictingRef.current = false;
+    }
+  }, [signOut]);
+
   useEffect(() => {
     if (!supabase || !isSupabaseConnected) {
       setIsAuthLoading(false);
@@ -205,6 +292,31 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           try {
             const profile = await fetchProfile(session.user.id);
             if (isMounted && profile) {
+              // Verify session exclusivity on startup
+              const storedToken = getDeviceSessionToken();
+              if (profile.active_session_token) {
+                if (storedToken && storedToken !== profile.active_session_token) {
+                  console.warn('[AuthContext] Stale session on startup (remote token differs). Evicting.');
+                  await client.auth.signOut({ scope: 'local' });
+                  if (isMounted) {
+                    setUser(null);
+                    setUserProfile(null);
+                  }
+                  return;
+                } else if (!storedToken) {
+                  // If this device had no local token recorded, adopt the active one
+                  setDeviceSessionToken(profile.active_session_token);
+                  currentSessionTokenRef.current = profile.active_session_token;
+                } else {
+                  currentSessionTokenRef.current = storedToken;
+                }
+              } else {
+                // First session setup: claim DB token if not yet set
+                const freshToken = rotateDeviceSessionToken();
+                currentSessionTokenRef.current = freshToken;
+                await client.from('user_profiles').update({ active_session_token: freshToken }).eq('id', session.user.id);
+              }
+
               setUserProfile(profile);
               if (profile.branch_id) setActiveBranchId(profile.branch_id);
             }
@@ -251,6 +363,73 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
   }, [fetchProfile, fetchWorkplaces]);
 
+  // Realtime single-session enforcement: evicts this session if another device/window logs in
+  useEffect(() => {
+    const client = supabase;
+    if (!client || !isSupabaseConnected || !user?.id) return;
+
+    if (!currentSessionTokenRef.current) {
+      currentSessionTokenRef.current = getDeviceSessionToken();
+    }
+
+    const channelName = `session_guard_${user.id}`;
+    const channel = client
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'user_profiles',
+          filter: `id=eq.${user.id}`,
+        },
+        (payload: any) => {
+          const remoteToken = payload.new?.active_session_token;
+          const myToken = currentSessionTokenRef.current;
+          if (remoteToken && myToken && remoteToken !== myToken) {
+            console.warn('[AuthContext] Active session overtaken by newer login. Remote:', remoteToken, 'Local:', myToken);
+            evictSession('You have been logged out because this account was logged into from another window or device.');
+          }
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log(`[AuthContext] Session guard active for user ${user.id}`);
+        }
+      });
+
+    // Verification check on tab focus: ensures background tabs detect invalidation immediately
+    const handleFocusCheck = async () => {
+      const myToken = currentSessionTokenRef.current;
+      if (!myToken || !client || !user?.id) return;
+      try {
+        const { data, error } = await client
+          .from('user_profiles')
+          .select('active_session_token')
+          .eq('id', user.id)
+          .single();
+
+        if (!error && data?.active_session_token && data.active_session_token !== myToken) {
+          console.warn('[AuthContext] Focus check: Session invalidated by newer login.');
+          evictSession('You have been logged out because this account was logged into from another window or device.');
+        }
+      } catch (err) {
+        console.warn('[AuthContext] Session focus verification error:', err);
+      }
+    };
+
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      window.addEventListener('focus', handleFocusCheck);
+    }
+
+    return () => {
+      client.removeChannel(channel);
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        window.removeEventListener('focus', handleFocusCheck);
+      }
+    };
+  }, [user?.id, evictSession]);
+
   const signIn = useCallback(async (emailInput: string, passwordInput: string): Promise<{ error: string | null }> => {
     if (!supabase) {
       return { error: 'Supabase is not connected. Check your configuration.' };
@@ -285,6 +464,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       if (res.data.user) {
+        // 1. Generate new session token for this window/tab and claim in DB
+        const freshToken = rotateDeviceSessionToken();
+        currentSessionTokenRef.current = freshToken;
+
+        try {
+          await supabase
+            .from('user_profiles')
+            .update({ active_session_token: freshToken })
+            .eq('id', res.data.user.id);
+        } catch (claimErr) {
+          console.warn('[AuthContext] Failed to claim active_session_token in DB:', claimErr);
+        }
+
         setUser(res.data.user);
         fetchWorkplaces();
         const profile = await fetchProfile(res.data.user.id);
@@ -300,30 +492,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return { error: err.message || 'Sign in failed' };
     }
   }, [fetchProfile, fetchWorkplaces]);
-
-  const signOut = useCallback(async () => {
-    try {
-      if (supabase) {
-        // scope: 'local' cleans up local storage immediately without throwing 403 if remote session was deleted
-        await supabase.auth.signOut({ scope: 'local' });
-      }
-    } catch (err) {
-      console.warn('[AuthContext] Remote signOut error (clearing local state):', err);
-    } finally {
-      setUser(null);
-      setUserProfile(null);
-      setActiveBranchId('orugodawatta_sec5');
-      profileMemoryCache.clear();
-      if (typeof window !== 'undefined' && window.localStorage) {
-        // Purge any lingering supabase auth keys from storage
-        Object.keys(window.localStorage).forEach(key => {
-          if (key.startsWith('sb-') || key.includes('auth-token')) {
-            window.localStorage.removeItem(key);
-          }
-        });
-      }
-    }
-  }, [setUserProfile]);
 
   // Derived branch display values from availableBranches list
   const activeBranch = availableBranches.find(b => b.id === activeBranchId);
