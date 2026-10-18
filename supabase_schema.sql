@@ -1,7 +1,7 @@
 -- ==============================================================================
 -- UNITED MOTORS VEHICLE TRACKING APP — PRISTINE PRODUCTION DATABASE SCHEMA
 -- ==============================================================================
--- Consolidated Idempotent Deployment Script (v1 - v12 Unified Source of Truth)
+-- Consolidated Idempotent Deployment Script (v1 - v14 Unified Source of Truth)
 --
 -- Includes:
 -- 1. PostgreSQL Extensions (uuid-ossp, pgcrypto, pg_cron)
@@ -113,6 +113,64 @@ ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS section VARCHAR(50);
 ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS branch_id VARCHAR(50) DEFAULT 'orugodawatta_sec5';
 ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS theme_preference VARCHAR(20) DEFAULT 'system';
 
+-- 4.1 Automatic Session Revocation on Password Change (v13 Security)
+CREATE OR REPLACE FUNCTION public.handle_user_password_change_revoke_sessions()
+RETURNS trigger
+SECURITY DEFINER
+SET search_path = public, auth
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF NEW.encrypted_password IS DISTINCT FROM OLD.encrypted_password THEN
+    DELETE FROM auth.sessions WHERE user_id = NEW.id;
+    DELETE FROM auth.refresh_tokens WHERE session_id NOT IN (SELECT id FROM auth.sessions);
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_auth_user_password_change ON auth.users;
+CREATE TRIGGER on_auth_user_password_change
+  AFTER UPDATE OF encrypted_password ON auth.users
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_user_password_change_revoke_sessions();
+
+-- 4.2 Admin Helper RPC to safely reset user password and revoke sessions
+CREATE OR REPLACE FUNCTION public.admin_reset_user_password(
+  p_email TEXT,
+  p_new_password TEXT
+)
+RETURNS JSONB
+SECURITY DEFINER
+SET search_path = public, auth
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_user_id UUID;
+BEGIN
+  SELECT id INTO v_user_id FROM auth.users WHERE LOWER(email) = LOWER(TRIM(p_email));
+  
+  IF v_user_id IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'error', 'User not found with email: ' || p_email);
+  END IF;
+
+  UPDATE auth.users
+  SET encrypted_password = crypt(p_new_password, gen_salt('bf')),
+      updated_at = NOW()
+  WHERE id = v_user_id;
+
+  DELETE FROM auth.sessions WHERE user_id = v_user_id;
+  DELETE FROM auth.refresh_tokens WHERE session_id NOT IN (SELECT id FROM auth.sessions);
+
+  RETURN jsonb_build_object(
+    'success', true,
+    'message', 'Password reset successfully and all active sessions revoked.',
+    'user_id', v_user_id,
+    'email', p_email
+  );
+END;
+$$;
+
 -- ------------------------------------------------------------------------------
 -- 5. OPERATIONAL TABLES (VEHICLES, STAGE LOGS, TASKS)
 -- ------------------------------------------------------------------------------
@@ -137,6 +195,8 @@ CREATE TABLE IF NOT EXISTS public.vehicles (
   paused_seconds INT NOT NULL DEFAULT 0,
   pause_reason TEXT,
   branch_id VARCHAR(50) NOT NULL DEFAULT 'orugodawatta_sec5' REFERENCES public.workplaces(id) ON DELETE RESTRICT,
+  assigned_advisor VARCHAR(255) DEFAULT NULL,
+  vehicle_type VARCHAR(20) DEFAULT NULL,
   gross_tat_seconds INT NOT NULL DEFAULT 0,
   net_tat_seconds INT NOT NULL DEFAULT 0,
   total_break_seconds INT NOT NULL DEFAULT 0,
@@ -162,6 +222,8 @@ ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS paused_at TIMESTAMPTZ;
 ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS paused_seconds INT DEFAULT 0;
 ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS pause_reason TEXT;
 ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS branch_id VARCHAR(50) DEFAULT 'orugodawatta_sec5';
+ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS assigned_advisor VARCHAR(255) DEFAULT NULL;
+ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS vehicle_type VARCHAR(20) DEFAULT NULL;
 ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS gross_tat_seconds INT DEFAULT 0;
 ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS net_tat_seconds INT DEFAULT 0;
 ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS total_break_seconds INT DEFAULT 0;
@@ -640,7 +702,9 @@ CREATE OR REPLACE FUNCTION public.intake_vehicle(
   p_is_urgent BOOLEAN DEFAULT FALSE,
   p_urgent_note TEXT DEFAULT NULL,
   p_tasks JSONB DEFAULT '[]'::jsonb,
-  p_branch_id VARCHAR(50) DEFAULT 'orugodawatta_sec5'
+  p_branch_id VARCHAR(50) DEFAULT 'orugodawatta_sec5',
+  p_assigned_advisor VARCHAR(255) DEFAULT NULL,
+  p_vehicle_type VARCHAR(20) DEFAULT NULL
 )
 RETURNS JSONB AS $$
 DECLARE
@@ -653,12 +717,14 @@ BEGIN
   INSERT INTO public.vehicles (
     vehicle_no, current_zone, technician_name, assigned_tech,
     remarks, is_booking, has_additional_repairs, is_urgent, urgent_note,
-    intake_at, status, is_finished, branch_id
+    intake_at, status, is_finished, branch_id,
+    assigned_advisor, vehicle_type
   ) VALUES (
     UPPER(TRIM(p_vehicle_no)), p_target_zone::bay_zone, p_technician_name,
     COALESCE(p_technician_name, 'Unassigned'), p_remarks,
     p_is_booking, p_has_additional_repairs, p_is_urgent, p_urgent_note,
-    v_now, 'active', FALSE, p_branch_id
+    v_now, 'active', FALSE, p_branch_id,
+    p_assigned_advisor, p_vehicle_type
   ) RETURNING id INTO v_vehicle_id;
 
   -- Insert initial stage log
@@ -1216,7 +1282,9 @@ BEGIN
     COALESCE(v.effective_completed_at, v.completed_at) AS effective_completed_at,
     v.gross_tat_seconds,
     v.net_tat_seconds,
-    v.total_break_seconds
+    v.total_break_seconds,
+    v.assigned_advisor,
+    v.vehicle_type
   FROM public.vehicles v
   WHERE (p_branch_id IS NULL OR v.branch_id = p_branch_id)
     AND (p_start_date IS NULL OR v.intake_at >= p_start_date)
@@ -1451,6 +1519,8 @@ BEGIN
       'intake_at', fv.intake_at,
       'created_at', fv.created_at,
       'effective_completed_at', fv.effective_completed_at,
+      'assigned_advisor', fv.assigned_advisor,
+      'vehicle_type', fv.vehicle_type,
       'gross_tat_seconds', COALESCE(
         NULLIF(fv.gross_tat_seconds, 0),
         GREATEST(0, EXTRACT(EPOCH FROM (COALESCE(fv.effective_completed_at, NOW()) - COALESCE(fv.intake_at, fv.created_at)))::INT)

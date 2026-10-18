@@ -53,5 +53,9 @@ export const supabase: SupabaseClient | null = isSupabaseConnected
   ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
   : null;
 
+if (__DEV__) {
+  console.log(`[Supabase] Active endpoint: ${SUPABASE_URL || 'None (Demo Mode)'}`);
+}
+
 export { safeStorage };
 
