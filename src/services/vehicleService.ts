@@ -1,14 +1,14 @@
 import { supabase, isSupabaseConnected } from '../lib/supabase';
-import { Vehicle, VehicleTask, StageLog, BayZone, TaskType } from '../types/vehicle';
+import { Vehicle, VehicleTask, StageLog, BayZone, TaskType, VehicleCategoryType } from '../types/vehicle';
 import { deduplicateTasks } from '../utils/vehicleUtils';
-import { getBreakOverlap } from '../utils/workshopHoursUtils';
+import { getBreakOverlap, getSriLankaTodayString, getSriLankaDayStartISO, getSriLankaDayEndISO, getSriLankaDateString } from '../utils/workshopHoursUtils';
 
 /**
  * Standardized Selective Projection according to Rule 5.5:
  * Avoids wildcard '*' queries, cutting network wire payload sizes by ~35%.
  */
 const VEHICLE_SELECT_PROJECTION = `
-  id, vehicle_no, current_zone, technician_name, assigned_tech, remarks, is_booking, has_additional_repairs, intake_at, completed_at, effective_completed_at,
+  id, vehicle_no, current_zone, technician_name, assigned_tech, assigned_advisor, vehicle_type, remarks, is_booking, has_additional_repairs, intake_at, completed_at, effective_completed_at,
   is_finished, status, is_urgent, urgent_note, is_paused, paused_at, paused_seconds, pause_reason, branch_id, gross_tat_seconds, net_tat_seconds, total_break_seconds, created_at,
   tasks:vehicle_tasks(id, vehicle_id, task_name, task_type, is_required, is_completed, completed_at, completed_by, created_at),
   stage_logs(id, vehicle_id, from_zone, to_zone, visit_number, entered_at, work_started_at, work_completed_at, exited_at, duration_seconds, active_seconds, idle_seconds, break_seconds, moved_by, technician_name, stage_remarks, is_paused, paused_at, paused_seconds, is_dispatched)
@@ -209,6 +209,8 @@ export const vehicleService = {
       current_zone: v.current_zone as BayZone,
       technician_name: (v.technician_name as string) || null,
       assigned_tech: (v.assigned_tech as string) || 'Unassigned',
+      assigned_advisor: (v.assigned_advisor as string) || null,
+      vehicle_type: (v.vehicle_type as VehicleCategoryType) || null,
       remarks: (v.remarks as string) || '',
       is_booking: Boolean(v.is_booking),
       has_additional_repairs: Boolean(v.has_additional_repairs),
@@ -324,28 +326,37 @@ export const vehicleService = {
         stage_logs(id, vehicle_id, from_zone, to_zone, visit_number, entered_at, work_started_at, work_completed_at, exited_at, duration_seconds, active_seconds, idle_seconds, break_seconds, moved_by, technician_name, stage_remarks, is_paused)
       `)
       .order('entered_at', { foreignTable: 'stage_logs', ascending: true });
-    const now = new Date();
 
     // Scope to branch first
     if (branchId) {
       query = query.eq('branch_id', branchId);
     }
 
+    const now = new Date();
+    const slTodayStr = getSriLankaTodayString(now);
+
     if (datePreset === 'today') {
-      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+      const startOfToday = getSriLankaDayStartISO(slTodayStr);
       query = query.gte('intake_at', startOfToday);
     } else if (datePreset === 'yesterday') {
-      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const startOfYesterday = new Date(startOfToday.getTime() - 24 * 60 * 60 * 1000);
-      query = query.gte('intake_at', startOfYesterday.toISOString()).lt('intake_at', startOfToday.toISOString());
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const slYesterdayStr = getSriLankaDateString(yesterday);
+      const startOfYesterday = getSriLankaDayStartISO(slYesterdayStr);
+      const endOfYesterday = getSriLankaDayEndISO(slYesterdayStr);
+      query = query.gte('intake_at', startOfYesterday).lte('intake_at', endOfYesterday);
     } else if (datePreset === '7days') {
-      const startOf7Days = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const past7 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const startOf7Days = getSriLankaDayStartISO(getSriLankaDateString(past7));
       query = query.gte('intake_at', startOf7Days);
     } else if (datePreset === 'month') {
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const slParts = slTodayStr.split('-').map(Number);
+      const firstOfMonthStr = `${slParts[0]}-${String(slParts[1]).padStart(2, '0')}-01`;
+      const startOfMonth = getSriLankaDayStartISO(firstOfMonthStr);
       query = query.gte('intake_at', startOfMonth);
     } else if (datePreset === '3months') {
-      const startOf3Months = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate()).toISOString();
+      const slParts = slTodayStr.split('-').map(Number);
+      const past3Mo = new Date(slParts[0], slParts[1] - 1 - 3, slParts[2]);
+      const startOf3Months = getSriLankaDayStartISO(getSriLankaDateString(past3Mo));
       query = query.gte('intake_at', startOf3Months);
     } else if (datePreset === 'custom') {
       if (customStartDate) {
@@ -537,6 +548,8 @@ export const vehicleService = {
       current_zone: BayZone;
       technician_name?: string | null;
       assigned_tech: string;
+      assigned_advisor?: string | null;
+      vehicle_type?: string | null;
       remarks: string;
       is_booking?: boolean;
       has_additional_repairs?: boolean;
@@ -544,12 +557,16 @@ export const vehicleService = {
       status: 'active' | 'finished' | 'incomplete' | 'on_hold';
       is_urgent: boolean;
       urgent_note: string | null;
-      branch_id?: string;
+      branch_id: string;
     },
     tasksList: { task_name: string; task_type: TaskType; is_required: boolean }[]
   ): Promise<Vehicle> {
     const client = supabase;
     if (!client || !isSupabaseConnected) throw new Error('Database not connected');
+
+    if (!vehicleData.branch_id) {
+      throw new Error('[vehicleService.createVehicle] branch_id is strictly required and cannot be empty.');
+    }
 
     // Try atomic RPC
     try {
@@ -563,7 +580,9 @@ export const vehicleService = {
         p_is_urgent: vehicleData.is_urgent,
         p_urgent_note: vehicleData.urgent_note,
         p_tasks: tasksList,
-        p_branch_id: vehicleData.branch_id || 'orugodawatta_sec5',
+        p_branch_id: vehicleData.branch_id,
+        p_assigned_advisor: vehicleData.assigned_advisor || null,
+        p_vehicle_type: vehicleData.vehicle_type || null,
       });
 
       if (!rpcErr && rpcRes && rpcRes.vehicle_id) {
@@ -612,6 +631,8 @@ export const vehicleService = {
           current_zone: vehicleData.current_zone,
           technician_name: vehicleData.technician_name || null,
           assigned_tech: vehicleData.assigned_tech,
+          assigned_advisor: vehicleData.assigned_advisor || null,
+          vehicle_type: vehicleData.vehicle_type || null,
           remarks: vehicleData.remarks,
           is_booking: Boolean(vehicleData.is_booking),
           has_additional_repairs: Boolean(vehicleData.has_additional_repairs),
@@ -649,6 +670,8 @@ export const vehicleService = {
         current_zone: vehicleData.current_zone,
         technician_name: vehicleData.technician_name || null,
         assigned_tech: vehicleData.assigned_tech,
+        assigned_advisor: vehicleData.assigned_advisor || null,
+        vehicle_type: vehicleData.vehicle_type || null,
         remarks: vehicleData.remarks,
         is_booking: Boolean(vehicleData.is_booking),
         has_additional_repairs: Boolean(vehicleData.has_additional_repairs),
@@ -657,7 +680,7 @@ export const vehicleService = {
         is_urgent: vehicleData.is_urgent,
         urgent_note: vehicleData.urgent_note,
         is_finished: false,
-        branch_id: vehicleData.branch_id || 'orugodawatta_sec5',
+        branch_id: vehicleData.branch_id,
       })
       .select()
       .single();
@@ -720,6 +743,8 @@ export const vehicleService = {
     extraData?: {
       vehicle_no?: string;
       technician_name?: string | null;
+      assigned_advisor?: string | null;
+      vehicle_type?: VehicleCategoryType | string | null;
       is_booking?: boolean;
       has_additional_repairs?: boolean;
     }
@@ -741,6 +766,12 @@ export const vehicleService = {
     }
     if (extraData?.technician_name !== undefined) {
       vehicleUpdatePayload.technician_name = extraData.technician_name ? extraData.technician_name.trim() : null;
+    }
+    if (extraData?.assigned_advisor !== undefined) {
+      vehicleUpdatePayload.assigned_advisor = extraData.assigned_advisor ? extraData.assigned_advisor.trim() : null;
+    }
+    if (extraData?.vehicle_type !== undefined) {
+      vehicleUpdatePayload.vehicle_type = extraData.vehicle_type || null;
     }
     if (extraData?.is_booking !== undefined) {
       vehicleUpdatePayload.is_booking = extraData.is_booking;

@@ -214,6 +214,7 @@ ALTER TABLE public.stage_logs ADD COLUMN IF NOT EXISTS branch_id VARCHAR(50) DEF
 CREATE TABLE IF NOT EXISTS public.vehicle_tasks (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   vehicle_id UUID NOT NULL REFERENCES public.vehicles(id) ON DELETE CASCADE,
+  branch_id VARCHAR(50) NOT NULL DEFAULT 'orugodawatta_sec5' REFERENCES public.workplaces(id) ON DELETE CASCADE,
   task_name VARCHAR(255) NOT NULL,
   task_type task_type NOT NULL,
   is_required BOOLEAN NOT NULL DEFAULT TRUE,
@@ -224,6 +225,7 @@ CREATE TABLE IF NOT EXISTS public.vehicle_tasks (
 );
 
 -- Backward-compatibility column assertions for pre-existing vehicle_tasks
+ALTER TABLE public.vehicle_tasks ADD COLUMN IF NOT EXISTS branch_id VARCHAR(50) DEFAULT 'orugodawatta_sec5';
 ALTER TABLE public.vehicle_tasks ADD COLUMN IF NOT EXISTS task_name VARCHAR(255);
 ALTER TABLE public.vehicle_tasks ADD COLUMN IF NOT EXISTS task_type task_type;
 ALTER TABLE public.vehicle_tasks ADD COLUMN IF NOT EXISTS is_required BOOLEAN DEFAULT TRUE;
@@ -290,6 +292,7 @@ CREATE INDEX IF NOT EXISTS idx_stage_logs_branch_id ON public.stage_logs(branch_
 
 CREATE INDEX IF NOT EXISTS idx_vehicle_tasks_vehicle_id ON public.vehicle_tasks(vehicle_id);
 CREATE INDEX IF NOT EXISTS idx_vehicle_tasks_task_type ON public.vehicle_tasks(task_type);
+CREATE INDEX IF NOT EXISTS idx_vehicle_tasks_branch_id ON public.vehicle_tasks(branch_id);
 
 CREATE INDEX IF NOT EXISTS idx_audit_logs_action_timestamp ON public.audit_logs(action_timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON public.audit_logs(created_at DESC);

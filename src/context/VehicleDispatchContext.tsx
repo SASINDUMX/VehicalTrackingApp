@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useCallback, useMemo, useEffect, ReactNode } from 'react';
-import { Vehicle, BayZone, TaskType, UserRole, NavigationTab } from '../types/vehicle';
+import { Vehicle, BayZone, TaskType, UserRole, NavigationTab, VehicleCategoryType } from '../types/vehicle';
 import { DateFilterPreset } from '../utils/reportExportUtils';
 import { vehicleService } from '../services/vehicleService';
 import { outboxService } from '../services/outboxService';
@@ -41,7 +41,9 @@ export interface VehicleDispatchContextType {
     urgentNote?: string | null,
     technicianName?: string | null,
     isBooking?: boolean,
-    hasAdditionalRepairs?: boolean
+    hasAdditionalRepairs?: boolean,
+    assignedAdvisor?: string | null,
+    vehicleType?: string | null
   ) => Promise<void>;
   updateVehiclePlate: (vehicleId: string, newPlate: string) => Promise<boolean>;
   toggleVehiclePause: (vehicleId: string, isPaused: boolean, reason?: string) => Promise<boolean>;
@@ -53,6 +55,8 @@ export interface VehicleDispatchContextType {
     metadata?: {
       vehicle_no?: string;
       technician_name?: string | null;
+      assigned_advisor?: string | null;
+      vehicle_type?: VehicleCategoryType | string | null;
       is_booking?: boolean;
       has_additional_repairs?: boolean;
     }
@@ -185,7 +189,9 @@ export const VehicleDispatchProvider: React.FC<{ children: ReactNode }> = ({ chi
       urgentNote: string | null = null,
       technicianName: string | null = null,
       isBooking = false,
-      hasAdditionalRepairs = false
+      hasAdditionalRepairs = false,
+      assignedAdvisor: string | null = null,
+      vehicleType: string | null = null
     ) => {
       const cleanNo = vehicleNo.trim().toUpperCase();
       const currentList = vehiclesRef.current;
@@ -219,6 +225,8 @@ export const VehicleDispatchProvider: React.FC<{ children: ReactNode }> = ({ chi
         current_zone: targetZone,
         technician_name: technicianName || null,
         assigned_tech: assignedTech || 'Unassigned',
+        assigned_advisor: assignedAdvisor || null,
+        vehicle_type: vehicleType || null,
         remarks: remarks || '',
         is_booking: isBooking,
         has_additional_repairs: hasAdditionalRepairs,
@@ -265,6 +273,8 @@ export const VehicleDispatchProvider: React.FC<{ children: ReactNode }> = ({ chi
             current_zone: targetZone,
             technician_name: technicianName || null,
             assigned_tech: assignedTech || 'Unassigned',
+            assigned_advisor: assignedAdvisor || null,
+            vehicle_type: vehicleType || null,
             remarks: remarks || '',
             is_booking: isBooking,
             has_additional_repairs: hasAdditionalRepairs,
@@ -385,6 +395,8 @@ export const VehicleDispatchProvider: React.FC<{ children: ReactNode }> = ({ chi
       metadata?: {
         vehicle_no?: string;
         technician_name?: string | null;
+        assigned_advisor?: string | null;
+        vehicle_type?: VehicleCategoryType | string | null;
         is_booking?: boolean;
         has_additional_repairs?: boolean;
       }
@@ -432,6 +444,8 @@ export const VehicleDispatchProvider: React.FC<{ children: ReactNode }> = ({ chi
             remarks: updatedRemarks,
             ...(metadata?.vehicle_no ? { vehicle_no: metadata.vehicle_no.trim().toUpperCase() } : {}),
             ...(metadata?.technician_name !== undefined ? { technician_name: metadata.technician_name } : {}),
+            ...(metadata?.assigned_advisor !== undefined ? { assigned_advisor: metadata.assigned_advisor ? metadata.assigned_advisor.trim() : null } : {}),
+            ...(metadata?.vehicle_type !== undefined ? { vehicle_type: metadata.vehicle_type || null } : {}),
             ...(metadata?.is_booking !== undefined ? { is_booking: metadata.is_booking } : {}),
             ...(metadata?.has_additional_repairs !== undefined ? { has_additional_repairs: metadata.has_additional_repairs } : {}),
             ...(urgencyData !== undefined ? {
