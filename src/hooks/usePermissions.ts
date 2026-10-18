@@ -41,6 +41,7 @@ export const usePermissions = () => {
     // Labor Actions (Starting Work & Task Completion per zone)
     canStartWork: (bayZone: BayZone): boolean => canForemanWorkInZone(role, section, bayZone),
     canMarkTaskDone: (bayZone: BayZone): boolean => canForemanWorkInZone(role, section, bayZone),
+    canManageBay: (bayZone: BayZone): boolean => canForemanWorkInZone(role, section, bayZone),
 
     currentRole: role,
     displayName: userProfile?.display_name ?? 'User',

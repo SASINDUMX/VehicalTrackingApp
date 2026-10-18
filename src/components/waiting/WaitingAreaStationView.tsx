@@ -33,7 +33,7 @@ export const WaitingAreaStationView: React.FC = React.memo(() => {
     setSelectedVehicle,
   } = useVehicles();
   const { colors, isDark } = useTheme();
-  const { canTransferVehicle, canFinishJob, displayName } = usePermissions();
+  const { canTransferVehicle, canManageBay, isMasterAccess, canFinishJob, displayName } = usePermissions();
   const { togglePin, isPinned } = usePinnedVehicles();
 
   const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
@@ -204,88 +204,96 @@ export const WaitingAreaStationView: React.FC = React.memo(() => {
               </View>
 
               <View style={styles.dispatchBtnGroup}>
-                {/* 1. Workshop Bay */}
-                <TouchableOpacity
-                  style={[
-                    styles.dispatchBtn,
-                    { backgroundColor: colors.bayWorkshopDim, borderColor: colors.bayWorkshopBorder },
-                    !canTransferVehicle && styles.disabledBtn,
-                  ]}
-                  onPress={() => {
-                    if (canTransferVehicle) {
-                      handleRequestTransfer(vehicle.id, vehicle.vehicle_no, 'workshop', APP_TERMINOLOGY.stations.workshop.name);
-                    }
-                  }}
-                  activeOpacity={canTransferVehicle ? 0.7 : 1}
-                >
-                  <Wrench size={13} color={colors.bayWorkshopLight} />
-                  <Text style={[styles.dispatchBtnText, { color: colors.bayWorkshopLight }]}>
-                    {APP_TERMINOLOGY.stations.workshop.dispatchBtn}
-                    {hasWorkshopTask ? ' ★' : ''}
-                  </Text>
-                </TouchableOpacity>
+                {/* 1. Workshop Bay (Car / SUV / LCV / Alignment foremen & Master roles) */}
+                {canManageBay('workshop') && (
+                  <TouchableOpacity
+                    style={[
+                      styles.dispatchBtn,
+                      { backgroundColor: colors.bayWorkshopDim, borderColor: colors.bayWorkshopBorder },
+                      !canTransferVehicle && styles.disabledBtn,
+                    ]}
+                    onPress={() => {
+                      if (canTransferVehicle) {
+                        handleRequestTransfer(vehicle.id, vehicle.vehicle_no, 'workshop', APP_TERMINOLOGY.stations.workshop.name);
+                      }
+                    }}
+                    activeOpacity={canTransferVehicle ? 0.7 : 1}
+                  >
+                    <Wrench size={13} color={colors.bayWorkshopLight} />
+                    <Text style={[styles.dispatchBtnText, { color: colors.bayWorkshopLight }]}>
+                      {APP_TERMINOLOGY.stations.workshop.dispatchBtn}
+                      {hasWorkshopTask ? ' ★' : ''}
+                    </Text>
+                  </TouchableOpacity>
+                )}
 
-                {/* 2. Wheel Alignment */}
-                <TouchableOpacity
-                  style={[
-                    styles.dispatchBtn,
-                    { backgroundColor: colors.bayAlignmentDim, borderColor: colors.bayAlignmentBorder },
-                    !canTransferVehicle && styles.disabledBtn,
-                  ]}
-                  onPress={() => {
-                    if (canTransferVehicle) {
-                      handleRequestTransfer(vehicle.id, vehicle.vehicle_no, 'alignment', APP_TERMINOLOGY.stations.alignment.name);
-                    }
-                  }}
-                  activeOpacity={canTransferVehicle ? 0.7 : 1}
-                >
-                  <Navigation size={13} color={colors.bayAlignmentLight} />
-                  <Text style={[styles.dispatchBtnText, { color: colors.bayAlignmentLight }]}>
-                    {APP_TERMINOLOGY.stations.alignment.dispatchBtn}
-                    {hasAlignmentTask ? ' ★' : ''}
-                  </Text>
-                </TouchableOpacity>
+                {/* 2. Wheel Alignment (Ground Floor Foremen & Master roles) */}
+                {canManageBay('alignment') && (
+                  <TouchableOpacity
+                    style={[
+                      styles.dispatchBtn,
+                      { backgroundColor: colors.bayAlignmentDim, borderColor: colors.bayAlignmentBorder },
+                      !canTransferVehicle && styles.disabledBtn,
+                    ]}
+                    onPress={() => {
+                      if (canTransferVehicle) {
+                        handleRequestTransfer(vehicle.id, vehicle.vehicle_no, 'alignment', APP_TERMINOLOGY.stations.alignment.name);
+                      }
+                    }}
+                    activeOpacity={canTransferVehicle ? 0.7 : 1}
+                  >
+                    <Navigation size={13} color={colors.bayAlignmentLight} />
+                    <Text style={[styles.dispatchBtnText, { color: colors.bayAlignmentLight }]}>
+                      {APP_TERMINOLOGY.stations.alignment.dispatchBtn}
+                      {hasAlignmentTask ? ' ★' : ''}
+                    </Text>
+                  </TouchableOpacity>
+                )}
 
-                {/* 3. Hoist Bay */}
-                <TouchableOpacity
-                  style={[
-                    styles.dispatchBtn,
-                    { backgroundColor: colors.bayHoistDim, borderColor: colors.bayHoistBorder },
-                    !canTransferVehicle && styles.disabledBtn,
-                  ]}
-                  onPress={() => {
-                    if (canTransferVehicle) {
-                      handleRequestTransfer(vehicle.id, vehicle.vehicle_no, 'hoist', APP_TERMINOLOGY.stations.hoist.name);
-                    }
-                  }}
-                  activeOpacity={canTransferVehicle ? 0.7 : 1}
-                >
-                  <Wrench size={13} color={colors.bayHoistLight} />
-                  <Text style={[styles.dispatchBtnText, { color: colors.bayHoistLight }]}>
-                    {APP_TERMINOLOGY.stations.hoist.dispatchBtn}
-                    {hasHoistTask ? ' ★' : ''}
-                  </Text>
-                </TouchableOpacity>
+                {/* 3. Hoist Bay (Hoist Foreman & Master roles) */}
+                {canManageBay('hoist') && (
+                  <TouchableOpacity
+                    style={[
+                      styles.dispatchBtn,
+                      { backgroundColor: colors.bayHoistDim, borderColor: colors.bayHoistBorder },
+                      !canTransferVehicle && styles.disabledBtn,
+                    ]}
+                    onPress={() => {
+                      if (canTransferVehicle) {
+                        handleRequestTransfer(vehicle.id, vehicle.vehicle_no, 'hoist', APP_TERMINOLOGY.stations.hoist.name);
+                      }
+                    }}
+                    activeOpacity={canTransferVehicle ? 0.7 : 1}
+                  >
+                    <Wrench size={13} color={colors.bayHoistLight} />
+                    <Text style={[styles.dispatchBtnText, { color: colors.bayHoistLight }]}>
+                      {APP_TERMINOLOGY.stations.hoist.dispatchBtn}
+                      {hasHoistTask ? ' ★' : ''}
+                    </Text>
+                  </TouchableOpacity>
+                )}
 
-                {/* 4. Advisor Final Inspection */}
-                <TouchableOpacity
-                  style={[
-                    styles.dispatchBtn,
-                    { backgroundColor: colors.bayInspectionDim, borderColor: colors.bayInspectionBorder },
-                    !canTransferVehicle && styles.disabledBtn,
-                  ]}
-                  onPress={() => {
-                    if (canTransferVehicle) {
-                      handleRequestTransfer(vehicle.id, vehicle.vehicle_no, 'inspection', APP_TERMINOLOGY.stations.inspection.name);
-                    }
-                  }}
-                  activeOpacity={canTransferVehicle ? 0.7 : 1}
-                >
-                  <CheckCircle2 size={13} color={colors.bayInspectionLight} />
-                  <Text style={[styles.dispatchBtnText, { color: colors.bayInspectionLight }]}>
-                    {APP_TERMINOLOGY.stations.inspection.dispatchBtn}
-                  </Text>
-                </TouchableOpacity>
+                {/* 4. Advisor Final Inspection (Master Roles only from Waiting Area) */}
+                {isMasterAccess && (
+                  <TouchableOpacity
+                    style={[
+                      styles.dispatchBtn,
+                      { backgroundColor: colors.bayInspectionDim, borderColor: colors.bayInspectionBorder },
+                      !canTransferVehicle && styles.disabledBtn,
+                    ]}
+                    onPress={() => {
+                      if (canTransferVehicle) {
+                        handleRequestTransfer(vehicle.id, vehicle.vehicle_no, 'inspection', APP_TERMINOLOGY.stations.inspection.name);
+                      }
+                    }}
+                    activeOpacity={canTransferVehicle ? 0.7 : 1}
+                  >
+                    <CheckCircle2 size={13} color={colors.bayInspectionLight} />
+                    <Text style={[styles.dispatchBtnText, { color: colors.bayInspectionLight }]}>
+                      {APP_TERMINOLOGY.stations.inspection.dispatchBtn}
+                    </Text>
+                  </TouchableOpacity>
+                )}
 
                 {/* 5. Complete / Gate Pass (For vehicles already finished waiting for pickup) */}
                 {canFinishJob && (
