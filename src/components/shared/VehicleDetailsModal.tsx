@@ -28,7 +28,6 @@ export const VehicleDetailsModal: React.FC = () => {
   const { 
     selectedVehicle, 
     setSelectedVehicle, 
-    transferVehicleZone, 
     updateVehicleJobOrder, 
     updateVehiclePlate,
     toggleVehiclePause,

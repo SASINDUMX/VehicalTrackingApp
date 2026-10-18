@@ -364,4 +364,14 @@ BEGIN
     'records', COALESCE(v_records, '[]'::jsonb)
   );
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp;
+
+-- 4. Security Hardening: Revoke anonymous access to report RPC and trigger functions
+REVOKE EXECUTE ON FUNCTION public.get_service_report_data(TIMESTAMPTZ, TIMESTAMPTZ, VARCHAR, TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_service_report_data(TIMESTAMPTZ, TIMESTAMPTZ, VARCHAR, TEXT) TO authenticated;
+
+REVOKE EXECUTE ON FUNCTION public.handle_new_user() FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION public.handle_user_password_change_revoke_sessions() FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION public.admin_reset_user_password(TEXT, TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.admin_reset_user_password(TEXT, TEXT) TO authenticated;
+

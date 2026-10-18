@@ -85,6 +85,7 @@ export const TechnicianVehicleCard: React.FC<TechnicianVehicleCardProps> = React
   const canStartBayWork = canStart && isTaskRequiredForBay;
   const isCardIdle = isStageIdle && isTaskRequiredForBay;
   const isPaused = Boolean(vehicle.is_paused);
+  const isCanDispatchToWaiting = canTransferVehicle && !isDispatching;
 
   return (
     <View
@@ -387,12 +388,12 @@ export const TechnicianVehicleCard: React.FC<TechnicianVehicleCardProps> = React
                     style={[
                       styles.dispatchBtn,
                       { backgroundColor: colors.bayWaitingDim, borderColor: colors.bayWaitingBorder },
-                      !isCanDispatch && { opacity: 0.35, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) },
+                      !isCanDispatchToWaiting && { opacity: 0.35, ...(Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : {}) },
                     ]}
                     onPress={() => {
-                      if (isCanDispatch) onRequestTransfer('waiting', APP_TERMINOLOGY.stations.waiting.name, autoCompleteTaskName);
+                      if (isCanDispatchToWaiting) onRequestTransfer('waiting', APP_TERMINOLOGY.stations.waiting.name, null);
                     }}
-                    activeOpacity={isCanDispatch ? 0.7 : 1}
+                    activeOpacity={isCanDispatchToWaiting ? 0.7 : 1}
                   >
                     <Text style={[styles.dispatchBtnText, { color: colors.bayWaitingLight }]}>{APP_TERMINOLOGY.stations.waiting.dispatchBtn}</Text>
                   </TouchableOpacity>

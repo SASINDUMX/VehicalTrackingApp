@@ -202,12 +202,17 @@ CREATE OR REPLACE FUNCTION public.admin_reset_user_password(
 )
 RETURNS JSONB
 SECURITY DEFINER
-SET search_path = public, auth
+SET search_path = public, auth, pg_temp
 LANGUAGE plpgsql
 AS $$
 DECLARE
   v_user_id UUID;
 BEGIN
+  -- Strict Super Admin authorization check
+  IF NOT public.is_super_admin() THEN
+    RAISE EXCEPTION 'Access Denied: Only Super Administrator can execute password resets.';
+  END IF;
+
   SELECT id INTO v_user_id FROM auth.users WHERE LOWER(email) = LOWER(TRIM(p_email));
   
   IF v_user_id IS NULL THEN
@@ -230,6 +235,10 @@ BEGIN
   );
 END;
 $$;
+
+REVOKE EXECUTE ON FUNCTION public.admin_reset_user_password(TEXT, TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.admin_reset_user_password(TEXT, TEXT) TO authenticated;
+
 
 -- ------------------------------------------------------------------------------
 -- 5. OPERATIONAL TABLES (VEHICLES, STAGE LOGS, TASKS)
@@ -1647,7 +1656,11 @@ BEGIN
     'records', COALESCE(v_records, '[]'::jsonb)
   );
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp;
+
+REVOKE EXECUTE ON FUNCTION public.get_service_report_data(TIMESTAMPTZ, TIMESTAMPTZ, VARCHAR, TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_service_report_data(TIMESTAMPTZ, TIMESTAMPTZ, VARCHAR, TEXT) TO authenticated;
+
 
 -- J. Paginated Audit Trail RPC
 DROP FUNCTION IF EXISTS public.get_audit_logs_paginated(character varying, timestamp with time zone, timestamp with time zone, character varying, integer, integer);
