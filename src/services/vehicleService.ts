@@ -39,7 +39,7 @@ export const vehicleService = {
       const { data: rpcRes, error: rpcErr } = await client.rpc('reconcile_daily_vehicles', {
         p_branch_id: branchId,
       });
-      if (!rpcErr && rpcRes && (Number(rpcRes.completed_count) > 0 || Number(rpcRes.deleted_count) > 0)) {
+      if (!rpcErr && rpcRes) {
         return {
           completedCount: Number(rpcRes.completed_count || 0),
           deletedCount: Number(rpcRes.deleted_count || 0),
@@ -137,13 +137,6 @@ export const vehicleService = {
   async fetchLiveVehicles(branchId?: string): Promise<Vehicle[]> {
     const client = supabase;
     if (!client || !isSupabaseConnected) return [];
-
-    // Reconcile stale overnight vehicles across day transitions
-    try {
-      await this.reconcileDailyVehicles(branchId);
-    } catch (e) {
-      console.warn('[vehicleService] Daily reconciliation note:', e);
-    }
 
     const cutoff48h = new Date(Date.now() - 48 * 3600 * 1000).toISOString();
     const liveFilter = `is_finished.eq.false,created_at.gte.${cutoff48h}`;

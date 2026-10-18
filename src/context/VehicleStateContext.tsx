@@ -8,6 +8,7 @@ import { chimeService } from '../lib/chime';
 import { hapticService } from '../lib/haptics';
 import { useAuth } from './AuthContext';
 import { deduplicateTasks } from '../utils/vehicleUtils';
+import { getSriLankaTodayString } from '../utils/workshopHoursUtils';
 
 export interface VehicleStateContextType {
   vehicles: Vehicle[];
@@ -365,20 +366,28 @@ export const VehicleStateProvider: React.FC<{ children: ReactNode }> = ({ childr
   // Midnight Rollover & Day Boundary Reconciliation (Asia/Colombo UTC+05:30)
   useEffect(() => {
     let timer: NodeJS.Timeout;
+    const lastCheckedDateRef = { current: getSriLankaTodayString() };
+    const lastHiddenAtRef = { current: Date.now() };
+
+    const runDayReconciliationAndRefresh = async () => {
+      try {
+        await vehicleService.reconcileDailyVehicles(activeBranchId);
+      } catch (err) {
+        console.warn('[VehicleStateContext] Day reconciliation error:', err);
+      }
+      fetchSupabaseData(false);
+    };
+
     const scheduleMidnightRefresh = () => {
       const now = new Date();
-      const slDateStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Colombo' });
+      const slDateStr = getSriLankaTodayString(now);
       const todayMidnight = new Date(`${slDateStr}T00:00:05+05:30`);
       const nextMidnight = new Date(todayMidnight.getTime() + 24 * 60 * 60 * 1000);
       const msUntilMidnight = Math.max(1000, nextMidnight.getTime() - now.getTime());
 
       timer = setTimeout(async () => {
-        try {
-          await vehicleService.reconcileDailyVehicles(activeBranchId);
-        } catch (err) {
-          console.warn('[VehicleStateContext] Midnight reconciliation error:', err);
-        }
-        fetchSupabaseData(false);
+        lastCheckedDateRef.current = getSriLankaTodayString();
+        await runDayReconciliationAndRefresh();
         scheduleMidnightRefresh();
       }, msUntilMidnight);
     };
@@ -386,10 +395,29 @@ export const VehicleStateProvider: React.FC<{ children: ReactNode }> = ({ childr
     scheduleMidnightRefresh();
 
     const handleVisibilityDayCheck = () => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        fetchSupabaseData(false);
+      if (typeof document === 'undefined') return;
+
+      if (document.visibilityState === 'hidden') {
+        lastHiddenAtRef.current = Date.now();
+        return;
+      }
+
+      if (document.visibilityState === 'visible') {
+        const currentDate = getSriLankaTodayString();
+        const isDayRollover = currentDate !== lastCheckedDateRef.current;
+        const hiddenDurationMs = Date.now() - lastHiddenAtRef.current;
+
+        if (isDayRollover) {
+          // Calendar date rolled over while device was asleep / tab backgrounded overnight
+          lastCheckedDateRef.current = currentDate;
+          runDayReconciliationAndRefresh();
+        } else if (hiddenDurationMs > 10 * 60 * 1000) {
+          // Backgrounded for more than 10 minutes: refresh live vehicles without reconciliation
+          fetchSupabaseData(false);
+        }
       }
     };
+
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', handleVisibilityDayCheck);
     }
