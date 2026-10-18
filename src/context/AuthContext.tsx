@@ -50,49 +50,66 @@ export const DEFAULT_WORKPLACES: WorkplaceRecord[] = [
   { id: 'kurunegala', code: 'KRG', name: 'United Motors — Kurunegala Branch', city: 'Kurunegala' },
 ];
 
+const CACHED_PROFILE_KEY = 'um_cached_user_profile';
+
+const getCachedProfile = (): UserProfile | null => {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const stored = window.localStorage.getItem(CACHED_PROFILE_KEY);
+      if (stored) return JSON.parse(stored);
+    }
+  } catch (_) {}
+  return null;
+};
+
+const setCachedProfile = (profile: UserProfile | null) => {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      if (profile) {
+        window.localStorage.setItem(CACHED_PROFILE_KEY, JSON.stringify(profile));
+      } else {
+        window.localStorage.removeItem(CACHED_PROFILE_KEY);
+      }
+    }
+  } catch (_) {}
+};
+
 const profileMemoryCache = new Map<string, UserProfile>();
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<any | null>(null);
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [userProfile, setUserProfileState] = useState<UserProfile | null>(() => getCachedProfile());
   const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
 
+  const setUserProfile = useCallback((profile: UserProfile | null) => {
+    setUserProfileState(profile);
+    setCachedProfile(profile);
+  }, []);
+
   // Branch state — seeded from profile.branch_id, switchable by manager roles
-  const [activeBranchId, setActiveBranchId] = useState<string>('orugodawatta_sec5');
+  const [activeBranchId, setActiveBranchId] = useState<string>(() => {
+    const cached = getCachedProfile();
+    return cached?.branch_id || 'orugodawatta_sec5';
+  });
   const [availableBranches, setAvailableBranches] = useState<WorkplaceRecord[]>(DEFAULT_WORKPLACES);
 
   // In-flight request deduplication map to collapse simultaneous calls into 1 network roundtrip
   const inFlightProfileRef = useRef<Map<string, Promise<UserProfile | null>>>(new Map());
 
   // Fetch all active workplaces once (used to populate branch switcher)
+  // Uses select('*') so PostgREST dynamically adapts without throwing 400 errors if optional columns are absent
   const fetchWorkplaces = useCallback(async () => {
     if (!supabase || !isSupabaseConnected) return;
     try {
-      // 1. Attempt query with trial columns (if migration_v17 is applied)
-      let workplacesData: WorkplaceRecord[] | null = null;
-      const res = await supabase
+      const { data, error } = await supabase
         .from('workplaces')
-        .select('id, name, code, city, is_trial, trial_expires_at')
+        .select('*')
         .eq('is_active', true)
         .order('name', { ascending: true });
 
-      if (!res.error && res.data) {
-        workplacesData = res.data as WorkplaceRecord[];
-      } else {
-        // 2. If trial columns don't exist yet on the active DB, fallback to baseline columns
-        const fallbackRes = await supabase
-          .from('workplaces')
-          .select('id, name, code, city')
-          .eq('is_active', true)
-          .order('name', { ascending: true });
-        if (!fallbackRes.error && fallbackRes.data) {
-          workplacesData = fallbackRes.data as WorkplaceRecord[];
-        }
-      }
-
-      if (workplacesData && workplacesData.length > 0) {
-        setAvailableBranches(workplacesData);
-        setActiveBranchId(prev => (prev ? prev : workplacesData![0].id));
+      if (!error && data && data.length > 0) {
+        setAvailableBranches(data as WorkplaceRecord[]);
+        setActiveBranchId(prev => (prev ? prev : data[0].id));
       }
     } catch (err) {
       console.warn('[AuthContext] workplaces fetch failed:', err);
@@ -126,6 +143,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
         const profile = data as UserProfile;
         profileMemoryCache.set(userId, profile);
+        setCachedProfile(profile);
         return profile;
       } catch (err) {
         console.warn('Profile fetch failed:', err);
@@ -162,28 +180,30 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       .then(async ({ data: { session } }) => {
         if (!isMounted) return;
         if (session?.user) {
-          // Verify with Supabase Auth server to detect if session was revoked on password reset
+          // Verify with Supabase Auth server: only sign out if server explicitly returns 401/403 (revoked/expired)
           try {
             const { data: { user: verifiedUser }, error: verifyError } = await client.auth.getUser();
-            if (verifyError || !verifiedUser) {
-              console.warn('[AuthContext] Session invalid or revoked on server, signing out:', verifyError?.message);
-              await client.auth.signOut();
+            if (verifyError && (verifyError.status === 401 || verifyError.status === 403)) {
+              console.warn('[AuthContext] Session invalid or revoked on server, signing out:', verifyError.message);
+              await client.auth.signOut({ scope: 'local' });
               if (isMounted) {
                 setUser(null);
                 setUserProfile(null);
               }
               return;
             }
+            if (verifiedUser) {
+              setUser(verifiedUser);
+            } else {
+              setUser(session.user);
+            }
           } catch (verifyErr) {
-            console.warn('[AuthContext] Session verification check error:', verifyErr);
+            console.warn('[AuthContext] Session verification check network warning (preserving session):', verifyErr);
+            setUser(session.user);
           }
 
-          setUser(session.user);
           try {
-            const profile = await Promise.race([
-              fetchProfile(session.user.id),
-              new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500)),
-            ]);
+            const profile = await fetchProfile(session.user.id);
             if (isMounted && profile) {
               setUserProfile(profile);
               if (profile.branch_id) setActiveBranchId(profile.branch_id);
@@ -303,7 +323,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         });
       }
     }
-  }, []);
+  }, [setUserProfile]);
 
   // Derived branch display values from availableBranches list
   const activeBranch = availableBranches.find(b => b.id === activeBranchId);
