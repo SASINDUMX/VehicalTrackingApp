@@ -76,6 +76,8 @@ CREATE TABLE IF NOT EXISTS public.workplaces (
 ALTER TABLE public.workplaces ADD COLUMN IF NOT EXISTS code VARCHAR(50);
 ALTER TABLE public.workplaces ADD COLUMN IF NOT EXISTS city VARCHAR(255) DEFAULT 'Colombo';
 ALTER TABLE public.workplaces ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+ALTER TABLE public.workplaces ADD COLUMN IF NOT EXISTS is_trial BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.workplaces ADD COLUMN IF NOT EXISTS trial_expires_at TIMESTAMPTZ DEFAULT NULL;
 
 -- Avoid UNIQUE(code) conflicts with legacy Peliyagoda codes if present
 UPDATE public.workplaces
@@ -103,6 +105,8 @@ CREATE TABLE IF NOT EXISTS public.user_profiles (
   section VARCHAR(50), -- 'car', 'suv', 'lcv', 'hoist', 'alignment'
   branch_id VARCHAR(50) NOT NULL DEFAULT 'orugodawatta_sec5' REFERENCES public.workplaces(id),
   theme_preference VARCHAR(20) DEFAULT 'system',
+  is_trial BOOLEAN DEFAULT FALSE,
+  trial_expires_at TIMESTAMPTZ DEFAULT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -114,6 +118,8 @@ ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS role user_role DEFAULT
 ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS section VARCHAR(50);
 ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS branch_id VARCHAR(50) DEFAULT 'orugodawatta_sec5';
 ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS theme_preference VARCHAR(20) DEFAULT 'system';
+ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS is_trial BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS trial_expires_at TIMESTAMPTZ DEFAULT NULL;
 
 -- 4.1 Automatic Session Revocation on Password Change (v13 Security)
 CREATE OR REPLACE FUNCTION public.handle_user_password_change_revoke_sessions()

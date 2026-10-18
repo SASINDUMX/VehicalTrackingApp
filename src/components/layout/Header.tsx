@@ -25,7 +25,7 @@ export const Header: React.FC = () => {
     drainOutbox,
     refreshVehicles,
   } = useVehicles();
-  const { signOut, user, activeBranchCode, activeBranchName, availableBranches, switchBranch } = useAuth();
+  const { signOut, user, activeBranchId, activeBranchCode, activeBranchName, availableBranches, switchBranch } = useAuth();
   const { displayName, currentRole, section, canSwitchBranch } = usePermissions();
   const { themeMode, isDark, colors, setThemeMode, toggleTheme } = useTheme();
   const [timeStr, setTimeStr] = useState<string>('');
@@ -366,6 +366,7 @@ export const Header: React.FC = () => {
           onClose={() => setIsBranchSwitcherOpen(false)}
           availableBranches={availableBranches}
           activeBranchCode={activeBranchCode}
+          activeBranchId={activeBranchId}
           onSelectBranch={switchBranch}
         />
       )}

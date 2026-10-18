@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { VehicleProvider, useVehicles } from './src/context/VehicleContext';
 import { UIProvider } from './src/context/UIContext';
 import { LoginScreen } from './src/components/auth/LoginScreen';
+import { TrialExpiredScreen } from './src/components/auth/TrialExpiredScreen';
 import { Header } from './src/components/layout/Header';
 import { SearchBarRow } from './src/components/layout/SearchBarRow';
 import { SegmentedTabs } from './src/components/layout/SegmentedTabs';
@@ -191,7 +192,7 @@ const AppContent: React.FC = () => {
 };
 
 const AuthGate: React.FC = () => {
-  const { isAuthenticated, isAuthLoading } = useAuth();
+  const { isAuthenticated, isAuthLoading, trialInfo, userProfile } = useAuth();
   const { colors } = useTheme();
 
   if (isAuthLoading) {
@@ -205,6 +206,11 @@ const AuthGate: React.FC = () => {
 
   if (!isAuthenticated) {
     return <LoginScreen />;
+  }
+
+  // Hard Licensing Gate: Lock access if workshop trial has expired (super_admin bypasses to allow admin management)
+  if (trialInfo.isExpired && userProfile?.role !== 'super_admin') {
+    return <TrialExpiredScreen />;
   }
 
   return (

@@ -1,12 +1,15 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, ReactNode } from 'react';
 import { supabase, isSupabaseConnected } from '../lib/supabase';
 import { UserRole, ForemanSection } from '../types/vehicle';
+import { calculateTrialInfo, TrialInfo } from '../utils/trialUtils';
 
 export interface WorkplaceRecord {
   id: string;
   name: string;
   code: string;
   city: string;
+  is_trial?: boolean;
+  trial_expires_at?: string | null;
 }
 
 export interface UserProfile {
@@ -16,6 +19,8 @@ export interface UserProfile {
   section?: ForemanSection | string | null;
   branch_id?: string;
   theme_preference?: 'system' | 'dark' | 'light';
+  is_trial?: boolean;
+  trial_expires_at?: string | null;
 }
 
 interface AuthContextType {
@@ -23,6 +28,7 @@ interface AuthContextType {
   userProfile: UserProfile | null;
   isAuthenticated: boolean;
   isAuthLoading: boolean;
+  trialInfo: TrialInfo;
   // Active branch (may differ from profile.branch_id for AGM/Manager who switch)
   activeBranchId: string;
   activeBranchName: string;
@@ -36,6 +42,14 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 // Module-level persistent cache for user profiles (synchronous across renders and callbacks)
+export const DEFAULT_WORKPLACES: WorkplaceRecord[] = [
+  { id: 'orugodawatta_sec5', code: 'SEC5', name: 'United Motors — Section 5 (Main)', city: 'Orugodawatta, Colombo' },
+  { id: 'orugodawatta_sec2', code: 'SEC2', name: 'United Motors — Section 2', city: 'Colombo' },
+  { id: 'kandy', code: 'KDY', name: 'United Motors — Kandy Branch', city: 'Kandy' },
+  { id: 'galle', code: 'GLE', name: 'United Motors — Galle Branch', city: 'Galle' },
+  { id: 'kurunegala', code: 'KRG', name: 'United Motors — Kurunegala Branch', city: 'Kurunegala' },
+];
+
 const profileMemoryCache = new Map<string, UserProfile>();
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -45,7 +59,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // Branch state — seeded from profile.branch_id, switchable by manager roles
   const [activeBranchId, setActiveBranchId] = useState<string>('orugodawatta_sec5');
-  const [availableBranches, setAvailableBranches] = useState<WorkplaceRecord[]>([]);
+  const [availableBranches, setAvailableBranches] = useState<WorkplaceRecord[]>(DEFAULT_WORKPLACES);
 
   // In-flight request deduplication map to collapse simultaneous calls into 1 network roundtrip
   const inFlightProfileRef = useRef<Map<string, Promise<UserProfile | null>>>(new Map());
@@ -54,14 +68,31 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const fetchWorkplaces = useCallback(async () => {
     if (!supabase || !isSupabaseConnected) return;
     try {
-      const { data } = await supabase
+      // 1. Attempt query with trial columns (if migration_v17 is applied)
+      let workplacesData: WorkplaceRecord[] | null = null;
+      const res = await supabase
         .from('workplaces')
-        .select('id, name, code, city')
+        .select('id, name, code, city, is_trial, trial_expires_at')
         .eq('is_active', true)
         .order('name', { ascending: true });
-      if (data && data.length > 0) {
-        setAvailableBranches(data as WorkplaceRecord[]);
-        setActiveBranchId(prev => (prev ? prev : data[0].id));
+
+      if (!res.error && res.data) {
+        workplacesData = res.data as WorkplaceRecord[];
+      } else {
+        // 2. If trial columns don't exist yet on the active DB, fallback to baseline columns
+        const fallbackRes = await supabase
+          .from('workplaces')
+          .select('id, name, code, city')
+          .eq('is_active', true)
+          .order('name', { ascending: true });
+        if (!fallbackRes.error && fallbackRes.data) {
+          workplacesData = fallbackRes.data as WorkplaceRecord[];
+        }
+      }
+
+      if (workplacesData && workplacesData.length > 0) {
+        setAvailableBranches(workplacesData);
+        setActiveBranchId(prev => (prev ? prev : workplacesData![0].id));
       }
     } catch (err) {
       console.warn('[AuthContext] workplaces fetch failed:', err);
@@ -177,6 +208,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (!isMounted) return;
       if (event === 'SIGNED_IN' && session?.user) {
         setUser(session.user);
+        fetchWorkplaces();
         const profile = await fetchProfile(session.user.id);
         if (isMounted) {
           setUserProfile(profile);
@@ -234,6 +266,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       if (res.data.user) {
         setUser(res.data.user);
+        fetchWorkplaces();
         const profile = await fetchProfile(res.data.user.id);
         if (!profile) {
           return { error: 'No user profile found. Please ensure a profile exists in user_profiles.' };
@@ -246,7 +279,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (err: any) {
       return { error: err.message || 'Sign in failed' };
     }
-  }, [fetchProfile]);
+  }, [fetchProfile, fetchWorkplaces]);
 
   const signOut = useCallback(async () => {
     try {
@@ -277,6 +310,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const activeBranchName = activeBranch?.name ?? 'United Motors - Orugodawatta (Section 5)';
   const activeBranchCode = activeBranch?.code ?? 'SEC 5';
 
+  // Derived trial evaluation state
+  const trialInfo = useMemo(() => {
+    return calculateTrialInfo(activeBranch, userProfile);
+  }, [activeBranch, userProfile]);
+
   // switchBranch: only called by Manager/AGM roles via header switcher
   const switchBranch = useCallback((branchId: string) => {
     setActiveBranchId(branchId);
@@ -287,6 +325,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     userProfile,
     isAuthenticated: Boolean(user && userProfile),
     isAuthLoading,
+    trialInfo,
     activeBranchId,
     activeBranchName,
     activeBranchCode,
@@ -294,7 +333,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     switchBranch,
     signIn,
     signOut,
-  }), [user, userProfile, isAuthLoading, activeBranchId, activeBranchName, activeBranchCode, availableBranches, switchBranch, signIn, signOut]);
+  }), [user, userProfile, isAuthLoading, trialInfo, activeBranchId, activeBranchName, activeBranchCode, availableBranches, switchBranch, signIn, signOut]);
 
   return (
     <AuthContext.Provider value={value}>

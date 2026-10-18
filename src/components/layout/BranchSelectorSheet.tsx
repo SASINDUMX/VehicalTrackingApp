@@ -15,6 +15,7 @@ interface BranchSelectorSheetProps {
   onClose: () => void;
   availableBranches: BranchOption[];
   activeBranchCode: string;
+  activeBranchId?: string;
   onSelectBranch: (branchId: string) => void;
 }
 
@@ -23,11 +24,20 @@ export const BranchSelectorSheet: React.FC<BranchSelectorSheetProps> = ({
   onClose,
   availableBranches,
   activeBranchCode,
+  activeBranchId,
   onSelectBranch,
 }) => {
   const { colors } = useTheme();
 
   if (!isOpen) return null;
+
+  const branches = availableBranches && availableBranches.length > 0 ? availableBranches : [
+    { id: 'orugodawatta_sec5', code: 'SEC5', name: 'United Motors — Section 5 (Main)', city: 'Orugodawatta, Colombo' },
+    { id: 'orugodawatta_sec2', code: 'SEC2', name: 'United Motors — Section 2', city: 'Colombo' },
+    { id: 'kandy', code: 'KDY', name: 'United Motors — Kandy Branch', city: 'Kandy' },
+    { id: 'galle', code: 'GLE', name: 'United Motors — Galle Branch', city: 'Galle' },
+    { id: 'kurunegala', code: 'KRG', name: 'United Motors — Kurunegala Branch', city: 'Kurunegala' },
+  ];
 
   return (
     <TouchableOpacity
@@ -44,9 +54,14 @@ export const BranchSelectorSheet: React.FC<BranchSelectorSheetProps> = ({
           <Text style={[styles.branchSheetTitle, { color: colors.textPrimary }]}>Switch Branch</Text>
         </View>
         <View style={[styles.dropdownDivider, { backgroundColor: colors.borderGlass }]} />
-        {availableBranches.map(branch => {
-          const isActive = branch.id === activeBranchCode.toLowerCase() ||
-            availableBranches.find(b => b.code === activeBranchCode)?.id === branch.id;
+        {branches.map(branch => {
+          const cleanActive = (activeBranchCode || '').replace(/\s+/g, '').toUpperCase();
+          const cleanBranchCode = (branch.code || '').replace(/\s+/g, '').toUpperCase();
+          const isActive =
+            (Boolean(activeBranchId) && branch.id === activeBranchId) ||
+            cleanBranchCode === cleanActive ||
+            branch.id.toLowerCase() === (activeBranchId || '').toLowerCase() ||
+            branch.id.toLowerCase() === (activeBranchCode || '').toLowerCase().replace(/\s+/g, '');
           return (
             <TouchableOpacity
               key={branch.id}
