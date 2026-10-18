@@ -1,8 +1,8 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Linking, Platform } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
-import { Coffee, Clock, AlertTriangle, ChevronRight, Sparkles } from 'lucide-react-native';
+import { Coffee, AlertTriangle, Sparkles } from 'lucide-react-native';
 
 interface BreakAlertBannerProps {
   activeBreak: { name: string; endStr: string } | null;
@@ -10,7 +10,7 @@ interface BreakAlertBannerProps {
 
 export const BreakAlertBanner: React.FC<BreakAlertBannerProps> = ({ activeBreak }) => {
   const { colors, isDark } = useTheme();
-  const { trialInfo, activeBranchName } = useAuth();
+  const { trialInfo } = useAuth();
 
   // Priority 1: Active Workshop Shift Break (Tea Time / Lunch)
   if (activeBreak) {
@@ -45,22 +45,8 @@ export const BreakAlertBanner: React.FC<BreakAlertBannerProps> = ({ activeBreak 
       ? (isDark ? 'rgba(245, 158, 11, 0.25)' : '#fde68a')
       : (isDark ? 'rgba(14, 165, 233, 0.25)' : '#bae6fd');
 
-    const handleUpgradePress = () => {
-      const message = encodeURIComponent(
-        `Hello United Motors Team, we are currently testing the Vehicle Tracking App at ${activeBranchName} (Trial: ${trialInfo.daysRemaining} days left) and would like to inquire about upgrading to a full workshop license.`
-      );
-      const url = `https://wa.me/94770000000?text=${message}`;
-      if (Platform.OS === 'web') {
-        window.open(url, '_blank');
-      } else {
-        Linking.openURL(url).catch(() => {});
-      }
-    };
-
     return (
-      <TouchableOpacity
-        activeOpacity={0.8}
-        onPress={handleUpgradePress}
+      <View
         style={[
           styles.stripContainer,
           {
@@ -77,15 +63,11 @@ export const BreakAlertBanner: React.FC<BreakAlertBannerProps> = ({ activeBreak 
           )}
           <Text style={[styles.stripText, { color: accentColor }]} numberOfLines={1}>
             {isWarning
-              ? `TRIAL EXPIRING SOON: ${trialInfo.daysRemaining} ${trialInfo.daysRemaining === 1 ? 'DAY' : 'DAYS'} LEFT`
-              : `WORKSHOP TRIAL EVALUATION: ${trialInfo.daysRemaining} ${trialInfo.daysRemaining === 1 ? 'DAY' : 'DAYS'} REMAINING`}
+              ? `TRIAL EVALUATION: ${trialInfo.daysRemaining} ${trialInfo.daysRemaining === 1 ? 'DAY' : 'DAYS'} LEFT`
+              : `TRIAL EVALUATION: ${trialInfo.daysRemaining} ${trialInfo.daysRemaining === 1 ? 'DAY' : 'DAYS'} REMAINING`}
           </Text>
-          <View style={styles.actionPill}>
-            <Text style={[styles.actionPillText, { color: accentColor }]}>Upgrade License</Text>
-            <ChevronRight size={11} color={accentColor} />
-          </View>
         </View>
-      </TouchableOpacity>
+      </View>
     );
   }
 
@@ -114,19 +96,5 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.5,
-  },
-  actionPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-    marginLeft: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 4,
-  },
-  actionPillText: {
-    fontSize: 10.5,
-    fontWeight: '800',
-    textDecorationLine: 'underline',
   },
 });
