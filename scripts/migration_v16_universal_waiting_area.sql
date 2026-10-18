@@ -10,11 +10,7 @@
 -- ==============================================================================
 
 -- 1. Extend Enum Type
-DO $$ 
-BEGIN
-  ALTER TYPE public.bay_zone ADD VALUE IF NOT EXISTS 'waiting';
-EXCEPTION WHEN duplicate_object THEN null;
-END $$;
+ALTER TYPE public.bay_zone ADD VALUE IF NOT EXISTS 'waiting';
 
 -- 2. Seed Section 2 Workplace
 INSERT INTO public.workplaces (id, code, name, city, is_active) 
