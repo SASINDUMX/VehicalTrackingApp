@@ -30,8 +30,10 @@ CREATE EXTENSION IF NOT EXISTS pg_cron;
 -- 2. ENUM TYPES
 -- ------------------------------------------------------------------------------
 DO $$ BEGIN
-  CREATE TYPE bay_zone AS ENUM ('workshop', 'hoist', 'alignment', 'inspection', 'completed');
+  CREATE TYPE bay_zone AS ENUM ('workshop', 'hoist', 'alignment', 'inspection', 'waiting', 'completed');
 EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+ALTER TYPE public.bay_zone ADD VALUE IF NOT EXISTS 'waiting';
 
 DO $$ BEGIN
   CREATE TYPE user_role AS ENUM (
@@ -135,7 +137,65 @@ CREATE TRIGGER on_auth_user_password_change
   FOR EACH ROW
   EXECUTE FUNCTION public.handle_user_password_change_revoke_sessions();
 
--- 4.2 Admin Helper RPC to safely reset user password and revoke sessions
+-- 4.2 Automatic User Profile Creation Trigger on New Signup / Dashboard Creation
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger
+SECURITY DEFINER
+SET search_path = public, auth
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_role user_role;
+  v_raw_role TEXT;
+BEGIN
+  v_raw_role := NEW.raw_user_meta_data->>'role';
+  
+  BEGIN
+    IF v_raw_role IS NOT NULL THEN
+      v_role := v_raw_role::user_role;
+    ELSE
+      v_role := 'service_executive'::user_role;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    v_role := 'service_executive'::user_role;
+  END;
+
+  INSERT INTO public.user_profiles (
+    id,
+    email,
+    display_name,
+    role,
+    branch_id,
+    section,
+    theme_preference,
+    created_at,
+    updated_at
+  ) VALUES (
+    NEW.id,
+    NEW.email,
+    COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'display_name', split_part(NEW.email, '@', 1)),
+    v_role,
+    COALESCE(NEW.raw_user_meta_data->>'branch_id', 'orugodawatta_sec5'),
+    NEW.raw_user_meta_data->>'section',
+    'system',
+    NOW(),
+    NOW()
+  )
+  ON CONFLICT (id) DO UPDATE
+  SET email = EXCLUDED.email,
+      updated_at = NOW();
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_new_user();
+
+-- 4.3 Admin Helper RPC to safely reset user password and revoke sessions
 CREATE OR REPLACE FUNCTION public.admin_reset_user_password(
   p_email TEXT,
   p_new_password TEXT
@@ -1375,6 +1435,14 @@ BEGIN
   WITH vehicle_bay_aggregates AS (
     SELECT
       vehicle_id,
+      MIN(CASE WHEN to_zone = 'waiting' THEN entered_at END) AS wt_first_in,
+      COALESCE(SUM(CASE WHEN to_zone = 'waiting' THEN 
+        CASE 
+          WHEN exited_at IS NOT NULL THEN COALESCE(duration_seconds, GREATEST(0, EXTRACT(EPOCH FROM (exited_at - entered_at))::INT))
+          ELSE GREATEST(0, EXTRACT(EPOCH FROM (NOW() - entered_at))::INT)
+        END 
+      END), 0)::INT AS wt_duration,
+
       MIN(CASE WHEN to_zone = 'workshop' THEN entered_at END) AS ws_first_in,
       COALESCE(SUM(CASE WHEN to_zone = 'workshop' THEN 
         CASE 
@@ -1455,31 +1523,43 @@ BEGIN
 
       COALESCE(SUM(
         CASE 
-          WHEN exited_at IS NOT NULL THEN idle_seconds
-          WHEN work_started_at IS NULL THEN GREATEST(0, EXTRACT(EPOCH FROM (NOW() - entered_at))::INT)
-          WHEN work_completed_at IS NOT NULL THEN GREATEST(0, EXTRACT(EPOCH FROM (work_started_at - entered_at))::INT) + GREATEST(0, EXTRACT(EPOCH FROM (NOW() - work_completed_at))::INT)
-          ELSE GREATEST(0, EXTRACT(EPOCH FROM (work_started_at - entered_at))::INT)
+          WHEN to_zone IN ('workshop', 'alignment', 'hoist') THEN
+            CASE 
+              WHEN exited_at IS NOT NULL THEN idle_seconds
+              WHEN work_started_at IS NULL THEN GREATEST(0, EXTRACT(EPOCH FROM (NOW() - entered_at))::INT)
+              WHEN work_completed_at IS NOT NULL THEN GREATEST(0, EXTRACT(EPOCH FROM (work_started_at - entered_at))::INT) + GREATEST(0, EXTRACT(EPOCH FROM (NOW() - work_completed_at))::INT)
+              ELSE GREATEST(0, EXTRACT(EPOCH FROM (work_started_at - entered_at))::INT)
+            END
+          ELSE 0
         END
       ), 0)::INT AS total_idle_sec,
 
       COALESCE(SUM(
         CASE 
-          WHEN exited_at IS NOT NULL THEN active_seconds
-          WHEN work_started_at IS NULL THEN 0
-          WHEN work_completed_at IS NOT NULL THEN GREATEST(0, EXTRACT(EPOCH FROM (work_completed_at - work_started_at))::INT)
-          ELSE GREATEST(0, EXTRACT(EPOCH FROM (NOW() - work_started_at))::INT)
+          WHEN to_zone IN ('workshop', 'alignment', 'hoist') THEN
+            CASE 
+              WHEN exited_at IS NOT NULL THEN active_seconds
+              WHEN work_started_at IS NULL THEN 0
+              WHEN work_completed_at IS NOT NULL THEN GREATEST(0, EXTRACT(EPOCH FROM (work_completed_at - work_started_at))::INT)
+              ELSE GREATEST(0, EXTRACT(EPOCH FROM (NOW() - work_started_at))::INT)
+            END
+          ELSE 0
         END
       ), 0)::INT AS total_active_sec,
 
       COALESCE(SUM(
         CASE 
-          WHEN break_seconds > 0 THEN break_seconds 
-          ELSE public.calculate_break_overlap_seconds(entered_at, COALESCE(exited_at, NOW()))
+          WHEN to_zone IN ('workshop', 'alignment', 'hoist') THEN
+            CASE 
+              WHEN break_seconds > 0 THEN break_seconds 
+              ELSE public.calculate_break_overlap_seconds(entered_at, COALESCE(exited_at, NOW()))
+            END
+          ELSE 0
         END
       ), 0)::INT AS total_stage_breaks_sec
     FROM public.stage_logs
     WHERE vehicle_id IN (SELECT id FROM temp_filtered_vehicles)
-      AND to_zone IN ('workshop', 'alignment', 'hoist')
+      AND to_zone IN ('workshop', 'alignment', 'hoist', 'waiting')
     GROUP BY vehicle_id
   ),
   task_summaries AS (
@@ -1536,6 +1616,8 @@ BEGIN
       ),
       'total_idle_sec', COALESCE(vba.total_idle_sec, 0),
       'total_active_sec', COALESCE(vba.total_active_sec, 0),
+      'waiting_first_in', vba.wt_first_in,
+      'waiting_duration', COALESCE(vba.wt_duration, 0),
       'workshop_first_in', vba.ws_first_in,
       'workshop_idle', COALESCE(vba.ws_idle, 0),
       'workshop_active', COALESCE(vba.ws_active, 0),
