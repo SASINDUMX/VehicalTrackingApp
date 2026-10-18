@@ -24,6 +24,64 @@ export const SegmentedTabs: React.FC = () => {
     return vehicles.filter(v => v.current_zone === 'waiting' && !v.is_finished).length;
   }, [vehicles]);
 
+  const tabs = useMemo<
+    {
+      id: NavigationTab;
+      label: string;
+      activeBg: string;
+      activeBorder: string;
+      activeColor: string;
+      badge?: number;
+    }[]
+  >(
+    () => [
+      {
+        id: 'overview',
+        label: APP_TERMINOLOGY.navigation.overview,
+        activeBg: colors.primaryDim,
+        activeBorder: colors.primary,
+        activeColor: isDark ? colors.primaryLight : colors.primary,
+      },
+      {
+        id: 'waiting',
+        label: APP_TERMINOLOGY.stations.waiting.tabLabel,
+        activeBg: colors.bayWaitingDim,
+        activeBorder: colors.bayWaiting,
+        activeColor: isDark ? colors.bayWaitingLight : colors.bayWaiting,
+        badge: waitingCount,
+      },
+      {
+        id: 'workshop',
+        label: APP_TERMINOLOGY.stations.workshop.tabLabel,
+        activeBg: colors.bayWorkshopDim,
+        activeBorder: colors.bayWorkshop,
+        activeColor: isDark ? colors.bayWorkshopLight : colors.bayWorkshop,
+      },
+      {
+        id: 'alignment',
+        label: APP_TERMINOLOGY.stations.alignment.tabLabel,
+        activeBg: colors.bayAlignmentDim,
+        activeBorder: colors.bayAlignment,
+        activeColor: isDark ? colors.bayAlignmentLight : colors.bayAlignment,
+      },
+      {
+        id: 'hoist',
+        label: APP_TERMINOLOGY.stations.hoist.tabLabel,
+        activeBg: colors.bayHoistDim,
+        activeBorder: colors.bayHoist,
+        activeColor: isDark ? colors.bayHoistLight : colors.bayHoist,
+      },
+      {
+        id: 'inspection',
+        label: APP_TERMINOLOGY.stations.inspection.tabLabel,
+        activeBg: colors.bayInspectionDim,
+        activeBorder: colors.bayInspection,
+        activeColor: isDark ? colors.bayInspectionLight : colors.bayInspection,
+      },
+    ],
+    [colors, isDark, waitingCount]
+  );
+
   if (isReportsModalOpen) {
     return (
       <View style={[styles.segmentedContainer, { backgroundColor: colors.surface, borderBottomColor: colors.borderGlass }]}>
@@ -109,64 +167,6 @@ export const SegmentedTabs: React.FC = () => {
       </View>
     );
   }
-
-  const tabs = useMemo<
-    {
-      id: NavigationTab;
-      label: string;
-      activeBg: string;
-      activeBorder: string;
-      activeColor: string;
-      badge?: number;
-    }[]
-  >(
-    () => [
-      {
-        id: 'overview',
-        label: APP_TERMINOLOGY.navigation.overview,
-        activeBg: colors.primaryDim,
-        activeBorder: colors.primary,
-        activeColor: isDark ? colors.primaryLight : colors.primary,
-      },
-      {
-        id: 'waiting',
-        label: APP_TERMINOLOGY.stations.waiting.tabLabel,
-        activeBg: colors.bayWaitingDim,
-        activeBorder: colors.bayWaiting,
-        activeColor: isDark ? colors.bayWaitingLight : colors.bayWaiting,
-        badge: waitingCount,
-      },
-      {
-        id: 'workshop',
-        label: APP_TERMINOLOGY.stations.workshop.tabLabel,
-        activeBg: colors.bayWorkshopDim,
-        activeBorder: colors.bayWorkshop,
-        activeColor: isDark ? colors.bayWorkshopLight : colors.bayWorkshop,
-      },
-      {
-        id: 'alignment',
-        label: APP_TERMINOLOGY.stations.alignment.tabLabel,
-        activeBg: colors.bayAlignmentDim,
-        activeBorder: colors.bayAlignment,
-        activeColor: isDark ? colors.bayAlignmentLight : colors.bayAlignment,
-      },
-      {
-        id: 'hoist',
-        label: APP_TERMINOLOGY.stations.hoist.tabLabel,
-        activeBg: colors.bayHoistDim,
-        activeBorder: colors.bayHoist,
-        activeColor: isDark ? colors.bayHoistLight : colors.bayHoist,
-      },
-      {
-        id: 'inspection',
-        label: APP_TERMINOLOGY.stations.inspection.tabLabel,
-        activeBg: colors.bayInspectionDim,
-        activeBorder: colors.bayInspection,
-        activeColor: isDark ? colors.bayInspectionLight : colors.bayInspection,
-      },
-    ],
-    [colors, isDark, waitingCount]
-  );
 
   return (
     <View
