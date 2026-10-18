@@ -207,39 +207,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const rawEmail = emailInput.trim().toLowerCase();
     let email = rawEmail;
     let password = passwordInput;
-    const isTryingAdmin = rawEmail === 'admin@unitedmotors.com' || rawEmail === 'superadmin@unitedmotors.com';
-
-    // Direct, zero-error handling for Super Admin to avoid Supabase GoTrue 500 schema error
-    if (isTryingAdmin) {
-      if (password !== 'UMAdmin@2026' && password !== 'Admin@123' && password !== 'Exec@123') {
-        return { error: 'Invalid login credentials' };
-      }
-      try {
-        const adminBridge = await supabase.auth.signInWithPassword({
-          email: 'executive@unitedmotors.com',
-          password: 'Exec@123',
-        });
-        if (adminBridge.error) {
-          return { error: adminBridge.error.message };
-        }
-        if (adminBridge.data.user) {
-          setUser(adminBridge.data.user);
-          const superAdminProfile: UserProfile = {
-            id: adminBridge.data.user.id,
-            display_name: 'Super Administrator (Headquarters)',
-            role: 'super_admin',
-            section: null,
-            branch_id: 'orugodawatta_sec5',
-            theme_preference: 'system',
-          };
-          setUserProfile(superAdminProfile);
-          setActiveBranchId('orugodawatta_sec5');
-          return { error: null };
-        }
-      } catch (err: any) {
-        return { error: err.message || 'Super Admin sign in failed' };
-      }
-    }
 
     // Alias mapping for common typo patterns
     if (rawEmail === 'advisor.car@unitedmotors.com') email = 'advisor.car1@unitedmotors.com';
@@ -252,6 +219,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         password = 'Foreman@123';
       }
 
+      // 1. Direct Supabase authentication with the user's real credentials
       let res = await supabase.auth.signInWithPassword({ email, password });
 
       // Fallback for foreman if password was entered differently
@@ -266,12 +234,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       if (res.data.user) {
         setUser(res.data.user);
-        let profile = await fetchProfile(res.data.user.id);
-        if (isTryingAdmin && profile) {
-          profile = { ...profile, role: 'super_admin', display_name: 'Super Administrator (Headquarters)' };
-        }
+        const profile = await fetchProfile(res.data.user.id);
         if (!profile) {
-          return { error: 'No user profile found. Contact your administrator.' };
+          return { error: 'No user profile found. Please ensure a profile exists in user_profiles.' };
         }
         setUserProfile(profile);
         setActiveBranchId(profile.branch_id || 'orugodawatta_sec5');
