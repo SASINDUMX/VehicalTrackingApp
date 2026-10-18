@@ -1,4 +1,4 @@
-export type BayZone = 'workshop' | 'hoist' | 'alignment' | 'inspection' | 'completed';
+export type BayZone = 'workshop' | 'hoist' | 'alignment' | 'inspection' | 'completed' | 'waiting';
 
 export type UserRole = 
   | 'super_admin'
@@ -11,7 +11,7 @@ export type UserRole =
 
 export type ForemanSection = 'car' | 'suv' | 'lcv' | 'hoist' | 'alignment';
 
-export type NavigationTab = 'overview' | 'workshop' | 'alignment' | 'hoist' | 'inspection';
+export type NavigationTab = 'overview' | 'waiting' | 'workshop' | 'alignment' | 'hoist' | 'inspection';
 
 export type TaskType = 'general_service' | 'hoist_service' | 'wheel_alignment';
 

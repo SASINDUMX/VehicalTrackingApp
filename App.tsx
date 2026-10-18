@@ -10,6 +10,7 @@ import { SegmentedTabs } from './src/components/layout/SegmentedTabs';
 import { FloorPlan2D } from './src/components/supervisor/FloorPlan2D';
 import { TechnicianStationView } from './src/components/technician/TechnicianStationView';
 import { AdvisorInspectionView } from './src/components/advisor/AdvisorInspectionView';
+import { WaitingAreaStationView } from './src/components/waiting/WaitingAreaStationView';
 import { AddVehicleModal } from './src/components/supervisor/AddVehicleModal';
 import { VehicleDetailsModal } from './src/components/shared/VehicleDetailsModal';
 import { ServiceReportsModal } from './src/components/reports/ServiceReportsModal';
@@ -19,7 +20,7 @@ import { UserRole, NavigationTab } from './src/types/vehicle';
 
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 
-const navigationTabs: NavigationTab[] = ['overview', 'workshop', 'alignment', 'hoist', 'inspection'];
+const navigationTabs: NavigationTab[] = ['overview', 'waiting', 'workshop', 'alignment', 'hoist', 'inspection'];
 
 const TabTransitionWrapper: React.FC<{ activeKey: string; children: React.ReactNode }> = ({ activeKey, children }) => {
   const fadeAnim = React.useRef(new Animated.Value(0.3)).current;
@@ -165,6 +166,7 @@ const AppContent: React.FC = () => {
             >
               <TabTransitionWrapper activeKey={activeTab}>
                 {activeTab === 'overview' && <FloorPlan2D />}
+                {activeTab === 'waiting' && <WaitingAreaStationView />}
                 {(activeTab === 'workshop' || activeTab === 'hoist' || activeTab === 'alignment') && (
                   <TechnicianStationView />
                 )}

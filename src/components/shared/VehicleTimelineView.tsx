@@ -14,6 +14,7 @@ const STAGE_ICONS: Record<BayZone, any> = {
   hoist: Wrench,
   inspection: CheckCircle2,
   completed: CheckCircle2,
+  waiting: Clock,
 };
 
 const getStageOrder = (colors?: any) =>
@@ -205,7 +206,11 @@ export const VehicleTimelineView: React.FC<VehicleTimelineViewProps> = ({
                   </Text>
                   <StatusPill
                     variant={nodeTheme.pillVariant}
-                    label={nodeTheme.pillLabel}
+                    label={
+                      stageDef.zone === 'waiting'
+                        ? (status === 'completed' ? 'DISPATCHED' : (status === 'idle' ? 'WAITING' : nodeTheme.pillLabel))
+                        : nodeTheme.pillLabel
+                    }
                     size="sm"
                   />
                 </View>
@@ -232,13 +237,13 @@ export const VehicleTimelineView: React.FC<VehicleTimelineViewProps> = ({
                         >
                           {{
                             active: `Active: ${spentStr}`,
-                            idle: `Idle: ${spentStr}`,
-                            completed: `Spent: ${spentStr}`,
-                            bypassed: 'Bypassed',
-                            skipped: 'Skipped',
-                            ready: 'Ready',
-                            pending: 'Pending',
-                          }[status] || 'Pending'}
+                            idle: stageDef.zone === 'waiting' ? `Waiting: ${spentStr}` : `Idle: ${spentStr}`,
+                            ready: 'Ready for delivery',
+                            completed: stageDef.zone === 'waiting' ? `Total Wait: ${spentStr}` : `Total: ${spentStr}`,
+                            bypassed: `Spent: ${spentStr}`,
+                            skipped: '0m',
+                            pending: '0m',
+                          }[status]}
                         </Text>
                       </View>
                     </View>

@@ -458,6 +458,15 @@ export const computeVehicleTimersMap = (vehicleList: Vehicle[]): Record<string, 
       return;
     }
 
+    // Waiting zone is the buffer staging area - pure queue duration timer
+    if (v.current_zone === 'waiting') {
+      const lastLog = v.stage_logs[v.stage_logs.length - 1];
+      const enterMs = lastLog?.entered_at ? new Date(lastLog.entered_at).getTime() : new Date(v.intake_at).getTime();
+      const waitSec = Number.isNaN(enterMs) ? 0 : Math.max(0, Math.floor((now.getTime() - enterMs) / 1000));
+      updated[v.id] = `WAITING · ${formatDurationString(waitSec, true)}`;
+      return;
+    }
+
     const lastLog = v.stage_logs[v.stage_logs.length - 1];
 
     if (lastLog && !lastLog.exited_at) {

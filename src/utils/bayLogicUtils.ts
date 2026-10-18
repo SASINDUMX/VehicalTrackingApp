@@ -10,6 +10,7 @@ export interface VehicleBayStatus {
   canShowHoistBtn: boolean;
   canShowWorkshopBtn: boolean;
   canShowAdvisorBtn: boolean;
+  canShowWaitingBtn: boolean;
   hasAnyDispatchBtn: boolean;
   isCanDispatch: boolean;
 }
@@ -49,7 +50,11 @@ export const computeVehicleBayStatus = (
 
   // Final Inspection is always available from working bays so vehicles can proceed to inspection
   const canShowAdvisorBtn   = activeBay !== 'inspection' && !vehicle.is_finished;
-  const hasAnyDispatchBtn   = canShowAlignmentBtn || canShowHoistBtn || canShowWorkshopBtn || canShowAdvisorBtn;
+
+  // Waiting Area is always available from working bays (e.g. for spare parts hold, customer approval)
+  const canShowWaitingBtn   = activeBay !== 'waiting' && !vehicle.is_finished;
+
+  const hasAnyDispatchBtn   = canShowAlignmentBtn || canShowHoistBtn || canShowWorkshopBtn || canShowAdvisorBtn || canShowWaitingBtn;
 
   return {
     isCurrentTaskDone,
@@ -60,6 +65,7 @@ export const computeVehicleBayStatus = (
     canShowHoistBtn,
     canShowWorkshopBtn,
     canShowAdvisorBtn,
+    canShowWaitingBtn,
     hasAnyDispatchBtn,
     isCanDispatch,
   };

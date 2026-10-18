@@ -3,7 +3,7 @@ import { Modal, View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet,
 import { useVehicles } from '../../context/VehicleContext';
 import { useUI } from '../../context/UIContext';
 import { BayZone, TaskType, VehicleCategoryType } from '../../types/vehicle';
-import { X, Car, Wrench, Shield, Navigation, Send, CheckSquare, Square, AlertTriangle } from 'lucide-react-native';
+import { X, Car, Wrench, Shield, Navigation, Send, CheckSquare, Square, AlertTriangle, Clock } from 'lucide-react-native';
 
 import { formatVehicleNoInput, isValidVehicleNo } from '../../utils/vehicleNumberUtils';
 import { computeRecommendedStation } from '../../utils/bayLogicUtils';
@@ -190,6 +190,26 @@ export const AddVehicleModal: React.FC = () => {
             <View style={styles.formGroup}>
               <Text style={[styles.label, { color: colors.textSecondary }]}>TARGET DISPATCH STATION:</Text>
               <View style={styles.dispatchGrid}>
+                {/* 0. Waiting Area (Holding/Staging Queue) */}
+                <TouchableOpacity
+                  style={[
+                    styles.dispatchBtn,
+                    {
+                      backgroundColor: targetZone === 'waiting' ? colors.bayWaitingDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
+                      borderColor: targetZone === 'waiting' ? colors.bayWaiting : colors.borderGlass,
+                    }
+                  ]}
+                  onPress={() => {
+                    setTargetZone('waiting');
+                    setAssignedTech(APP_TERMINOLOGY.stations.waiting.name);
+                  }}
+                >
+                  <Clock size={16} color={targetZone === 'waiting' ? colors.bayWaitingLight : colors.textMuted} />
+                  <Text style={[styles.dispatchText, { color: targetZone === 'waiting' ? colors.textPrimary : colors.textSecondary }]}>
+                    TO {APP_TERMINOLOGY.stations.waiting.shortName.toUpperCase()}
+                  </Text>
+                </TouchableOpacity>
+
                 {/* 1. Workshop (Default 1st) */}
                 {selectedTasks.includes('general_service') && (
                   <TouchableOpacity

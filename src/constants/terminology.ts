@@ -73,6 +73,15 @@ export const APP_TERMINOLOGY = {
       code: 'DONE',
       description: 'Vehicle servicing completed and handed over to customer',
     },
+    waiting: {
+      id: 'waiting',
+      name: 'Holding & Waiting Area',
+      shortName: 'Waiting Area',
+      tabLabel: 'Waiting',
+      dispatchBtn: 'Waiting Area',
+      code: 'HOLD',
+      description: 'Holding yard for vehicles queued for bays, awaiting spare parts, or pending delivery',
+    },
   } as Record<BayZone, StationTerminology>,
 
   sections: {
