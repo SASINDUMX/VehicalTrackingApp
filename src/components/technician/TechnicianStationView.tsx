@@ -3,7 +3,7 @@ import { View, Text, FlatList, StyleSheet } from 'react-native';
 import { Car, AlertTriangle, CheckCircle2 } from 'lucide-react-native';
 import { EmptyStateCard } from '../shared/EmptyStateCard';
 import { TransferConfirmModal } from '../shared/TransferConfirmModal';
-import { LoadingSpot } from '../shared/LoadingSpot';
+import { VehicleCardSkeleton } from '../shared/VehicleCardSkeleton';
 import { sortWorkshopVehicles } from '../../utils/vehicleUtils';
 import { useTechnicianStation } from '../../hooks/useTechnicianStation';
 import { usePinnedVehicles } from '../../hooks/usePinnedVehicles';
@@ -80,7 +80,9 @@ export const TechnicianStationView: React.FC = React.memo(() => {
   return (
     <View style={styles.rootView}>
       {isLoading ? (
-        <LoadingSpot color={getBayColor(activeBay, colors)} />
+        <View style={[styles.content, { gap: 12 }]}>
+          <VehicleCardSkeleton variant="full" count={3} />
+        </View>
       ) : sortedBayVehicles.length === 0 ? (
         <EmptyStateCard
           icon={Car}

@@ -6,7 +6,7 @@ import { StatusPill } from '../shared/StatusPill';
 import { VehicleCardHeader } from '../shared/VehicleCardHeader';
 import { TransferConfirmModal } from '../shared/TransferConfirmModal';
 import { CalloutBanner } from '../shared/CalloutBanner';
-import { LoadingSpot } from '../shared/LoadingSpot';
+import { VehicleCardSkeleton } from '../shared/VehicleCardSkeleton';
 import { sortWorkshopVehicles, getBayForTaskType } from '../../utils/vehicleUtils';
 import { useAdvisorInspection } from '../../hooks/useAdvisorInspection';
 import { usePinnedVehicles } from '../../hooks/usePinnedVehicles';
@@ -199,7 +199,11 @@ export const AdvisorInspectionView: React.FC = React.memo(() => {
   };
 
   if (isLoading) {
-    return <LoadingSpot color={colors.bayInspection} />;
+    return (
+      <View style={[styles.content, { gap: 12 }]}>
+        <VehicleCardSkeleton variant="full" count={3} />
+      </View>
+    );
   }
 
   if (displayVehicles.length === 0) {

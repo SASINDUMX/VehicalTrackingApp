@@ -4,7 +4,7 @@ import { Car, FileCheck, Bookmark } from 'lucide-react-native';
 import { EmptyStateCard } from '../shared/EmptyStateCard';
 import { VehicleCardHeader } from '../shared/VehicleCardHeader';
 import { VehicleProgressBar } from '../shared/VehicleProgressBar';
-import { LoadingSpot } from '../shared/LoadingSpot';
+import { VehicleCardSkeleton } from '../shared/VehicleCardSkeleton';
 import { computeSpatialVehicleStatus } from '../../utils/bayLogicUtils';
 import { sortWorkshopVehicles } from '../../utils/vehicleUtils';
 import { useFloorPlan } from '../../hooks/useFloorPlan';
@@ -163,7 +163,9 @@ export const FloorPlan2D: React.FC = React.memo(() => {
 
                     <View style={[styles.spatialBayFloor, { backgroundColor: isDark ? colors.surface : colors.surfaceElevated }]}>
                       {isLoading ? (
-                        <LoadingSpot color={bay.color} compact />
+                        <View style={styles.bayVehicleContainer}>
+                          <VehicleCardSkeleton variant="compact" count={2} />
+                        </View>
                       ) : bayVehicles.length === 0 ? (
                         <View style={[styles.bayEmptySpot, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)' }]}>
                           <Car size={28} color={colors.textMuted} />
