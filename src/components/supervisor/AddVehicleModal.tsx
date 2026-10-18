@@ -321,7 +321,7 @@ export const AddVehicleModal: React.FC = () => {
             {/* Vehicle Type (Optional single-select) */}
             <View style={styles.formGroup}>
               <Text style={[styles.label, { color: colors.textSecondary }]}>VEHICLE TYPE (OPTIONAL):</Text>
-              <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+              <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'nowrap' }}>
                 {[
                   { type: 'car' as const, label: 'CAR' },
                   { type: 'suv' as const, label: 'SUV' },
@@ -336,16 +336,33 @@ export const AddVehicleModal: React.FC = () => {
                         styles.dispatchBtn,
                         {
                           flex: 1,
-                          minWidth: 70,
-                          paddingVertical: 10,
+                          minWidth: 0,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          paddingVertical: 9,
+                          paddingHorizontal: 4,
                           backgroundColor: isSelected ? colors.primaryDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
                           borderColor: isSelected ? colors.primary : colors.borderGlass,
+                          ...(Platform.OS === 'web' ? ({ cursor: 'pointer' } as any) : {}),
                         }
                       ]}
                       onPress={() => setVehicleType(isSelected ? null : item.type)}
+                      activeOpacity={0.7}
                     >
-                      {isSelected ? <CheckSquare size={14} color={colors.primary} /> : <Square size={14} color={colors.textMuted} />}
-                      <Text style={[styles.dispatchText, { color: isSelected ? colors.textPrimary : colors.textSecondary, marginLeft: 6 }]}>
+                      {isSelected ? <CheckSquare size={13} color={colors.primary} /> : <Square size={13} color={colors.textMuted} />}
+                      <Text 
+                        numberOfLines={1}
+                        style={[
+                          styles.dispatchText, 
+                          { 
+                            color: isSelected ? colors.textPrimary : colors.textSecondary, 
+                            marginLeft: 4,
+                            fontSize: 11,
+                            fontWeight: isSelected ? '800' : '600',
+                          }
+                        ]}
+                      >
                         {item.label}
                       </Text>
                     </TouchableOpacity>
