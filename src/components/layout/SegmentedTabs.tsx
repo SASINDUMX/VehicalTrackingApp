@@ -1,13 +1,15 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import React, { useMemo } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, ScrollView } from 'react-native';
 import { useVehicles } from '../../context/VehicleContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { FileText, ClipboardList, Info } from 'lucide-react-native';
 import { useTheme } from '../../context/ThemeContext';
 import { APP_TERMINOLOGY } from '../../constants/terminology';
+import { NavigationTab } from '../../types/vehicle';
 
 export const SegmentedTabs: React.FC = () => {
   const {
+    vehicles,
     activeTab,
     setActiveTab,
     isReportsModalOpen,
@@ -17,6 +19,68 @@ export const SegmentedTabs: React.FC = () => {
   } = useVehicles();
   const { canViewAuditLogs } = usePermissions();
   const { colors, isDark } = useTheme();
+
+  const waitingCount = useMemo(() => {
+    return vehicles.filter(v => v.current_zone === 'waiting' && !v.is_finished).length;
+  }, [vehicles]);
+
+  const tabs = useMemo<
+    {
+      id: NavigationTab;
+      label: string;
+      activeBg: string;
+      activeBorder: string;
+      activeColor: string;
+      badge?: number;
+    }[]
+  >(
+    () => [
+      {
+        id: 'overview',
+        label: APP_TERMINOLOGY.navigation.overview,
+        activeBg: colors.primaryDim,
+        activeBorder: colors.primary,
+        activeColor: isDark ? colors.primaryLight : colors.primary,
+      },
+      {
+        id: 'waiting',
+        label: APP_TERMINOLOGY.stations.waiting.tabLabel,
+        activeBg: colors.bayWaitingDim,
+        activeBorder: colors.bayWaiting,
+        activeColor: isDark ? colors.bayWaitingLight : colors.bayWaiting,
+        badge: waitingCount,
+      },
+      {
+        id: 'workshop',
+        label: APP_TERMINOLOGY.stations.workshop.tabLabel,
+        activeBg: colors.bayWorkshopDim,
+        activeBorder: colors.bayWorkshop,
+        activeColor: isDark ? colors.bayWorkshopLight : colors.bayWorkshop,
+      },
+      {
+        id: 'alignment',
+        label: APP_TERMINOLOGY.stations.alignment.tabLabel,
+        activeBg: colors.bayAlignmentDim,
+        activeBorder: colors.bayAlignment,
+        activeColor: isDark ? colors.bayAlignmentLight : colors.bayAlignment,
+      },
+      {
+        id: 'hoist',
+        label: APP_TERMINOLOGY.stations.hoist.tabLabel,
+        activeBg: colors.bayHoistDim,
+        activeBorder: colors.bayHoist,
+        activeColor: isDark ? colors.bayHoistLight : colors.bayHoist,
+      },
+      {
+        id: 'inspection',
+        label: APP_TERMINOLOGY.stations.inspection.tabLabel,
+        activeBg: colors.bayInspectionDim,
+        activeBorder: colors.bayInspection,
+        activeColor: isDark ? colors.bayInspectionLight : colors.bayInspection,
+      },
+    ],
+    [colors, isDark, waitingCount]
+  );
 
   if (isReportsModalOpen) {
     return (
@@ -104,169 +168,81 @@ export const SegmentedTabs: React.FC = () => {
     );
   }
 
-  const isOverviewActive = activeTab === 'overview';
-  const isWorkshopActive = activeTab === 'workshop';
-  const isAlignmentActive = activeTab === 'alignment';
-  const isHoistActive = activeTab === 'hoist';
-  const isAdvisorActive = activeTab === 'inspection';
-
   return (
-    <View style={[styles.segmentedContainer, { backgroundColor: colors.surface, borderBottomColor: colors.borderGlass }]}>
-      <View style={styles.segmentedRow}>
-        {/* 1. Floor Overview Button */}
-        <TouchableOpacity
+    <View
+      style={[
+        styles.segmentedContainer,
+        { backgroundColor: colors.surface, borderBottomColor: colors.borderGlass },
+      ]}
+    >
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        style={styles.scrollWrapper}
+      >
+        <View
           style={[
-            styles.segmentSingleBtn,
+            styles.unifiedRail,
             {
-              backgroundColor: isOverviewActive 
-                ? colors.primaryDim 
-                : (isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.04)'),
-              borderColor: isOverviewActive ? colors.primary : colors.borderGlass,
-            }
+              backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.03)',
+              borderColor: colors.borderGlass,
+            },
           ]}
-          onPress={() => setActiveTab('overview')}
-          activeOpacity={0.7}
         >
-          <Text 
-            numberOfLines={1}
-            style={[
-              styles.segmentBtnText,
-              {
-                color: isOverviewActive 
-                  ? (isDark ? colors.primaryLight : colors.primary) 
-                  : colors.textSecondary,
-                fontWeight: isOverviewActive ? '800' : '600',
-              }
-            ]}
-          >
-            {APP_TERMINOLOGY.navigation.overview}
-          </Text>
-        </TouchableOpacity>
+          {tabs.map((tab, index) => {
+            const isActive = activeTab === tab.id;
+            const isPrevActive = index > 0 && activeTab === tabs[index - 1].id;
+            const showDivider = index > 0 && !isActive && !isPrevActive;
 
-        {/* 2. 3 Workshop Station Stages (Grouped Box: General | Alignment | Hoist) */}
-        <View style={[
-          styles.groupedStagesBox,
-          {
-            backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.04)',
-            borderColor: colors.borderGlass
-          }
-        ]}>
-          <TouchableOpacity
-            style={[
-              styles.groupedStageItem,
-              isWorkshopActive && {
-                backgroundColor: colors.bayWorkshopDim,
-                borderColor: colors.bayWorkshop,
-              }
-            ]}
-            onPress={() => setActiveTab('workshop')}
-            activeOpacity={0.7}
-          >
-            <Text 
-              numberOfLines={1}
-              style={[
-                styles.segmentBtnText,
-                {
-                  color: isWorkshopActive 
-                    ? (isDark ? colors.bayWorkshopLight : colors.bayWorkshop) 
-                    : colors.textSecondary,
-                  fontWeight: isWorkshopActive ? '800' : '600',
-                }
-              ]}
-            >
-              {APP_TERMINOLOGY.stations.workshop.tabLabel}
-            </Text>
-          </TouchableOpacity>
-
-          <View style={[styles.stageDivider, { backgroundColor: colors.borderGlass }]} />
-
-          <TouchableOpacity
-            style={[
-              styles.groupedStageItem,
-              isAlignmentActive && {
-                backgroundColor: colors.bayAlignmentDim,
-                borderColor: colors.bayAlignment,
-              }
-            ]}
-            onPress={() => setActiveTab('alignment')}
-            activeOpacity={0.7}
-          >
-            <Text 
-              numberOfLines={1}
-              style={[
-                styles.segmentBtnText,
-                {
-                  color: isAlignmentActive 
-                    ? (isDark ? colors.bayAlignmentLight : colors.bayAlignment) 
-                    : colors.textSecondary,
-                  fontWeight: isAlignmentActive ? '800' : '600',
-                }
-              ]}
-            >
-              {APP_TERMINOLOGY.stations.alignment.tabLabel}
-            </Text>
-          </TouchableOpacity>
-
-          <View style={[styles.stageDivider, { backgroundColor: colors.borderGlass }]} />
-
-          <TouchableOpacity
-            style={[
-              styles.groupedStageItem,
-              isHoistActive && {
-                backgroundColor: colors.bayHoistDim,
-                borderColor: colors.bayHoist,
-              }
-            ]}
-            onPress={() => setActiveTab('hoist')}
-            activeOpacity={0.7}
-          >
-            <Text 
-              numberOfLines={1}
-              style={[
-                styles.segmentBtnText,
-                {
-                  color: isHoistActive 
-                    ? (isDark ? colors.bayHoistLight : colors.bayHoist) 
-                    : colors.textSecondary,
-                  fontWeight: isHoistActive ? '800' : '600',
-                }
-              ]}
-            >
-              {APP_TERMINOLOGY.stations.hoist.tabLabel}
-            </Text>
-          </TouchableOpacity>
+            return (
+              <React.Fragment key={tab.id}>
+                {showDivider && (
+                  <View style={[styles.railDivider, { backgroundColor: colors.borderGlass }]} />
+                )}
+                <TouchableOpacity
+                  style={[
+                    styles.railItem,
+                    isActive && {
+                      backgroundColor: tab.activeBg,
+                      borderColor: tab.activeBorder,
+                    },
+                  ]}
+                  onPress={() => setActiveTab(tab.id)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.tabContentRow}>
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        styles.railItemText,
+                        {
+                          color: isActive ? tab.activeColor : colors.textSecondary,
+                          fontWeight: isActive ? '800' : '600',
+                        },
+                      ]}
+                    >
+                      {tab.label}
+                    </Text>
+                    {Boolean(tab.badge && tab.badge > 0) && (
+                      <View
+                        style={[
+                          styles.counterPill,
+                          {
+                            backgroundColor: isActive ? tab.activeBorder : colors.bayWaiting,
+                          },
+                        ]}
+                      >
+                        <Text style={styles.counterPillText}>{tab.badge}</Text>
+                      </View>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              </React.Fragment>
+            );
+          })}
         </View>
-
-        {/* 3. Ready Handover Button */}
-        <TouchableOpacity
-          style={[
-            styles.segmentSingleBtn,
-            {
-              backgroundColor: isAdvisorActive 
-                ? colors.bayInspectionDim 
-                : (isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.04)'),
-              borderColor: isAdvisorActive ? colors.bayInspection : colors.borderGlass,
-            }
-          ]}
-          onPress={() => setActiveTab('inspection')}
-          activeOpacity={0.7}
-        >
-          <Text 
-            numberOfLines={1}
-            style={[
-              styles.segmentBtnText,
-              {
-                color: isAdvisorActive 
-                  ? (isDark ? colors.bayInspectionLight : colors.bayInspection) 
-                  : colors.textSecondary,
-                fontWeight: isAdvisorActive ? '800' : '600',
-              }
-            ]}
-          >
-            {APP_TERMINOLOGY.stations.inspection.tabLabel}
-          </Text>
-        </TouchableOpacity>
-      </View>
+      </ScrollView>
     </View>
   );
 };
@@ -274,53 +250,70 @@ export const SegmentedTabs: React.FC = () => {
 const styles = StyleSheet.create({
   segmentedContainer: {
     borderBottomWidth: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingVertical: 5,
+    paddingHorizontal: 8,
   },
-  segmentedRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 6,
+  scrollWrapper: {
     width: '100%',
   },
-  segmentSingleBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 36,
-    width: 72,
-    borderWidth: 1,
-    paddingHorizontal: 4,
-    borderRadius: 10,
+  scrollContent: {
+    minWidth: '100%',
   },
-  groupedStagesBox: {
+  unifiedRail: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    height: 36,
+    height: 33,
+    borderRadius: 9,
     borderWidth: 1,
-    borderRadius: 10,
     padding: 2,
+    minWidth: '100%',
   },
-  groupedStageItem: {
+  railItem: {
     flex: 1,
+    minWidth: 50,
+    height: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    height: '100%',
-    borderRadius: 8,
+    borderRadius: 7,
     borderWidth: 1,
     borderColor: 'transparent',
-    paddingHorizontal: 2,
+    paddingHorizontal: 4,
+    ...(Platform.OS === 'web' ? ({ cursor: 'pointer' } as any) : {}),
+  },
+  railDivider: {
+    width: 1,
+    height: 12,
+    alignSelf: 'center',
   },
   stageDivider: {
     width: 1,
-    height: 14,
+    height: 12,
   },
-  segmentBtnText: {
-    fontSize: 11.5,
-    fontWeight: '600',
+  tabContentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3.5,
+  },
+  railItemText: {
+    fontSize: 11,
+    letterSpacing: 0,
+  },
+  counterPill: {
+    borderRadius: 7,
+    paddingHorizontal: 4,
+    paddingVertical: 0.5,
+    minWidth: 14,
+    height: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  counterPillText: {
+    color: '#000000',
+    fontSize: 8.5,
+    fontWeight: '900',
   },
   // Reports Inline Navigation Header in place of Segmented Tabs
   reportsHeaderRow: {

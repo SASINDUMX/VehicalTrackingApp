@@ -16,11 +16,14 @@ export interface PendingTransfer {
 
 export const useTechnicianStation = () => {
   const { vehicles, activeTab, toggleTaskCompletion, transferVehicleZone, startStageWork, isLoading, searchQuery, showMyVehiclesOnly, setSelectedVehicle } = useVehicles();
-  const { canMarkTaskDone, canTransferVehicle, canStartWork, currentRole, displayName } = usePermissions();
+  const { canMarkTaskDone, canTransferVehicle: globalCanTransfer, canStartWork, canManageBay, currentRole, displayName } = usePermissions();
 
   const activeBay: BayZone = (activeTab === 'hoist' || activeTab === 'alignment') ? activeTab : 'workshop';
   const techName = displayName;
   const activeTaskType: TaskType = getTaskTypeForBay(activeBay);
+
+  // A foreman can only dispatch/transfer vehicles out of bays they actually manage
+  const canTransferVehicle = globalCanTransfer && canManageBay(activeBay);
 
   const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
   const [pendingTransfer, setPendingTransfer] = useState<PendingTransfer | null>(null);

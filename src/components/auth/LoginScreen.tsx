@@ -153,7 +153,7 @@ export const LoginScreen: React.FC = () => {
 
         {/* Footer */}
         <Text style={[styles.footer, { color: colors.textMuted }]}>
-          v1.1
+          v2
         </Text>
       </ScrollView>
     </KeyboardAvoidingView>

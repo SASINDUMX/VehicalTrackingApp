@@ -3,7 +3,7 @@ import { useVehicles } from "../context/VehicleContext";
 import { usePermissions } from "./usePermissions";
 import { useTheme } from "../context/ThemeContext";
 import { BayZone } from "../types/vehicle";
-import { Wrench, Droplets, Navigation, CheckCircle } from "lucide-react-native";
+import { Wrench, Droplets, Navigation, CheckCircle, Clock } from "lucide-react-native";
 import { matchesVehicleSearch } from "../utils/searchUtils";
 import { getActiveStageNetSeconds, computeVehicleTimersMap, sortWorkshopVehicles } from "../utils/vehicleUtils";
 import { APP_TERMINOLOGY } from "../constants/terminology";
@@ -22,6 +22,7 @@ export const useFloorPlan = () => {
   const { colors } = useTheme();
 
   const bays: BayItem[] = useMemo(() => [
+    { id: "waiting", name: APP_TERMINOLOGY.stations.waiting.name, code: APP_TERMINOLOGY.stations.waiting.code, icon: Clock, color: colors.bayWaiting },
     { id: "workshop", name: APP_TERMINOLOGY.stations.workshop.name, code: APP_TERMINOLOGY.stations.workshop.code, icon: Wrench, color: colors.bayWorkshop },
     { id: "alignment", name: APP_TERMINOLOGY.stations.alignment.name, code: APP_TERMINOLOGY.stations.alignment.code, icon: Navigation, color: colors.bayAlignment },
     { id: "hoist", name: APP_TERMINOLOGY.stations.hoist.name, code: APP_TERMINOLOGY.stations.hoist.code, icon: Droplets, color: colors.bayHoist },
@@ -41,7 +42,7 @@ export const useFloorPlan = () => {
       return matchesVehicleSearch(v.vehicle_no, searchQuery) || tech.includes(q);
     });
 
-    (['workshop', 'hoist', 'alignment', 'inspection'] as BayZone[]).forEach(z => {
+    (['waiting', 'workshop', 'hoist', 'alignment', 'inspection'] as BayZone[]).forEach(z => {
       const bayList = filtered.filter(v => v.current_zone === z);
       map.set(z, sortWorkshopVehicles(bayList));
     });

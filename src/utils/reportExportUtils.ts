@@ -55,6 +55,8 @@ export interface ServerReportRecord {
   total_break_seconds: number;
   total_idle_sec: number;
   total_active_sec: number;
+  waiting_first_in?: string | null;
+  waiting_duration: number;
   workshop_first_in?: string | null;
   workshop_idle: number;
   workshop_active: number;
@@ -557,7 +559,8 @@ export const exportServiceLogsToCSV = (
     'OVERALL EFFICIENCY',
     '',
     '',
-    '',
+    'BREAKS',
+    'WAITING YARD',
     'GENERAL SERVICE',
     '',
     '',
@@ -592,6 +595,8 @@ export const exportServiceLogsToCSV = (
     'Net Active Work',
     'Total Idle Time',
     'Total Shift Breaks',
+    // Waiting Yard
+    'Total Wait',
     // General Service
     'First In',
     'Idle',
@@ -633,6 +638,8 @@ export const exportServiceLogsToCSV = (
     let totalActiveSec = 0;
     let totalIdleSec = 0;
     let breakSeconds = 0;
+    let wtFirstIn: string | null = null;
+    let wtWaitSec = 0;
     let wsFirstIn: string | null = null;
     let wsIdle = 0, wsActive = 0, wsBreak = 0;
     let alFirstIn: string | null = null;
@@ -675,6 +682,8 @@ export const exportServiceLogsToCSV = (
         : Math.max(0, Math.floor(((rec.effective_completed_at ? new Date(rec.effective_completed_at).getTime() : Date.now()) - start.getTime()) / 1000));
       totalActiveSec = rec.total_active_sec;
       totalIdleSec = rec.total_idle_sec;
+      wtFirstIn = rec.waiting_first_in || null;
+      wtWaitSec = rec.waiting_duration || 0;
       wsFirstIn = rec.workshop_first_in || null;
       wsIdle = rec.workshop_idle;
       wsActive = rec.workshop_active;
@@ -714,9 +723,12 @@ export const exportServiceLogsToCSV = (
       const breaks = getBreakOverlap(start, end);
       breakSeconds = breaks.breakSeconds;
 
+      const waitingTiming = getStageTimingForZone(v, 'waiting');
       const workshopTiming = getStageTimingForZone(v, 'workshop');
       const alignmentTiming = getStageTimingForZone(v, 'alignment');
       const hoistTiming = getStageTimingForZone(v, 'hoist');
+      wtFirstIn = waitingTiming.firstIn;
+      wtWaitSec = waitingTiming.totalSec;
       wsFirstIn = workshopTiming.firstIn;
       wsIdle = workshopTiming.idleSec;
       wsActive = workshopTiming.activeSec;
@@ -770,6 +782,8 @@ export const exportServiceLogsToCSV = (
       escapeCSV(formatDuration(totalActiveSec)),
       escapeCSV(formatDuration(totalIdleSec)),
       escapeCSV(formatDuration(breakSeconds)),
+      // Waiting Yard (Total Wait)
+      escapeCSV(wtWaitSec > 0 ? formatDuration(wtWaitSec) : '-'),
       // General Service (First In | Idle | Active | Breaks)
       escapeCSV(formatFirstInTime(wsFirstIn)),
       escapeCSV(formatDuration(wsIdle)),
@@ -836,6 +850,8 @@ export const REPORT_THEME_COLORS = {
   cardBg: '#f8fafc',
   alignmentBg: '#ecfdf5',
   alignmentColor: '#047857',
+  waitingBg: '#f1f5f9',
+  waitingColor: '#475569',
 } as const;
 
 /**
@@ -868,6 +884,8 @@ export const exportServiceLogsToPDF = (
     let totalActiveSec = 0;
     let totalIdleSec = 0;
     let breakSeconds = 0;
+    let wtFirstIn: string | null = null;
+    let wtWaitSec = 0;
     let wsFirstIn: string | null = null;
     let wsIdle = 0, wsActive = 0, wsBreak = 0;
     let alFirstIn: string | null = null;
@@ -883,11 +901,21 @@ export const exportServiceLogsToPDF = (
     if (isServerRecord) {
       const rec = v as ServerReportRecord;
       const isHold = Boolean(rec.is_paused || rec.status === 'on_hold');
-      statusLabel = isHold ? 'ON HOLD' : isEffectiveDone ? 'DONE' : (rec.current_zone === 'workshop' ? 'GENERAL' : rec.current_zone.toUpperCase());
+      statusLabel = isHold
+        ? 'ON HOLD'
+        : isEffectiveDone
+        ? 'DONE'
+        : rec.current_zone === 'waiting'
+        ? 'WAITING'
+        : rec.current_zone === 'workshop'
+        ? 'GENERAL'
+        : rec.current_zone.toUpperCase();
       statusBg = isHold
         ? REPORT_THEME_COLORS.warningBg
         : isEffectiveDone
         ? REPORT_THEME_COLORS.successBg
+        : rec.current_zone === 'waiting'
+        ? REPORT_THEME_COLORS.waitingBg
         : rec.current_zone === 'workshop'
         ? REPORT_THEME_COLORS.primaryBg
         : rec.current_zone === 'alignment'
@@ -897,6 +925,8 @@ export const exportServiceLogsToPDF = (
         ? REPORT_THEME_COLORS.warningLight
         : isEffectiveDone
         ? REPORT_THEME_COLORS.success
+        : rec.current_zone === 'waiting'
+        ? REPORT_THEME_COLORS.waitingColor
         : rec.current_zone === 'workshop'
         ? REPORT_THEME_COLORS.primaryLight
         : rec.current_zone === 'alignment'
@@ -921,6 +951,8 @@ export const exportServiceLogsToPDF = (
         : Math.max(0, Math.floor(((rec.effective_completed_at ? new Date(rec.effective_completed_at).getTime() : Date.now()) - start.getTime()) / 1000));
       totalActiveSec = rec.total_active_sec;
       totalIdleSec = rec.total_idle_sec;
+      wtFirstIn = rec.waiting_first_in || null;
+      wtWaitSec = rec.waiting_duration || 0;
       wsFirstIn = rec.workshop_first_in || null;
       wsIdle = rec.workshop_idle;
       wsActive = rec.workshop_active;
@@ -958,9 +990,12 @@ export const exportServiceLogsToPDF = (
       const breaks = getBreakOverlap(start, end);
       breakSeconds = breaks.breakSeconds;
 
+      const waitingTiming = getStageTimingForZone(v, 'waiting');
       const workshopTiming = getStageTimingForZone(v, 'workshop');
       const alignmentTiming = getStageTimingForZone(v, 'alignment');
       const hoistTiming = getStageTimingForZone(v, 'hoist');
+      wtFirstIn = waitingTiming.firstIn;
+      wtWaitSec = waitingTiming.totalSec;
       wsFirstIn = workshopTiming.firstIn;
       wsIdle = workshopTiming.idleSec;
       wsActive = workshopTiming.activeSec;
@@ -979,11 +1014,21 @@ export const exportServiceLogsToPDF = (
       taskProgressStr = `${completedTasksCount}/${totalTasksCount}`;
 
       const isHold = Boolean(v.is_paused || v.status === 'on_hold');
-      statusLabel = isHold ? 'ON HOLD' : isEffectiveDone ? 'DONE' : (v.current_zone === 'workshop' ? 'GENERAL' : v.current_zone.toUpperCase());
+      statusLabel = isHold
+        ? 'ON HOLD'
+        : isEffectiveDone
+        ? 'DONE'
+        : v.current_zone === 'waiting'
+        ? 'WAITING'
+        : v.current_zone === 'workshop'
+        ? 'GENERAL'
+        : v.current_zone.toUpperCase();
       statusBg = isHold
         ? REPORT_THEME_COLORS.warningBg
         : isEffectiveDone
         ? REPORT_THEME_COLORS.successBg
+        : v.current_zone === 'waiting'
+        ? REPORT_THEME_COLORS.waitingBg
         : v.current_zone === 'workshop'
         ? REPORT_THEME_COLORS.primaryBg
         : v.current_zone === 'alignment'
@@ -993,6 +1038,8 @@ export const exportServiceLogsToPDF = (
         ? REPORT_THEME_COLORS.warningLight
         : isEffectiveDone
         ? REPORT_THEME_COLORS.success
+        : v.current_zone === 'waiting'
+        ? REPORT_THEME_COLORS.waitingColor
         : v.current_zone === 'workshop'
         ? REPORT_THEME_COLORS.primaryLight
         : v.current_zone === 'alignment'
@@ -1051,6 +1098,10 @@ export const exportServiceLogsToPDF = (
         </td>
         <td style="padding: 8px 10px; font-size: 11px; color: #fbbf24; font-weight: 700; border-bottom: 1px solid #e2e8f0;">
           ${breakSeconds > 0 ? formatDuration(breakSeconds) : '-'}
+        </td>
+        <!-- Waiting Yard -->
+        <td style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #d97706; text-align: center; border-bottom: 1px solid #e2e8f0;">
+          ${wtWaitSec > 0 ? formatDuration(wtWaitSec) : '-'}
         </td>
         <!-- General Workshop -->
         <td style="padding: 8px 6px; font-size: 11px; font-weight: 700; color: #38bdf8; text-align: center; border-bottom: 1px solid #e2e8f0;">
@@ -1261,7 +1312,7 @@ export const exportServiceLogsToPDF = (
         <table class="table-container">
           <thead style="display: table-header-group;">
             <tr class="running-batch-header" style="background: #0284c7; color: #ffffff;">
-              <th colspan="25" style="padding: 5px 10px; text-align: left; font-size: 9px; font-weight: 700; border: none; letter-spacing: 0.3px;">
+              <th colspan="26" style="padding: 5px 10px; text-align: left; font-size: 9px; font-weight: 700; border: none; letter-spacing: 0.3px;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                   <span>UNITED MOTORS LANKA PLC — SERVICE AUDIT REPORT</span>
                   <span style="font-family: monospace; font-size: 8.5px; font-weight: 800; background: rgba(255,255,255,0.25); padding: 2px 8px; border-radius: 4px;">
@@ -1282,6 +1333,7 @@ export const exportServiceLogsToPDF = (
               <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Net Active</th>
               <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Total Idle</th>
               <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Breaks</th>
+              <th style="padding: 6px; text-align: center; background: #475569; border-right: 1px solid #334155;">WAITING YARD</th>
               <th colspan="4" style="padding: 6px; text-align: center; background: #0369a1; border-right: 1px solid #334155;">GENERAL SERVICE</th>
               <th colspan="4" style="padding: 6px; text-align: center; background: #047857; border-right: 1px solid #334155;">WHEEL ALIGNMENT</th>
               <th colspan="4" style="padding: 6px; text-align: center; background: #b45309; border-right: 1px solid #334155;">HOIST SERVICE</th>
@@ -1289,6 +1341,8 @@ export const exportServiceLogsToPDF = (
               <th rowspan="2" style="padding: 8px 6px; text-align: left;">Remarks / Priority</th>
             </tr>
             <tr style="background: #1e293b; color: #94a3b8;">
+              <!-- Waiting Yard -->
+              <th style="padding: 4px; text-align: center; font-size: 8.5px; color: #fbbf24; border-right: 1px solid #334155;">Total Wait</th>
               <!-- General Service -->
               <th style="padding: 4px; text-align: center; font-size: 8.5px; color: #38bdf8; border-right: 1px solid #334155;">First In</th>
               <th style="padding: 4px; text-align: center; font-size: 8.5px; color: #f59e0b; border-right: 1px solid #334155;">Idle</th>
@@ -1311,7 +1365,7 @@ export const exportServiceLogsToPDF = (
           </tbody>
           <tfoot style="display: table-footer-group;">
             <tr style="background: #f8fafc;">
-              <td colspan="25" style="padding: 4px 10px; font-size: 8px; font-weight: 600; color: #64748b; border-top: 1px solid #cbd5e1; border-bottom: none;">
+              <td colspan="26" style="padding: 4px 10px; font-size: 8px; font-weight: 600; color: #64748b; border-top: 1px solid #cbd5e1; border-bottom: none;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                   <span>UNITED MOTORS LANKA PLC — Service & Telemetry Audit Log (${datePresetLabel})</span>
                   <span style="font-family: monospace; font-size: 8px; color: #94a3b8;">Batch Ref: ${batchRefId}</span>

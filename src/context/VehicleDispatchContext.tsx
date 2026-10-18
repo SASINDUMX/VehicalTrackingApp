@@ -631,7 +631,7 @@ export const VehicleDispatchProvider: React.FC<{ children: ReactNode }> = ({ chi
       let isPersistedOrQueued = false;
 
       try {
-        if (currentBayTask) {
+        if (currentBayTask && targetZone !== 'waiting') {
           await toggleTaskCompletion(vehicleId, currentBayTask.id, mover);
         }
 

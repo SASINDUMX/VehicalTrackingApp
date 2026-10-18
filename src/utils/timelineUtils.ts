@@ -71,6 +71,7 @@ export const computeVehicleTimelineStages = (
   const isHoistReq = vehicle.tasks.some(t => t.task_type === 'hoist_service' && t.is_required);
 
   const isRequiredForZone = (zone: BayZone) => {
+    if (zone === 'waiting') return false; // Waiting is an optional holding/buffer zone, never a required labor task
     if (zone === 'workshop') return isWorkshopReq;
     if (zone === 'alignment') return isAlignmentReq;
     if (zone === 'hoist') return isHoistReq;
@@ -103,7 +104,7 @@ export const computeVehicleTimelineStages = (
   sortedLogs.forEach((log, logIdx) => {
     const baseDef = stageDefMap.get(log.to_zone) || {
       zone: log.to_zone,
-      name: log.to_zone,
+      name: log.to_zone === 'waiting' ? 'Waiting Area' : log.to_zone,
       icon: null,
       color: '#666',
       isRequired: isRequiredForZone(log.to_zone),
@@ -120,6 +121,40 @@ export const computeVehicleTimelineStages = (
 
     const isCurrent = !log.exited_at && vehicle.current_zone === log.to_zone;
     const isInspection = log.to_zone === 'inspection';
+    const isWaiting = log.to_zone === 'waiting';
+
+    if (isWaiting) {
+      const isExited = Boolean(log.exited_at);
+      const isCompleted = isExited && !isCurrent;
+      const queueNotes: string[] = [];
+      if (isCurrent) {
+        queueNotes.push('Queued in waiting area');
+      } else {
+        queueNotes.push('Dispatched to bay');
+      }
+      const rawSec = log.duration_seconds > 0
+        ? log.duration_seconds
+        : Math.max(0, Math.floor(((log.exited_at ? new Date(log.exited_at).getTime() : Date.now()) - new Date(log.entered_at).getTime()) / 1000));
+      const spentStr = isCurrent ? activeStageDuration : formatDurationString(rawSec, true);
+
+      traversedNodes.push({
+        id: log.id || `waiting-${logIdx}`,
+        stageDef,
+        status: isCompleted ? 'completed' : 'idle',
+        isCurrent,
+        logsForZone: [log],
+        isCompleted,
+        isBypassed: false, // Waiting is a staging buffer, never bypassed!
+        isCancelled: false,
+        isInspection: false,
+        isStageIdle: isCurrent,
+        spentStr,
+        breakNotes: [],
+        queueNotes,
+        workCompletedAt: null,
+      });
+      return;
+    }
 
     if (isInspection) {
       traversedNodes.push({
@@ -210,7 +245,7 @@ export const computeVehicleTimelineStages = (
   const unvisitedNodes: PreNode[] = [];
 
   masterStages.forEach(s => {
-    if (s.zone === 'inspection') return; // Handled separately below
+    if (s.zone === 'inspection' || s.zone === 'waiting') return; // Handled separately / never marked as unvisited skipped
     if (!enteredZones.has(s.zone) && isRequiredForZone(s.zone)) {
       const stageDef = stageDefMap.get(s.zone)!;
       unvisitedNodes.push({

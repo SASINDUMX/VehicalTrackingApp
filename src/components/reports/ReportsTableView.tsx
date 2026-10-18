@@ -109,6 +109,16 @@ export const ReportsTableView: React.FC<ReportsTableViewProps> = ({
               </Text>
               <View
                 style={[
+                  styles.thGroupHeaderWaiting,
+                  { borderColor: colors.borderGlass, backgroundColor: colors.bayWaitingDim },
+                ]}
+              >
+                <Text style={[styles.thGroupHeaderText, { color: colors.bayWaitingLight, fontSize: 8 }]}>
+                  WAITING
+                </Text>
+              </View>
+              <View
+                style={[
                   styles.thGroupHeader,
                   { borderColor: colors.borderGlass, backgroundColor: colors.bayWorkshopDim },
                 ]}
@@ -166,6 +176,10 @@ export const ReportsTableView: React.FC<ReportsTableViewProps> = ({
               <View style={styles.colTime} />
               <View style={styles.colTime} />
               <View style={styles.colTime} />
+              {/* Waiting Yard sub-headers */}
+              <Text style={[styles.thSubCell, styles.colSubBay, { color: colors.warning }]}>
+                TOTAL WAIT
+              </Text>
               {/* General Service sub-headers */}
               <Text style={[styles.thSubCell, styles.colSubBay, { color: colors.primaryLight }]}>
                 FIRST IN
@@ -221,6 +235,8 @@ export const ReportsTableView: React.FC<ReportsTableViewProps> = ({
               let activeWorkSec = 0;
               let totalIdleSec = 0;
               let breakSeconds = 0;
+              let wtFirstIn: string | null = null;
+              let wtWaitSec = 0;
               let wsFirstIn: string | null = null;
               let wsIdle = 0,
                 wsActive = 0,
@@ -280,6 +296,8 @@ export const ReportsTableView: React.FC<ReportsTableViewProps> = ({
                       );
                 activeWorkSec = rec.total_active_sec;
                 totalIdleSec = rec.total_idle_sec;
+                wtFirstIn = rec.waiting_first_in || null;
+                wtWaitSec = rec.waiting_duration || 0;
                 wsFirstIn = rec.workshop_first_in || null;
                 wsIdle = rec.workshop_idle;
                 wsActive = rec.workshop_active;
@@ -343,9 +361,12 @@ export const ReportsTableView: React.FC<ReportsTableViewProps> = ({
                       })
                     : 'In Progress';
 
+                const waitingTiming = getStageTimingForZone(v, 'waiting');
                 const workshopTiming = getStageTimingForZone(v, 'workshop');
                 const alignmentTiming = getStageTimingForZone(v, 'alignment');
                 const hoistTiming = getStageTimingForZone(v, 'hoist');
+                wtFirstIn = waitingTiming.firstIn;
+                wtWaitSec = waitingTiming.totalSec;
                 wsFirstIn = workshopTiming.firstIn;
                 wsIdle = workshopTiming.idleSec;
                 wsActive = workshopTiming.activeSec;
@@ -492,6 +513,10 @@ export const ReportsTableView: React.FC<ReportsTableViewProps> = ({
                     ]}
                   >
                     {breakSeconds > 0 ? formatDuration(breakSeconds) : '-'}
+                  </Text>
+                  {/* Waiting Yard (Total Wait) */}
+                  <Text style={[styles.tdText, styles.colSubBay, { color: colors.warning, fontWeight: '700' }]}>
+                    {wtWaitSec > 0 ? formatDuration(wtWaitSec) : '-'}
                   </Text>
                   {/* General Workshop (First In / Idle / Active / Breaks) */}
                   <Text
@@ -695,6 +720,15 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingHorizontal: 10,
     borderBottomWidth: 1,
+  },
+  thGroupHeaderWaiting: {
+    width: 70,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    paddingVertical: 3,
+    borderRadius: 4,
   },
   thGroupHeader: {
     width: 280,

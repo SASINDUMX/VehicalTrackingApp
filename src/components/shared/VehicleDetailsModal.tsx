@@ -28,7 +28,6 @@ export const VehicleDetailsModal: React.FC = () => {
   const { 
     selectedVehicle, 
     setSelectedVehicle, 
-    transferVehicleZone, 
     updateVehicleJobOrder, 
     updateVehiclePlate,
     toggleVehiclePause,
@@ -428,7 +427,7 @@ export const VehicleDetailsModal: React.FC = () => {
                 {/* Vehicle Type (Optional single-select) */}
                 <View style={styles.remarksEditGroup}>
                   <Text style={[styles.editSectionTitle, { color: colors.textSecondary }]}>VEHICLE TYPE (OPTIONAL):</Text>
-                  <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                  <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'nowrap' }}>
                     {[
                       { type: 'car' as const, label: 'CAR' },
                       { type: 'suv' as const, label: 'SUV' },
@@ -441,20 +440,31 @@ export const VehicleDetailsModal: React.FC = () => {
                           key={item.type}
                           style={{
                             flex: 1,
-                            minWidth: 70,
+                            minWidth: 0,
                             flexDirection: 'row',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            paddingVertical: 10,
+                            paddingVertical: 9,
+                            paddingHorizontal: 4,
                             borderRadius: 10,
                             borderWidth: 1,
                             backgroundColor: isSelected ? colors.primaryDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
                             borderColor: isSelected ? colors.primary : colors.borderGlass,
+                            ...(Platform.OS === 'web' ? ({ cursor: 'pointer' } as any) : {}),
                           }}
                           onPress={() => setVehicleType(isSelected ? null : item.type)}
+                          activeOpacity={0.7}
                         >
-                          {isSelected ? <CheckSquare size={14} color={colors.primary} /> : <Square size={14} color={colors.textMuted} />}
-                          <Text style={{ fontSize: 12, fontWeight: '700', color: isSelected ? colors.textPrimary : colors.textSecondary, marginLeft: 6 }}>
+                          {isSelected ? <CheckSquare size={13} color={colors.primary} /> : <Square size={13} color={colors.textMuted} />}
+                          <Text 
+                            numberOfLines={1}
+                            style={{ 
+                              fontSize: 11, 
+                              fontWeight: isSelected ? '800' : '600', 
+                              color: isSelected ? colors.textPrimary : colors.textSecondary, 
+                              marginLeft: 4 
+                            }}
+                          >
                             {item.label}
                           </Text>
                         </TouchableOpacity>

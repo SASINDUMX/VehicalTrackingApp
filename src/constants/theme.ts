@@ -63,6 +63,10 @@ export interface ThemeColors {
   bayInspectionLight: string;
   bayInspectionDim: string;
   bayInspectionBorder: string;
+  bayWaiting: string;
+  bayWaitingLight: string;
+  bayWaitingDim: string;
+  bayWaitingBorder: string;
 
   // Whole Card States (High Visibility & Contrast)
   cardActiveBg: string;
@@ -164,6 +168,10 @@ export const DarkColors: ThemeColors = {
   bayInspectionLight: '#c084fc',
   bayInspectionDim: 'rgba(168, 85, 247, 0.14)',
   bayInspectionBorder: 'rgba(192, 132, 252, 0.35)',
+  bayWaiting: '#f59e0b',
+  bayWaitingLight: '#fbbf24',
+  bayWaitingDim: 'rgba(245, 158, 11, 0.14)',
+  bayWaitingBorder: 'rgba(251, 191, 36, 0.35)',
 
   // Whole Card States (Transparent Glassmorphic + State Glow)
   cardActiveBg: 'rgba(14, 165, 233, 0.04)',
@@ -265,6 +273,10 @@ export const LightColors: ThemeColors = {
   bayInspectionLight: '#9333ea',
   bayInspectionDim: 'rgba(124, 58, 237, 0.08)',
   bayInspectionBorder: 'rgba(124, 58, 237, 0.25)',
+  bayWaiting: '#d97706',
+  bayWaitingLight: '#f59e0b',
+  bayWaitingDim: 'rgba(217, 119, 6, 0.08)',
+  bayWaitingBorder: 'rgba(217, 119, 6, 0.25)',
 
   // Whole Card States (Transparent Glassmorphic + State Glow)
   cardActiveBg: 'rgba(2, 132, 199, 0.03)',

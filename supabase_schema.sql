@@ -1,7 +1,7 @@
 -- ==============================================================================
 -- UNITED MOTORS VEHICLE TRACKING APP — PRISTINE PRODUCTION DATABASE SCHEMA
 -- ==============================================================================
--- Consolidated Idempotent Deployment Script (v1 - v12 Unified Source of Truth)
+-- Consolidated Idempotent Deployment Script (v1 - v14 Unified Source of Truth)
 --
 -- Includes:
 -- 1. PostgreSQL Extensions (uuid-ossp, pgcrypto, pg_cron)
@@ -30,8 +30,10 @@ CREATE EXTENSION IF NOT EXISTS pg_cron;
 -- 2. ENUM TYPES
 -- ------------------------------------------------------------------------------
 DO $$ BEGIN
-  CREATE TYPE bay_zone AS ENUM ('workshop', 'hoist', 'alignment', 'inspection', 'completed');
+  CREATE TYPE bay_zone AS ENUM ('workshop', 'hoist', 'alignment', 'inspection', 'waiting', 'completed');
 EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+ALTER TYPE public.bay_zone ADD VALUE IF NOT EXISTS 'waiting';
 
 DO $$ BEGIN
   CREATE TYPE user_role AS ENUM (
@@ -74,6 +76,8 @@ CREATE TABLE IF NOT EXISTS public.workplaces (
 ALTER TABLE public.workplaces ADD COLUMN IF NOT EXISTS code VARCHAR(50);
 ALTER TABLE public.workplaces ADD COLUMN IF NOT EXISTS city VARCHAR(255) DEFAULT 'Colombo';
 ALTER TABLE public.workplaces ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+ALTER TABLE public.workplaces ADD COLUMN IF NOT EXISTS is_trial BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.workplaces ADD COLUMN IF NOT EXISTS trial_expires_at TIMESTAMPTZ DEFAULT NULL;
 
 -- Avoid UNIQUE(code) conflicts with legacy Peliyagoda codes if present
 UPDATE public.workplaces
@@ -101,6 +105,8 @@ CREATE TABLE IF NOT EXISTS public.user_profiles (
   section VARCHAR(50), -- 'car', 'suv', 'lcv', 'hoist', 'alignment'
   branch_id VARCHAR(50) NOT NULL DEFAULT 'orugodawatta_sec5' REFERENCES public.workplaces(id),
   theme_preference VARCHAR(20) DEFAULT 'system',
+  is_trial BOOLEAN DEFAULT FALSE,
+  trial_expires_at TIMESTAMPTZ DEFAULT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -112,6 +118,133 @@ ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS role user_role DEFAULT
 ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS section VARCHAR(50);
 ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS branch_id VARCHAR(50) DEFAULT 'orugodawatta_sec5';
 ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS theme_preference VARCHAR(20) DEFAULT 'system';
+ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS is_trial BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS trial_expires_at TIMESTAMPTZ DEFAULT NULL;
+
+-- 4.1 Automatic Session Revocation on Password Change (v13 Security)
+CREATE OR REPLACE FUNCTION public.handle_user_password_change_revoke_sessions()
+RETURNS trigger
+SECURITY DEFINER
+SET search_path = public, auth
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF NEW.encrypted_password IS DISTINCT FROM OLD.encrypted_password THEN
+    DELETE FROM auth.sessions WHERE user_id = NEW.id;
+    DELETE FROM auth.refresh_tokens WHERE session_id NOT IN (SELECT id FROM auth.sessions);
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_auth_user_password_change ON auth.users;
+CREATE TRIGGER on_auth_user_password_change
+  AFTER UPDATE OF encrypted_password ON auth.users
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_user_password_change_revoke_sessions();
+
+-- 4.2 Automatic User Profile Creation Trigger on New Signup / Dashboard Creation
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger
+SECURITY DEFINER
+SET search_path = public, auth
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_role user_role;
+  v_raw_role TEXT;
+BEGIN
+  v_raw_role := NEW.raw_user_meta_data->>'role';
+  
+  BEGIN
+    IF v_raw_role IS NOT NULL THEN
+      v_role := v_raw_role::user_role;
+    ELSE
+      v_role := 'service_executive'::user_role;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    v_role := 'service_executive'::user_role;
+  END;
+
+  INSERT INTO public.user_profiles (
+    id,
+    email,
+    display_name,
+    role,
+    branch_id,
+    section,
+    theme_preference,
+    created_at,
+    updated_at
+  ) VALUES (
+    NEW.id,
+    NEW.email,
+    COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'display_name', split_part(NEW.email, '@', 1)),
+    v_role,
+    COALESCE(NEW.raw_user_meta_data->>'branch_id', 'orugodawatta_sec5'),
+    NEW.raw_user_meta_data->>'section',
+    'system',
+    NOW(),
+    NOW()
+  )
+  ON CONFLICT (id) DO UPDATE
+  SET email = EXCLUDED.email,
+      updated_at = NOW();
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_new_user();
+
+-- 4.3 Admin Helper RPC to safely reset user password and revoke sessions
+CREATE OR REPLACE FUNCTION public.admin_reset_user_password(
+  p_email TEXT,
+  p_new_password TEXT
+)
+RETURNS JSONB
+SECURITY DEFINER
+SET search_path = public, auth, pg_temp
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_user_id UUID;
+BEGIN
+  -- Strict Super Admin authorization check
+  IF NOT public.is_super_admin() THEN
+    RAISE EXCEPTION 'Access Denied: Only Super Administrator can execute password resets.';
+  END IF;
+
+  SELECT id INTO v_user_id FROM auth.users WHERE LOWER(email) = LOWER(TRIM(p_email));
+  
+  IF v_user_id IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'error', 'User not found with email: ' || p_email);
+  END IF;
+
+  UPDATE auth.users
+  SET encrypted_password = crypt(p_new_password, gen_salt('bf')),
+      updated_at = NOW()
+  WHERE id = v_user_id;
+
+  DELETE FROM auth.sessions WHERE user_id = v_user_id;
+  DELETE FROM auth.refresh_tokens WHERE session_id NOT IN (SELECT id FROM auth.sessions);
+
+  RETURN jsonb_build_object(
+    'success', true,
+    'message', 'Password reset successfully and all active sessions revoked.',
+    'user_id', v_user_id,
+    'email', p_email
+  );
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.admin_reset_user_password(TEXT, TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.admin_reset_user_password(TEXT, TEXT) TO authenticated;
+
 
 -- ------------------------------------------------------------------------------
 -- 5. OPERATIONAL TABLES (VEHICLES, STAGE LOGS, TASKS)
@@ -137,6 +270,8 @@ CREATE TABLE IF NOT EXISTS public.vehicles (
   paused_seconds INT NOT NULL DEFAULT 0,
   pause_reason TEXT,
   branch_id VARCHAR(50) NOT NULL DEFAULT 'orugodawatta_sec5' REFERENCES public.workplaces(id) ON DELETE RESTRICT,
+  assigned_advisor VARCHAR(255) DEFAULT NULL,
+  vehicle_type VARCHAR(20) DEFAULT NULL,
   gross_tat_seconds INT NOT NULL DEFAULT 0,
   net_tat_seconds INT NOT NULL DEFAULT 0,
   total_break_seconds INT NOT NULL DEFAULT 0,
@@ -162,6 +297,8 @@ ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS paused_at TIMESTAMPTZ;
 ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS paused_seconds INT DEFAULT 0;
 ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS pause_reason TEXT;
 ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS branch_id VARCHAR(50) DEFAULT 'orugodawatta_sec5';
+ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS assigned_advisor VARCHAR(255) DEFAULT NULL;
+ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS vehicle_type VARCHAR(20) DEFAULT NULL;
 ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS gross_tat_seconds INT DEFAULT 0;
 ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS net_tat_seconds INT DEFAULT 0;
 ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS total_break_seconds INT DEFAULT 0;
@@ -640,7 +777,9 @@ CREATE OR REPLACE FUNCTION public.intake_vehicle(
   p_is_urgent BOOLEAN DEFAULT FALSE,
   p_urgent_note TEXT DEFAULT NULL,
   p_tasks JSONB DEFAULT '[]'::jsonb,
-  p_branch_id VARCHAR(50) DEFAULT 'orugodawatta_sec5'
+  p_branch_id VARCHAR(50) DEFAULT 'orugodawatta_sec5',
+  p_assigned_advisor VARCHAR(255) DEFAULT NULL,
+  p_vehicle_type VARCHAR(20) DEFAULT NULL
 )
 RETURNS JSONB AS $$
 DECLARE
@@ -653,12 +792,14 @@ BEGIN
   INSERT INTO public.vehicles (
     vehicle_no, current_zone, technician_name, assigned_tech,
     remarks, is_booking, has_additional_repairs, is_urgent, urgent_note,
-    intake_at, status, is_finished, branch_id
+    intake_at, status, is_finished, branch_id,
+    assigned_advisor, vehicle_type
   ) VALUES (
     UPPER(TRIM(p_vehicle_no)), p_target_zone::bay_zone, p_technician_name,
     COALESCE(p_technician_name, 'Unassigned'), p_remarks,
     p_is_booking, p_has_additional_repairs, p_is_urgent, p_urgent_note,
-    v_now, 'active', FALSE, p_branch_id
+    v_now, 'active', FALSE, p_branch_id,
+    p_assigned_advisor, p_vehicle_type
   ) RETURNING id INTO v_vehicle_id;
 
   -- Insert initial stage log
@@ -1216,7 +1357,9 @@ BEGIN
     COALESCE(v.effective_completed_at, v.completed_at) AS effective_completed_at,
     v.gross_tat_seconds,
     v.net_tat_seconds,
-    v.total_break_seconds
+    v.total_break_seconds,
+    v.assigned_advisor,
+    v.vehicle_type
   FROM public.vehicles v
   WHERE (p_branch_id IS NULL OR v.branch_id = p_branch_id)
     AND (p_start_date IS NULL OR v.intake_at >= p_start_date)
@@ -1307,6 +1450,14 @@ BEGIN
   WITH vehicle_bay_aggregates AS (
     SELECT
       vehicle_id,
+      MIN(CASE WHEN to_zone = 'waiting' THEN entered_at END) AS wt_first_in,
+      COALESCE(SUM(CASE WHEN to_zone = 'waiting' THEN 
+        CASE 
+          WHEN exited_at IS NOT NULL THEN COALESCE(duration_seconds, GREATEST(0, EXTRACT(EPOCH FROM (exited_at - entered_at))::INT))
+          ELSE GREATEST(0, EXTRACT(EPOCH FROM (NOW() - entered_at))::INT)
+        END 
+      END), 0)::INT AS wt_duration,
+
       MIN(CASE WHEN to_zone = 'workshop' THEN entered_at END) AS ws_first_in,
       COALESCE(SUM(CASE WHEN to_zone = 'workshop' THEN 
         CASE 
@@ -1387,31 +1538,43 @@ BEGIN
 
       COALESCE(SUM(
         CASE 
-          WHEN exited_at IS NOT NULL THEN idle_seconds
-          WHEN work_started_at IS NULL THEN GREATEST(0, EXTRACT(EPOCH FROM (NOW() - entered_at))::INT)
-          WHEN work_completed_at IS NOT NULL THEN GREATEST(0, EXTRACT(EPOCH FROM (work_started_at - entered_at))::INT) + GREATEST(0, EXTRACT(EPOCH FROM (NOW() - work_completed_at))::INT)
-          ELSE GREATEST(0, EXTRACT(EPOCH FROM (work_started_at - entered_at))::INT)
+          WHEN to_zone IN ('workshop', 'alignment', 'hoist') THEN
+            CASE 
+              WHEN exited_at IS NOT NULL THEN idle_seconds
+              WHEN work_started_at IS NULL THEN GREATEST(0, EXTRACT(EPOCH FROM (NOW() - entered_at))::INT)
+              WHEN work_completed_at IS NOT NULL THEN GREATEST(0, EXTRACT(EPOCH FROM (work_started_at - entered_at))::INT) + GREATEST(0, EXTRACT(EPOCH FROM (NOW() - work_completed_at))::INT)
+              ELSE GREATEST(0, EXTRACT(EPOCH FROM (work_started_at - entered_at))::INT)
+            END
+          ELSE 0
         END
       ), 0)::INT AS total_idle_sec,
 
       COALESCE(SUM(
         CASE 
-          WHEN exited_at IS NOT NULL THEN active_seconds
-          WHEN work_started_at IS NULL THEN 0
-          WHEN work_completed_at IS NOT NULL THEN GREATEST(0, EXTRACT(EPOCH FROM (work_completed_at - work_started_at))::INT)
-          ELSE GREATEST(0, EXTRACT(EPOCH FROM (NOW() - work_started_at))::INT)
+          WHEN to_zone IN ('workshop', 'alignment', 'hoist') THEN
+            CASE 
+              WHEN exited_at IS NOT NULL THEN active_seconds
+              WHEN work_started_at IS NULL THEN 0
+              WHEN work_completed_at IS NOT NULL THEN GREATEST(0, EXTRACT(EPOCH FROM (work_completed_at - work_started_at))::INT)
+              ELSE GREATEST(0, EXTRACT(EPOCH FROM (NOW() - work_started_at))::INT)
+            END
+          ELSE 0
         END
       ), 0)::INT AS total_active_sec,
 
       COALESCE(SUM(
         CASE 
-          WHEN break_seconds > 0 THEN break_seconds 
-          ELSE public.calculate_break_overlap_seconds(entered_at, COALESCE(exited_at, NOW()))
+          WHEN to_zone IN ('workshop', 'alignment', 'hoist') THEN
+            CASE 
+              WHEN break_seconds > 0 THEN break_seconds 
+              ELSE public.calculate_break_overlap_seconds(entered_at, COALESCE(exited_at, NOW()))
+            END
+          ELSE 0
         END
       ), 0)::INT AS total_stage_breaks_sec
     FROM public.stage_logs
     WHERE vehicle_id IN (SELECT id FROM temp_filtered_vehicles)
-      AND to_zone IN ('workshop', 'alignment', 'hoist')
+      AND to_zone IN ('workshop', 'alignment', 'hoist', 'waiting')
     GROUP BY vehicle_id
   ),
   task_summaries AS (
@@ -1451,6 +1614,8 @@ BEGIN
       'intake_at', fv.intake_at,
       'created_at', fv.created_at,
       'effective_completed_at', fv.effective_completed_at,
+      'assigned_advisor', fv.assigned_advisor,
+      'vehicle_type', fv.vehicle_type,
       'gross_tat_seconds', COALESCE(
         NULLIF(fv.gross_tat_seconds, 0),
         GREATEST(0, EXTRACT(EPOCH FROM (COALESCE(fv.effective_completed_at, NOW()) - COALESCE(fv.intake_at, fv.created_at)))::INT)
@@ -1466,6 +1631,8 @@ BEGIN
       ),
       'total_idle_sec', COALESCE(vba.total_idle_sec, 0),
       'total_active_sec', COALESCE(vba.total_active_sec, 0),
+      'waiting_first_in', vba.wt_first_in,
+      'waiting_duration', COALESCE(vba.wt_duration, 0),
       'workshop_first_in', vba.ws_first_in,
       'workshop_idle', COALESCE(vba.ws_idle, 0),
       'workshop_active', COALESCE(vba.ws_active, 0),
@@ -1495,7 +1662,11 @@ BEGIN
     'records', COALESCE(v_records, '[]'::jsonb)
   );
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp;
+
+REVOKE EXECUTE ON FUNCTION public.get_service_report_data(TIMESTAMPTZ, TIMESTAMPTZ, VARCHAR, TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_service_report_data(TIMESTAMPTZ, TIMESTAMPTZ, VARCHAR, TEXT) TO authenticated;
+
 
 -- J. Paginated Audit Trail RPC
 DROP FUNCTION IF EXISTS public.get_audit_logs_paginated(character varying, timestamp with time zone, timestamp with time zone, character varying, integer, integer);
