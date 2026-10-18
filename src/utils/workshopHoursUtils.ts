@@ -42,6 +42,52 @@ export const WORKSHOP_BREAKS: WorkshopBreak[] = [
 export const SRI_LANKA_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;
 
 /**
+ * Returns today's calendar date string (YYYY-MM-DD) in Asia/Colombo (UTC+05:30).
+ */
+export const getSriLankaTodayString = (now: Date = new Date()): string => {
+  try {
+    return now.toLocaleDateString('en-CA', { timeZone: 'Asia/Colombo' });
+  } catch {
+    const sl = new Date(now.getTime() + SRI_LANKA_OFFSET_MS);
+    return sl.toISOString().split('T')[0];
+  }
+};
+
+/**
+ * Returns a given Date's calendar date string (YYYY-MM-DD) in Asia/Colombo (UTC+05:30).
+ */
+export const getSriLankaDateString = (d: Date): string => {
+  try {
+    return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Colombo' });
+  } catch {
+    const sl = new Date(d.getTime() + SRI_LANKA_OFFSET_MS);
+    return sl.toISOString().split('T')[0];
+  }
+};
+
+/**
+ * Returns the exact beginning of a Sri Lanka calendar day (00:00:00.000+05:30) as an ISO string.
+ * Resilient against YYYY-MM-DD, full ISO strings, or malformed inputs.
+ */
+export const getSriLankaDayStartISO = (dateStr: string): string => {
+  if (!dateStr) return '';
+  const cleanDate = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr.trim();
+  const d = new Date(`${cleanDate}T00:00:00+05:30`);
+  return !Number.isNaN(d.getTime()) ? d.toISOString() : '';
+};
+
+/**
+ * Returns the exact end of a Sri Lanka calendar day (23:59:59.999+05:30) as an ISO string.
+ * Resilient against YYYY-MM-DD, full ISO strings, or malformed inputs.
+ */
+export const getSriLankaDayEndISO = (dateStr: string): string => {
+  if (!dateStr) return '';
+  const cleanDate = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr.trim();
+  const d = new Date(`${cleanDate}T23:59:59.999+05:30`);
+  return !Number.isNaN(d.getTime()) ? d.toISOString() : '';
+};
+
+/**
  * Returns the currently active workshop break if the given time falls within one.
  * Uses exact Asia/Colombo (UTC+05:30) calendar time regardless of client device timezone.
  */

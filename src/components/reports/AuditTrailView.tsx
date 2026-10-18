@@ -33,6 +33,7 @@ import { useUI } from '../../context/UIContext';
 import { auditService } from '../../services/auditService';
 import { AuditLogEntry, AuditActionType, AuditActionCategory } from '../../types/audit';
 import { DateFilterPreset, getDatePresetRangeDescription } from '../../utils/reportExportUtils';
+import { getSriLankaTodayString, getSriLankaDateString, getSriLankaDayStartISO, getSriLankaDayEndISO } from '../../utils/workshopHoursUtils';
 import { LicensePlate } from '../shared/LicensePlate';
 import { EmptyStateCard } from '../shared/EmptyStateCard';
 import { ThemeDatePicker } from '../shared/ThemeDatePicker';
@@ -104,8 +105,8 @@ export const AuditTrailView: React.FC = () => {
   const { reportsRefreshTrigger } = useUI();
 
   const [datePreset, setDatePreset] = useState<DateFilterPreset>('today');
-  const [customDate, setCustomDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
-  const [customEndDate, setCustomEndDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [customDate, setCustomDate] = useState<string>(() => getSriLankaTodayString());
+  const [customEndDate, setCustomEndDate] = useState<string>(() => getSriLankaTodayString());
   const [branchFilter, setBranchFilter] = useState<string>('all');
   const [actionCategory, setActionCategory] = useState<AuditActionCategory>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -118,27 +119,29 @@ export const AuditTrailView: React.FC = () => {
 
   const handleSelectPreset = (presetId: DateFilterPreset) => {
     const now = new Date();
-    const todayStr = now.toISOString().split('T')[0];
+    const todayStr = getSriLankaTodayString(now);
 
     if (presetId === 'today') {
       setCustomDate(todayStr);
       setCustomEndDate(todayStr);
     } else if (presetId === 'yesterday') {
-      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
-      const yStr = yesterday.toISOString().split('T')[0];
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const yStr = getSriLankaDateString(yesterday);
       setCustomDate(yStr);
       setCustomEndDate(yStr);
     } else if (presetId === '7days') {
-      const past7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-      setCustomDate(past7.toISOString().split('T')[0]);
+      const past7 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      setCustomDate(getSriLankaDateString(past7));
       setCustomEndDate(todayStr);
     } else if (presetId === 'month') {
-      const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      setCustomDate(firstOfMonth.toISOString().split('T')[0]);
+      const slParts = todayStr.split('-').map(Number);
+      const firstOfMonthStr = `${slParts[0]}-${String(slParts[1]).padStart(2, '0')}-01`;
+      setCustomDate(firstOfMonthStr);
       setCustomEndDate(todayStr);
     } else if (presetId === '3months') {
-      const past3Mo = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate());
-      setCustomDate(past3Mo.toISOString().split('T')[0]);
+      const slParts = todayStr.split('-').map(Number);
+      const past3Mo = new Date(slParts[0], slParts[1] - 1 - 3, slParts[2]);
+      setCustomDate(getSriLankaDateString(past3Mo));
       setCustomEndDate(todayStr);
     }
     setDatePreset(presetId);
@@ -166,20 +169,13 @@ export const AuditTrailView: React.FC = () => {
     const endStr = customEndDate.trim();
 
     if (startStr) {
-      const parsedStart = new Date(startStr);
-      if (!Number.isNaN(parsedStart.getTime())) {
-        start = new Date(parsedStart.getFullYear(), parsedStart.getMonth(), parsedStart.getDate()).toISOString();
-      }
+      start = getSriLankaDayStartISO(startStr);
     }
 
     if (endStr) {
-      const parsedEnd = new Date(endStr);
-      if (!Number.isNaN(parsedEnd.getTime())) {
-        end = new Date(parsedEnd.getFullYear(), parsedEnd.getMonth(), parsedEnd.getDate(), 23, 59, 59, 999).toISOString();
-      }
+      end = getSriLankaDayEndISO(endStr);
     } else if (start) {
-      const parsedStart = new Date(startStr);
-      end = new Date(parsedStart.getFullYear(), parsedStart.getMonth(), parsedStart.getDate(), 23, 59, 59, 999).toISOString();
+      end = getSriLankaDayEndISO(startStr);
     }
 
     return { startDate: start, endDate: end };

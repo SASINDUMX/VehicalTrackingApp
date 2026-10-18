@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Calendar, ChevronLeft, ChevronRight, X, Check } from 'lucide-react-native';
 import { useTheme } from '../../context/ThemeContext';
+import { getSriLankaTodayString } from '../../utils/workshopHoursUtils';
 
 interface ThemeDatePickerProps {
   label?: string;
@@ -238,7 +239,7 @@ export const ThemeDatePicker: React.FC<ThemeDatePickerProps> = ({
             <View style={styles.gridContainer}>
               {calendarGrid.map((cell, idx) => {
                 const isSelected = cell.dateStr === value;
-                const isToday = cell.dateStr === new Date().toISOString().split('T')[0];
+                const isToday = cell.dateStr === getSriLankaTodayString();
 
                 if (!cell.isCurrentMonth) {
                   return (
@@ -300,7 +301,7 @@ export const ThemeDatePicker: React.FC<ThemeDatePickerProps> = ({
               <TouchableOpacity
                 style={[styles.todayActionBtn, { backgroundColor: colors.primaryDim }]}
                 onPress={() => {
-                  const todayStr = new Date().toISOString().split('T')[0];
+                  const todayStr = getSriLankaTodayString();
                   handleSelectDate(todayStr);
                 }}
               >

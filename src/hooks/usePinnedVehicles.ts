@@ -1,7 +1,8 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Platform } from 'react-native';
+import { getSriLankaTodayString } from '../utils/workshopHoursUtils';
 
-const getPinKey = () => `um_pins_${new Date().toISOString().split('T')[0]}`;
+const getPinKey = () => `um_pins_${getSriLankaTodayString()}`;
 
 const loadPins = (): Set<string> => {
   try {
