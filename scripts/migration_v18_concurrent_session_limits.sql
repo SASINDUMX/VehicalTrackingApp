@@ -1,38 +1,42 @@
 -- ==============================================================================
--- MIGRATION V18: CONCURRENT SESSION LIMIT ENFORCEMENT (MULTI-DEVICE SLIDING WINDOW)
+-- MIGRATION V18: SINGLE SESSION ENFORCEMENT ("LAST LOGIN WINS")
 -- ==============================================================================
 -- Description:
--- Limits the number of concurrent active device sessions per user account.
--- Uses a First-In-First-Out (FIFO) sliding window (default 3 concurrent logins).
--- When a user logs in on a 4th device, the oldest active session is automatically
--- evicted, ensuring seamless login on new devices without orphaned session lockouts.
+-- Enforces strictly 1 active device session per user account at any given time.
+-- When a user logs in on a new device, the database immediately expires all previous
+-- sessions (setting not_after = NOW()) and revokes their refresh tokens.
+--
+-- Why not_after & revoked?
+-- 1. 100% non-destructive and audit-friendly (preserves session history).
+-- 2. GoTrue Auth natively respects not_after and revoked=true on token refresh.
+-- 3. The older device receives 401 Unauthorized and returns to the login screen.
 -- ==============================================================================
 
-CREATE OR REPLACE FUNCTION public.enforce_concurrent_session_limit()
+CREATE OR REPLACE FUNCTION public.enforce_single_session_last_login_wins()
 RETURNS TRIGGER AS $$
-DECLARE
-  v_max_sessions INT := 3; -- Limit of 3 concurrent sessions for all accounts
 BEGIN
-  -- Keep the newest N sessions, evict any older sessions beyond the limit
-  DELETE FROM auth.sessions
-  WHERE id IN (
-    SELECT id FROM auth.sessions
-    WHERE user_id = NEW.user_id
-    ORDER BY created_at DESC
-    OFFSET v_max_sessions
-  );
+  -- 1. Expire all previous sessions for this user except the newly created one
+  UPDATE auth.sessions
+  SET not_after = NOW(), updated_at = NOW()
+  WHERE user_id = NEW.user_id AND id != NEW.id;
 
-  -- Purge orphaned refresh tokens for revoked sessions
-  DELETE FROM auth.refresh_tokens 
-  WHERE session_id NOT IN (SELECT id FROM auth.sessions);
+  -- 2. Mark older refresh tokens as revoked
+  UPDATE auth.refresh_tokens
+  SET revoked = TRUE, updated_at = NOW()
+  WHERE user_id = NEW.user_id::text AND session_id != NEW.id;
 
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Recreate trigger idempotently
-DROP TRIGGER IF EXISTS on_session_created_enforce_limit ON auth.sessions;
-
-CREATE TRIGGER on_session_created_enforce_limit
-AFTER INSERT ON auth.sessions
-FOR EACH ROW EXECUTE FUNCTION public.enforce_concurrent_session_limit();
+-- Bind trigger idempotently to auth.sessions
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'on_session_created_enforce_single'
+  ) THEN
+    CREATE TRIGGER on_session_created_enforce_single
+    AFTER INSERT ON auth.sessions
+    FOR EACH ROW EXECUTE FUNCTION public.enforce_single_session_last_login_wins();
+  END IF;
+END $$;
