@@ -21,9 +21,7 @@ import {
   ChevronLeft,
   ChevronRight,
   AlertCircle,
-  FileCheck,
-  RefreshCw,
-  ClipboardList,
+  X,
   Layers,
   CloudOff,
 } from 'lucide-react-native';
@@ -33,6 +31,7 @@ import { useUI } from '../../context/UIContext';
 import { auditService } from '../../services/auditService';
 import { AuditLogEntry, AuditActionType, AuditActionCategory } from '../../types/audit';
 import { DateFilterPreset, getDatePresetRangeDescription } from '../../utils/reportExportUtils';
+import { getSriLankaTodayString, getSriLankaDateString, getSriLankaDayStartISO, getSriLankaDayEndISO } from '../../utils/workshopHoursUtils';
 import { LicensePlate } from '../shared/LicensePlate';
 import { EmptyStateCard } from '../shared/EmptyStateCard';
 import { ThemeDatePicker } from '../shared/ThemeDatePicker';
@@ -104,8 +103,8 @@ export const AuditTrailView: React.FC = () => {
   const { reportsRefreshTrigger } = useUI();
 
   const [datePreset, setDatePreset] = useState<DateFilterPreset>('today');
-  const [customDate, setCustomDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
-  const [customEndDate, setCustomEndDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [customDate, setCustomDate] = useState<string>(() => getSriLankaTodayString());
+  const [customEndDate, setCustomEndDate] = useState<string>(() => getSriLankaTodayString());
   const [branchFilter, setBranchFilter] = useState<string>('all');
   const [actionCategory, setActionCategory] = useState<AuditActionCategory>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -118,27 +117,29 @@ export const AuditTrailView: React.FC = () => {
 
   const handleSelectPreset = (presetId: DateFilterPreset) => {
     const now = new Date();
-    const todayStr = now.toISOString().split('T')[0];
+    const todayStr = getSriLankaTodayString(now);
 
     if (presetId === 'today') {
       setCustomDate(todayStr);
       setCustomEndDate(todayStr);
     } else if (presetId === 'yesterday') {
-      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
-      const yStr = yesterday.toISOString().split('T')[0];
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const yStr = getSriLankaDateString(yesterday);
       setCustomDate(yStr);
       setCustomEndDate(yStr);
     } else if (presetId === '7days') {
-      const past7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-      setCustomDate(past7.toISOString().split('T')[0]);
+      const past7 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      setCustomDate(getSriLankaDateString(past7));
       setCustomEndDate(todayStr);
     } else if (presetId === 'month') {
-      const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      setCustomDate(firstOfMonth.toISOString().split('T')[0]);
+      const slParts = todayStr.split('-').map(Number);
+      const firstOfMonthStr = `${slParts[0]}-${String(slParts[1]).padStart(2, '0')}-01`;
+      setCustomDate(firstOfMonthStr);
       setCustomEndDate(todayStr);
     } else if (presetId === '3months') {
-      const past3Mo = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate());
-      setCustomDate(past3Mo.toISOString().split('T')[0]);
+      const slParts = todayStr.split('-').map(Number);
+      const past3Mo = new Date(slParts[0], slParts[1] - 1 - 3, slParts[2]);
+      setCustomDate(getSriLankaDateString(past3Mo));
       setCustomEndDate(todayStr);
     }
     setDatePreset(presetId);
@@ -166,20 +167,13 @@ export const AuditTrailView: React.FC = () => {
     const endStr = customEndDate.trim();
 
     if (startStr) {
-      const parsedStart = new Date(startStr);
-      if (!Number.isNaN(parsedStart.getTime())) {
-        start = new Date(parsedStart.getFullYear(), parsedStart.getMonth(), parsedStart.getDate()).toISOString();
-      }
+      start = getSriLankaDayStartISO(startStr);
     }
 
     if (endStr) {
-      const parsedEnd = new Date(endStr);
-      if (!Number.isNaN(parsedEnd.getTime())) {
-        end = new Date(parsedEnd.getFullYear(), parsedEnd.getMonth(), parsedEnd.getDate(), 23, 59, 59, 999).toISOString();
-      }
+      end = getSriLankaDayEndISO(endStr);
     } else if (start) {
-      const parsedStart = new Date(startStr);
-      end = new Date(parsedStart.getFullYear(), parsedStart.getMonth(), parsedStart.getDate(), 23, 59, 59, 999).toISOString();
+      end = getSriLankaDayEndISO(startStr);
     }
 
     return { startDate: start, endDate: end };
@@ -212,9 +206,28 @@ export const AuditTrailView: React.FC = () => {
     loadAuditLogs();
   }, [loadAuditLogs, reportsRefreshTrigger]);
 
+  // Debounced search input matching main SearchBarRow pattern
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      const trimmed = searchQuery.trim();
+      if (trimmed !== appliedSearch) {
+        setAppliedSearch(trimmed);
+        setPage(0);
+      }
+    }, 350);
+
+    return () => clearTimeout(handler);
+  }, [searchQuery, appliedSearch]);
+
   const handleSearchSubmit = () => {
     setPage(0);
     setAppliedSearch(searchQuery.trim());
+  };
+
+  const handleClearSearch = () => {
+    setSearchQuery('');
+    setAppliedSearch('');
+    setPage(0);
   };
 
   const handleExportCSV = () => {
@@ -229,35 +242,9 @@ export const AuditTrailView: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      {/* Top Banner Notice: Immutability & Scope */}
-      <View
-        style={[
-          styles.legalNoticeBanner,
-          { backgroundColor: isDark ? 'rgba(56, 189, 248, 0.08)' : '#f0f9ff', borderColor: colors.primaryBorder },
-        ]}
-      >
-        <ClipboardList size={16} color={colors.primaryLight} />
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.legalNoticeTitle, { color: colors.primaryLight }]}>
-            COMPREHENSIVE ACTIVITY & AUDIT LOG
-          </Text>
-          <Text style={[styles.legalNoticeSubtitle, { color: colors.textSecondary }]}>
-            Full traceable history of every vehicle intake, license plate correction, priority escalation, hold override, bay transfer, task completion, and deletion. Tamper-proof and cryptographically signed with actor attribution.
-          </Text>
-        </View>
-        <TouchableOpacity
-          style={[styles.refreshBtn, { borderColor: colors.primaryBorder, backgroundColor: colors.primaryDim }]}
-          onPress={loadAuditLogs}
-          activeOpacity={0.7}
-        >
-          <RefreshCw size={13} color={colors.primaryLight} />
-          <Text style={[styles.refreshBtnText, { color: colors.primaryLight }]}>Refresh</Text>
-        </TouchableOpacity>
-      </View>
-
       {/* Filter Section */}
       <View style={[styles.filterCard, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)', borderColor: colors.borderGlass }]}>
-        {/* Date Filter Row */}
+        {/* Timeframe & Date Filter Row */}
         <View style={styles.filterRow}>
           <View style={styles.filterLabelGroup}>
             <Calendar size={13} color={colors.primaryLight} />
@@ -288,35 +275,32 @@ export const AuditTrailView: React.FC = () => {
               </TouchableOpacity>
             ))}
           </View>
+
+          {/* Theme Date Pickers (From / To) */}
+          <View style={styles.datePickerRow}>
+            <ThemeDatePicker
+              label="FROM:"
+              value={customDate}
+              onChange={handleCustomDateChange}
+              maxDate={customEndDate || undefined}
+            />
+
+            <ThemeDatePicker
+              label="TO:"
+              value={customEndDate}
+              onChange={handleCustomEndDateChange}
+              minDate={customDate || undefined}
+            />
+          </View>
         </View>
 
-        {/* Permanent Theme Date Pickers (From / To) */}
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 12, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.borderGlass }}>
-          <ThemeDatePicker
-            label="FROM:"
-            value={customDate}
-            onChange={handleCustomDateChange}
-            maxDate={customEndDate || undefined}
-          />
-
-          <ThemeDatePicker
-            label="TO:"
-            value={customEndDate}
-            onChange={handleCustomEndDateChange}
-            minDate={customDate || undefined}
-          />
-
-          <Text style={{ fontSize: 11, color: colors.textMuted }}>
-            (Click calendar icon or edit date directly)
-          </Text>
-        </View>
-
-        {/* Branch & Search Bar */}
-        <View style={styles.branchSearchRow}>
-          {/* Branch Filter Pills */}
-          <View style={styles.branchGroup}>
+        {/* Facility Filter Row */}
+        <View style={[styles.facilityFilterRow, { borderTopColor: colors.borderGlass }]}>
+          <View style={styles.filterLabelGroup}>
             <MapPin size={13} color={colors.primaryLight} />
             <Text style={[styles.filterLabel, { color: colors.textSecondary }]}>FACILITY:</Text>
+          </View>
+          <View style={styles.pillsWrap}>
             <TouchableOpacity
               style={[
                 styles.branchPill,
@@ -348,28 +332,6 @@ export const AuditTrailView: React.FC = () => {
                 </Text>
               </TouchableOpacity>
             ))}
-          </View>
-
-          {/* Search Box */}
-          <View style={[styles.searchBox, { borderColor: colors.borderGlass, backgroundColor: isDark ? 'rgba(0,0,0,0.3)' : '#ffffff' }]}>
-            <Search size={14} color={colors.textMuted} />
-            <TextInput
-              style={[styles.searchInput, { color: colors.textPrimary }]}
-              placeholder="Search plate, action, staff..."
-              placeholderTextColor={colors.textMuted}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              onSubmitEditing={handleSearchSubmit}
-              returnKeyType="search"
-            />
-            {searchQuery !== appliedSearch && (
-              <TouchableOpacity
-                style={[styles.searchApplyBtn, { backgroundColor: colors.primary }]}
-                onPress={handleSearchSubmit}
-              >
-                <Text style={styles.searchApplyText}>Filter</Text>
-              </TouchableOpacity>
-            )}
           </View>
         </View>
 
@@ -410,28 +372,64 @@ export const AuditTrailView: React.FC = () => {
         </View>
       </View>
 
-      {/* Action Header: Results count and CSV Export */}
+      {/* Action Header: Search Bar with Integrated Count, and CSV Export */}
       <View style={styles.actionHeaderBar}>
-        <View style={styles.resultsInfoRow}>
-          <FileCheck size={14} color={colors.primaryLight} />
-          <Text style={[styles.resultsInfoText, { color: colors.textPrimary }]}>
-            {totalCount} Traceable Event{totalCount !== 1 ? 's' : ''} Found
+        <View
+          style={[
+            styles.searchBoxContainer,
+            {
+              backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)',
+              borderColor: colors.primaryBorder,
+            },
+          ]}
+        >
+          <View style={styles.searchIconWrapper}>
+            <Search size={15} color={colors.primaryLight} />
+          </View>
+          <TextInput
+            style={[styles.searchInput, { color: colors.textPrimary }]}
+            placeholder="Search plate, action, staff..."
+            placeholderTextColor={colors.textMuted}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            onSubmitEditing={handleSearchSubmit}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity
+              onPress={handleClearSearch}
+              style={styles.clearSearchBtn}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <X size={14} color={colors.textMuted} />
+            </TouchableOpacity>
+          )}
+
+          {/* Integrated Traceable Events Count */}
+          <Text style={[styles.searchCountText, { color: colors.textMuted }]}>
+            {totalCount}
           </Text>
-          {appliedSearch ? (
-            <Text style={{ fontSize: 11, color: colors.textMuted }}>
-              (matching "{appliedSearch}")
-            </Text>
-          ) : null}
         </View>
 
-        {auditLogs.length > 0 && Platform.OS === 'web' && (
+        {Platform.OS === 'web' && (
           <TouchableOpacity
-            style={[styles.exportBtn, { backgroundColor: colors.primary }]}
+            style={[
+              styles.exportBtn,
+              {
+                backgroundColor: totalCount === 0 ? (isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)') : colors.primary,
+                borderColor: totalCount === 0 ? colors.borderGlass : 'transparent',
+                borderWidth: 1,
+                opacity: totalCount === 0 ? 0.45 : 1,
+              },
+            ]}
+            disabled={totalCount === 0 || isLoading}
             onPress={handleExportCSV}
             activeOpacity={0.8}
           >
-            <Download size={13} color="#ffffff" />
-            <Text style={styles.exportBtnText}>Export Audit Trail (CSV)</Text>
+            <Download size={13} color={totalCount === 0 ? colors.textMuted : '#ffffff'} />
+            <Text style={[styles.exportBtnText, totalCount === 0 && { color: colors.textMuted }]}>
+              Export Audit Trail (CSV)
+            </Text>
           </TouchableOpacity>
         )}
       </View>
@@ -644,37 +642,6 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingBottom: 24,
   },
-  legalNoticeBanner: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    padding: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-  },
-  legalNoticeTitle: {
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-    marginBottom: 2,
-  },
-  legalNoticeSubtitle: {
-    fontSize: 11,
-    lineHeight: 16,
-  },
-  refreshBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-    borderWidth: 1,
-  },
-  refreshBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
   filterCard: {
     padding: 12,
     borderRadius: 10,
@@ -723,67 +690,27 @@ const styles = StyleSheet.create({
   activePillText: {
     fontWeight: '800',
   },
-  customDateRow: {
+  datePickerRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
+    gap: 12,
+    marginTop: 4,
+  },
+  facilityFilterRow: {
     gap: 8,
-  },
-  customDateInput: {
-    borderWidth: 1,
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    fontSize: 11,
-    fontWeight: '700',
-    width: 120,
-  },
-  branchSearchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  branchGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 6,
+    paddingTop: 10,
+    borderTopWidth: 1,
   },
   branchPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 6,
     borderWidth: 1,
     borderColor: 'transparent',
   },
   branchPillText: {
     fontSize: 11,
-    fontWeight: '700',
-  },
-  searchBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    gap: 6,
-    minWidth: 240,
-  },
-  searchInput: {
-    fontSize: 12,
-    flex: 1,
-    padding: 0,
-  },
-  searchApplyBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 4,
-  },
-  searchApplyText: {
-    color: '#ffffff',
-    fontSize: 10.5,
     fontWeight: '700',
   },
   categoryFilterRow: {
@@ -817,30 +744,66 @@ const styles = StyleSheet.create({
   actionHeaderBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 10,
     paddingVertical: 4,
     paddingHorizontal: 2,
   },
-  resultsInfoRow: {
+  searchBoxContainer: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    height: 36,
     gap: 6,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    minWidth: 0,
+    borderWidth: 1,
   },
-  resultsInfoText: {
-    fontSize: 12,
+  searchIconWrapper: {
+    marginRight: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 13,
+    padding: 0,
+    minWidth: 0,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
+  },
+  clearSearchBtn: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    marginLeft: 4,
+  },
+  searchCountText: {
+    fontSize: 13,
     fontWeight: '700',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    marginLeft: 6,
+    marginRight: 2,
+    flexShrink: 0,
+    opacity: 0.9,
   },
   exportBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
+    height: 36,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    flexShrink: 0,
   },
   exportBtnText: {
     color: '#ffffff',
-    fontSize: 11,
+    fontSize: 11.5,
     fontWeight: '700',
   },
   loadingContainer: {

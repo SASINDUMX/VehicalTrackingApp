@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { View, TouchableOpacity, StyleSheet, ScrollView, Text } from 'react-native';
 import { ArrowLeft, Download, Printer } from 'lucide-react-native';
 import { useVehicles } from '../../context/VehicleContext';
+import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { vehicleService } from '../../services/vehicleService';
@@ -17,6 +18,7 @@ import {
   exportServiceLogsToCSV,
   exportServiceLogsToPDF,
 } from '../../utils/reportExportUtils';
+import { getSriLankaTodayString, getSriLankaDateString, getSriLankaDayStartISO, getSriLankaDayEndISO } from '../../utils/workshopHoursUtils';
 import { ReportsFilterBar } from './ReportsFilterBar';
 import { ReportsKPIGrid } from './ReportsKPIGrid';
 import { ReportsTableView } from './ReportsTableView';
@@ -47,6 +49,7 @@ export const ServiceReportsModal: React.FC = () => {
     setIsCalculationInfoOpen,
     reportsRefreshTrigger,
   } = useVehicles();
+  const { activeBranchId } = useAuth();
   const { colors, isDark } = useTheme();
   const { canViewAuditLogs } = usePermissions();
 
@@ -55,36 +58,38 @@ export const ServiceReportsModal: React.FC = () => {
   const [reportVehicles, setReportVehicles] = useState<Vehicle[]>(vehicles);
   const [isLoadingReport, setIsLoadingReport] = useState<boolean>(false);
 
-  // Initialize with today's date formatted as YYYY-MM-DD
-  const [customDate, setCustomDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
-  const [customEndDate, setCustomEndDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  // Initialize with today's date formatted as YYYY-MM-DD in Asia/Colombo
+  const [customDate, setCustomDate] = useState<string>(() => getSriLankaTodayString());
+  const [customEndDate, setCustomEndDate] = useState<string>(() => getSriLankaTodayString());
 
   const [serverKPIs, setServerKPIs] = useState<ReportKPIs | null>(null);
   const [serverRecords, setServerRecords] = useState<ServerReportRecord[] | null>(null);
 
   const handleSelectPreset = (presetId: DateFilterPreset) => {
     const now = new Date();
-    const todayStr = now.toISOString().split('T')[0];
+    const todayStr = getSriLankaTodayString(now);
 
     if (presetId === 'today') {
       setCustomDate(todayStr);
       setCustomEndDate(todayStr);
     } else if (presetId === 'yesterday') {
-      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
-      const yStr = yesterday.toISOString().split('T')[0];
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const yStr = getSriLankaDateString(yesterday);
       setCustomDate(yStr);
       setCustomEndDate(yStr);
     } else if (presetId === '7days') {
-      const past7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-      setCustomDate(past7.toISOString().split('T')[0]);
+      const past7 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      setCustomDate(getSriLankaDateString(past7));
       setCustomEndDate(todayStr);
     } else if (presetId === 'month') {
-      const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      setCustomDate(firstOfMonth.toISOString().split('T')[0]);
+      const slParts = todayStr.split('-').map(Number);
+      const firstOfMonthStr = `${slParts[0]}-${String(slParts[1]).padStart(2, '0')}-01`;
+      setCustomDate(firstOfMonthStr);
       setCustomEndDate(todayStr);
     } else if (presetId === '3months') {
-      const past3Mo = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate());
-      setCustomDate(past3Mo.toISOString().split('T')[0]);
+      const slParts = todayStr.split('-').map(Number);
+      const past3Mo = new Date(slParts[0], slParts[1] - 1 - 3, slParts[2]);
+      setCustomDate(getSriLankaDateString(past3Mo));
       setCustomEndDate(todayStr);
     }
     setDatePreset(presetId);
@@ -118,21 +123,14 @@ export const ServiceReportsModal: React.FC = () => {
     const endStr = customEndDate.trim();
 
     if (startStr) {
-      const parsedStart = new Date(startStr);
-      if (!Number.isNaN(parsedStart.getTime())) {
-        startDate = new Date(parsedStart.getFullYear(), parsedStart.getMonth(), parsedStart.getDate()).toISOString();
-      }
+      startDate = getSriLankaDayStartISO(startStr);
     }
 
     if (endStr) {
-      const parsedEnd = new Date(endStr);
-      if (!Number.isNaN(parsedEnd.getTime())) {
-        endDate = new Date(parsedEnd.getFullYear(), parsedEnd.getMonth(), parsedEnd.getDate(), 23, 59, 59, 999).toISOString();
-      }
+      endDate = getSriLankaDayEndISO(endStr);
     } else if (startDate) {
-      // Single-day filter: End date defaults to 23:59:59 of the start day
-      const parsedStart = new Date(startStr);
-      endDate = new Date(parsedStart.getFullYear(), parsedStart.getMonth(), parsedStart.getDate(), 23, 59, 59, 999).toISOString();
+      // Single-day filter: End date defaults to end of the start day
+      endDate = getSriLankaDayEndISO(startStr);
     }
 
     setIsLoadingReport(true);
@@ -143,6 +141,7 @@ export const ServiceReportsModal: React.FC = () => {
         startDate,
         endDate,
         status: statusPreset,
+        branchId: activeBranchId,
       })
       .then((res) => {
         if (!isCancelled && res) {
@@ -155,7 +154,8 @@ export const ServiceReportsModal: React.FC = () => {
         }
 
         // Fallback: If RPC not yet applied, fallback to raw vehicles fetch
-        const isTodayRange = customDate === new Date().toISOString().split('T')[0] && customEndDate === customDate;
+        const slToday = getSriLankaTodayString();
+        const isTodayRange = customDate === slToday && customEndDate === slToday;
         if (isTodayRange) {
           setReportVehicles(vehiclesRef.current);
           setIsLoadingReport(false);
@@ -170,7 +170,8 @@ export const ServiceReportsModal: React.FC = () => {
         }
       })
       .catch(() => {
-        const isTodayRange = customDate === new Date().toISOString().split('T')[0] && customEndDate === customDate;
+        const slToday = getSriLankaTodayString();
+        const isTodayRange = customDate === slToday && customEndDate === slToday;
         if (isTodayRange) {
           setReportVehicles(vehiclesRef.current);
           setIsLoadingReport(false);
@@ -188,7 +189,7 @@ export const ServiceReportsModal: React.FC = () => {
     return () => {
       isCancelled = true;
     };
-  }, [customDate, customEndDate, statusPreset, fetchHistoricalVehicles, datePreset, reportsRefreshTrigger]);
+  }, [customDate, customEndDate, statusPreset, fetchHistoricalVehicles, datePreset, reportsRefreshTrigger, activeBranchId]);
 
   const filteredVehicles = useMemo(() => {
     if (serverRecords) {
@@ -199,27 +200,18 @@ export const ServiceReportsModal: React.FC = () => {
     const startStr = customDate.trim();
     const endStr = customEndDate.trim();
     if (startStr) {
-      const parsedStart = new Date(startStr);
-      if (!Number.isNaN(parsedStart.getTime())) {
-        const startIso = new Date(parsedStart.getFullYear(), parsedStart.getMonth(), parsedStart.getDate()).toISOString();
-        let endIso: string;
-        if (endStr) {
-          const parsedEnd = new Date(endStr);
-          endIso = !Number.isNaN(parsedEnd.getTime())
-            ? new Date(parsedEnd.getFullYear(), parsedEnd.getMonth(), parsedEnd.getDate(), 23, 59, 59, 999).toISOString()
-            : new Date(parsedStart.getFullYear(), parsedStart.getMonth(), parsedStart.getDate(), 23, 59, 59, 999).toISOString();
-        } else {
-          endIso = new Date(parsedStart.getFullYear(), parsedStart.getMonth(), parsedStart.getDate(), 23, 59, 59, 999).toISOString();
-        }
-        customRange = { start: startIso, end: endIso };
-      }
+      customRange = { start: startStr, end: endStr || startStr };
     }
-    return filterVehiclesForReport(reportVehicles, 'custom', statusPreset, customRange);
-  }, [serverRecords, reportVehicles, statusPreset, customDate, customEndDate]);
+    return filterVehiclesForReport(reportVehicles, datePreset, statusPreset, customRange);
+  }, [serverRecords, reportVehicles, statusPreset, datePreset, customDate, customEndDate]);
 
   // Server KPIs are authoritative: computed directly in PostgreSQL.
-  // Falls back to client calculation only if offline or RPC is unavailable.
+  // Falls back to client calculation only if offline or RPC is unavailable,
+  // but NEVER while a server query is in-flight (avoids stale number flashing).
   const kpis = useMemo(() => {
+    if (isLoadingReport) {
+      return null;
+    }
     if (
       serverKPIs &&
       serverKPIs.workshopBay &&
@@ -229,7 +221,12 @@ export const ServiceReportsModal: React.FC = () => {
       return serverKPIs;
     }
     return calculateReportKPIs(filteredVehicles as any);
-  }, [serverKPIs, filteredVehicles]);
+  }, [isLoadingReport, serverKPIs, filteredVehicles]);
+
+  const effectiveExportKPIs = useMemo<ReportKPIs>(() => {
+    if (kpis) return kpis;
+    return calculateReportKPIs(filteredVehicles as any);
+  }, [kpis, filteredVehicles]);
 
   const dateRangeInfo = useMemo(() => {
     return getDatePresetRangeDescription(datePreset, customDate, customEndDate);
@@ -265,8 +262,8 @@ export const ServiceReportsModal: React.FC = () => {
               onCustomEndDateChange={handleCustomEndDateChange}
             />
 
-            {/* Executive KPI Metric Cards */}
-            <ReportsKPIGrid kpis={kpis} />
+            {/* Executive KPI Metric Cards with unified loading skeleton */}
+            <ReportsKPIGrid kpis={kpis} isLoading={isLoadingReport} />
 
             {/* Table Preview */}
             <ReportsTableView
@@ -306,8 +303,12 @@ export const ServiceReportsModal: React.FC = () => {
 
           <View style={styles.stickyFooterRight}>
             <TouchableOpacity
-              style={[styles.exportBtn, { backgroundColor: colors.success }]}
-              onPress={() => exportServiceLogsToCSV(filteredVehicles, activeFilterLabel, kpis)}
+              style={[
+                styles.exportBtn,
+                { backgroundColor: colors.success, opacity: isLoadingReport ? 0.6 : 1 },
+              ]}
+              disabled={isLoadingReport}
+              onPress={() => exportServiceLogsToCSV(filteredVehicles, activeFilterLabel, effectiveExportKPIs)}
               activeOpacity={0.8}
             >
               <Download size={15} color="#ffffff" />
@@ -315,8 +316,12 @@ export const ServiceReportsModal: React.FC = () => {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.exportBtn, { backgroundColor: colors.primary }]}
-              onPress={() => exportServiceLogsToPDF(filteredVehicles, kpis, activeFilterLabel)}
+              style={[
+                styles.exportBtn,
+                { backgroundColor: colors.primary, opacity: isLoadingReport ? 0.6 : 1 },
+              ]}
+              disabled={isLoadingReport}
+              onPress={() => exportServiceLogsToPDF(filteredVehicles, effectiveExportKPIs, activeFilterLabel)}
               activeOpacity={0.8}
             >
               <Printer size={15} color="#ffffff" />

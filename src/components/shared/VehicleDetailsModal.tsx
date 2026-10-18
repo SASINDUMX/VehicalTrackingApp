@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, TextInput, Platform } from 'react-native';
 import { useVehicles } from '../../context/VehicleContext';
 import { usePermissions } from '../../hooks/usePermissions';
-import { BayZone, TaskType, Vehicle } from '../../types/vehicle';
+import { BayZone, TaskType, Vehicle, VehicleCategoryType } from '../../types/vehicle';
 import { 
   Wrench, Navigation, Pencil, Save, 
   Clock, CheckCircle2, Trash2, AlertTriangle,
@@ -45,6 +45,8 @@ export const VehicleDetailsModal: React.FC = () => {
   );
   const [remarks, setRemarks] = useState<string>(() => selectedVehicle?.remarks || '');
   const [technicianName, setTechnicianName] = useState<string>(() => selectedVehicle?.technician_name || '');
+  const [assignedAdvisor, setAssignedAdvisor] = useState<string>(() => selectedVehicle?.assigned_advisor || '');
+  const [vehicleType, setVehicleType] = useState<VehicleCategoryType | null>(() => (selectedVehicle?.vehicle_type as VehicleCategoryType) || null);
   const [isBooking, setIsBooking] = useState<boolean>(() => Boolean(selectedVehicle?.is_booking));
   const [hasAdditionalRepairs, setHasAdditionalRepairs] = useState<boolean>(() => Boolean(selectedVehicle?.has_additional_repairs));
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -72,6 +74,8 @@ export const VehicleDetailsModal: React.FC = () => {
       setSelectedTasks(activeTaskTypes);
       setRemarks(selectedVehicle.remarks || '');
       setTechnicianName(selectedVehicle.technician_name || '');
+      setAssignedAdvisor(selectedVehicle.assigned_advisor || '');
+      setVehicleType((selectedVehicle.vehicle_type as VehicleCategoryType) || null);
       setIsBooking(Boolean(selectedVehicle.is_booking));
       setHasAdditionalRepairs(Boolean(selectedVehicle.has_additional_repairs));
       setIsEditing(false);
@@ -99,18 +103,27 @@ export const VehicleDetailsModal: React.FC = () => {
     });
   };
 
+  // Synchronous ref to prevent stale closures during background Realtime updates
+  const selectedVehicleRef = useRef<Vehicle | null>(selectedVehicle);
+  useEffect(() => {
+    selectedVehicleRef.current = selectedVehicle;
+  });
+
   // Live timer tick for active current stage duration & total elapsed time
   useEffect(() => {
-    if (!selectedVehicle) return;
+    if (!selectedVehicle?.id) return;
 
     const updateTimers = () => {
-      const timers = calculateTimers(selectedVehicle);
+      const current = selectedVehicleRef.current;
+      if (!current) return;
+      const timers = calculateTimers(current);
       setTotalElapsedStr(timers.totalElapsedStr);
       setGrossElapsedStr(timers.grossElapsedStr);
       setActiveStageDuration(timers.activeStageDuration);
       setActiveStageDurationRaw(timers.activeStageDurationRaw);
     };
 
+    updateTimers(); // Immediate initial tick
     const interval = setInterval(updateTimers, 1000);
     return () => clearInterval(interval);
   }, [selectedVehicle?.id]);
@@ -184,6 +197,8 @@ export const VehicleDetailsModal: React.FC = () => {
       const metadataToSave = {
         vehicle_no: cleanPlate,
         technician_name: technicianName.trim() || null,
+        assigned_advisor: assignedAdvisor.trim() || null,
+        vehicle_type: vehicleType || null,
         is_booking: isBooking,
         has_additional_repairs: hasAdditionalRepairs,
       };
@@ -210,6 +225,9 @@ export const VehicleDetailsModal: React.FC = () => {
         headerLeft={
           <View style={styles.headerLeftRow}>
             <LicensePlate number={selectedVehicle.vehicle_no} size="md" />
+            {Boolean(selectedVehicle.vehicle_type) && (
+              <StatusPill variant="neutral" label={String(selectedVehicle.vehicle_type).toUpperCase()} size="md" />
+            )}
             <VehicleNotePill vehicle={selectedVehicle} size="md" />
           </View>
         }
@@ -232,6 +250,11 @@ export const VehicleDetailsModal: React.FC = () => {
                 onPress={() => {
                   setIsEditing(false);
                   setRemarks(selectedVehicle.remarks || '');
+                  setTechnicianName(selectedVehicle.technician_name || '');
+                  setAssignedAdvisor(selectedVehicle.assigned_advisor || '');
+                  setVehicleType((selectedVehicle.vehicle_type as VehicleCategoryType) || null);
+                  setIsBooking(Boolean(selectedVehicle.is_booking));
+                  setHasAdditionalRepairs(Boolean(selectedVehicle.has_additional_repairs));
                   setLocalIsUrgent(selectedVehicle.is_urgent || false);
                   setLocalUrgentNote(selectedVehicle.urgent_note || '');
                 }}
@@ -358,19 +381,137 @@ export const VehicleDetailsModal: React.FC = () => {
                   />
                 )}
 
-                {/* Urgency Section — Edit Mode (Advisors, Workshop Manager, Master Access) */}
-                {canSetUrgent && (
-                  <View style={styles.remarksEditGroup}>
-                    <UrgentToggleInput
-                      isUrgent={localIsUrgent}
-                      onToggleUrgent={setLocalIsUrgent}
-                      urgentNote={localUrgentNote}
-                      onChangeUrgentNote={setLocalUrgentNote}
-                      title={APP_TERMINOLOGY.urgency.sectionTitle}
-                      placeholder={APP_TERMINOLOGY.urgency.placeholder}
-                    />
+                {/* Assigned Service Advisor (Optional) */}
+                <View style={styles.remarksEditGroup}>
+                  <Text style={[styles.editSectionTitle, { color: colors.textSecondary }]}>ASSIGNED SERVICE ADVISOR (OPTIONAL):</Text>
+                  <TextInput
+                    style={[
+                      styles.textAreaInput,
+                      {
+                        backgroundColor: isDark ? 'rgba(0, 0, 0, 0.2)' : 'rgba(0, 0, 0, 0.04)',
+                        borderColor: colors.borderGlass,
+                        color: colors.textPrimary,
+                        height: 44,
+                        paddingVertical: 10,
+                      }
+                    ]}
+                    placeholder="e.g. Advisor Car 2, Kasun (leave blank to assign later)"
+                    placeholderTextColor={colors.textMuted}
+                    value={assignedAdvisor}
+                    onChangeText={setAssignedAdvisor}
+                    autoCapitalize="words"
+                  />
+                </View>
+
+                {/* Assigned Technician (Optional) */}
+                <View style={styles.remarksEditGroup}>
+                  <Text style={[styles.editSectionTitle, { color: colors.textSecondary }]}>ASSIGNED TECHNICIAN (OPTIONAL):</Text>
+                  <TextInput
+                    style={[
+                      styles.textAreaInput,
+                      {
+                        backgroundColor: isDark ? 'rgba(0, 0, 0, 0.2)' : 'rgba(0, 0, 0, 0.04)',
+                        borderColor: colors.borderGlass,
+                        color: colors.textPrimary,
+                        height: 44,
+                        paddingVertical: 10,
+                      }
+                    ]}
+                    placeholder="e.g. Kasun, Nimal (leave blank to assign later)"
+                    placeholderTextColor={colors.textMuted}
+                    value={technicianName}
+                    onChangeText={setTechnicianName}
+                    autoCapitalize="words"
+                  />
+                </View>
+
+                {/* Vehicle Type (Optional single-select) */}
+                <View style={styles.remarksEditGroup}>
+                  <Text style={[styles.editSectionTitle, { color: colors.textSecondary }]}>VEHICLE TYPE (OPTIONAL):</Text>
+                  <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                    {[
+                      { type: 'car' as const, label: 'CAR' },
+                      { type: 'suv' as const, label: 'SUV' },
+                      { type: 'lcv' as const, label: 'LCV' },
+                      { type: 'van' as const, label: 'VAN' },
+                    ].map(item => {
+                      const isSelected = vehicleType === item.type;
+                      return (
+                        <TouchableOpacity
+                          key={item.type}
+                          style={{
+                            flex: 1,
+                            minWidth: 70,
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            paddingVertical: 10,
+                            borderRadius: 10,
+                            borderWidth: 1,
+                            backgroundColor: isSelected ? colors.primaryDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
+                            borderColor: isSelected ? colors.primary : colors.borderGlass,
+                          }}
+                          onPress={() => setVehicleType(isSelected ? null : item.type)}
+                        >
+                          {isSelected ? <CheckSquare size={14} color={colors.primary} /> : <Square size={14} color={colors.textMuted} />}
+                          <Text style={{ fontSize: 12, fontWeight: '700', color: isSelected ? colors.textPrimary : colors.textSecondary, marginLeft: 6 }}>
+                            {item.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
                   </View>
-                )}
+                </View>
+
+                {/* Additional Flags (Booking & Additional Repairs in one row) */}
+                <View style={styles.remarksEditGroup}>
+                  <Text style={[styles.editSectionTitle, { color: colors.textSecondary }]}>ADDITIONAL (OPTIONAL):</Text>
+                  <View style={{ flexDirection: 'row', gap: 10 }}>
+                    <TouchableOpacity
+                      style={{
+                        flex: 1,
+                        minWidth: 0,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 8,
+                        paddingVertical: 10,
+                        borderRadius: 10,
+                        borderWidth: 1,
+                        backgroundColor: isBooking ? colors.primaryDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
+                        borderColor: isBooking ? colors.primary : colors.borderGlass,
+                      }}
+                      onPress={() => setIsBooking(!isBooking)}
+                    >
+                      {isBooking ? <CheckSquare size={16} color={colors.primary} /> : <Square size={16} color={colors.textMuted} />}
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: isBooking ? colors.textPrimary : colors.textSecondary }}>
+                        PRIOR BOOKING
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={{
+                        flex: 1,
+                        minWidth: 0,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 8,
+                        paddingVertical: 10,
+                        borderRadius: 10,
+                        borderWidth: 1,
+                        backgroundColor: hasAdditionalRepairs ? colors.warningDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
+                        borderColor: hasAdditionalRepairs ? colors.warning : colors.borderGlass,
+                      }}
+                      onPress={() => setHasAdditionalRepairs(!hasAdditionalRepairs)}
+                    >
+                      {hasAdditionalRepairs ? <CheckSquare size={16} color={colors.warning} /> : <Square size={16} color={colors.textMuted} />}
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: hasAdditionalRepairs ? colors.textPrimary : colors.textSecondary }}>
+                        ADDITIONAL REPAIRS
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
 
                 {/* Remarks Section — Edit Mode (Advisors, Workshop Manager, Foremen, Master Access) */}
                 {canEditRemarks && (
@@ -395,71 +536,19 @@ export const VehicleDetailsModal: React.FC = () => {
                   </View>
                 )}
 
-                {/* Technician Name (Actual mechanic) */}
-                <View style={styles.remarksEditGroup}>
-                  <Text style={[styles.editSectionTitle, { color: colors.textSecondary }]}>ASSIGNED TECHNICIAN (ACTUAL MECHANIC):</Text>
-                  <TextInput
-                    style={[
-                      styles.textAreaInput,
-                      {
-                        backgroundColor: isDark ? 'rgba(0, 0, 0, 0.2)' : 'rgba(0, 0, 0, 0.04)',
-                        borderColor: colors.borderGlass,
-                        color: colors.textPrimary,
-                        height: 44,
-                        paddingVertical: 10,
-                      }
-                    ]}
-                    placeholder="e.g. Kasun Fernando, Sunil Shantha..."
-                    placeholderTextColor={colors.textMuted}
-                    value={technicianName}
-                    onChangeText={setTechnicianName}
-                  />
-                </View>
-
-                {/* Prior Booking & Additional Repairs Checkboxes */}
-                <View style={{ flexDirection: 'row', gap: 12, flexWrap: 'wrap', marginTop: 4 }}>
-                  <TouchableOpacity
-                    style={{
-                      flex: 1,
-                      minWidth: 180,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 8,
-                      padding: 12,
-                      borderRadius: 10,
-                      borderWidth: 1,
-                      backgroundColor: isBooking ? colors.primaryDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
-                      borderColor: isBooking ? colors.primary : colors.borderGlass,
-                    }}
-                    onPress={() => setIsBooking(!isBooking)}
-                  >
-                    {isBooking ? <CheckSquare size={16} color={colors.primary} /> : <Square size={16} color={colors.textMuted} />}
-                    <Text style={{ fontSize: 12, fontWeight: '700', color: isBooking ? colors.textPrimary : colors.textSecondary }}>
-                      PRIOR BOOKING
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={{
-                      flex: 1,
-                      minWidth: 180,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 8,
-                      padding: 12,
-                      borderRadius: 10,
-                      borderWidth: 1,
-                      backgroundColor: hasAdditionalRepairs ? colors.warningDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
-                      borderColor: hasAdditionalRepairs ? colors.warning : colors.borderGlass,
-                    }}
-                    onPress={() => setHasAdditionalRepairs(!hasAdditionalRepairs)}
-                  >
-                    {hasAdditionalRepairs ? <CheckSquare size={16} color={colors.warning} /> : <Square size={16} color={colors.textMuted} />}
-                    <Text style={{ fontSize: 12, fontWeight: '700', color: hasAdditionalRepairs ? colors.textPrimary : colors.textSecondary }}>
-                      ADDITIONAL REPAIRS
-                    </Text>
-                  </TouchableOpacity>
-                </View>
+                {/* Urgency Section — Edit Mode (Advisors, Workshop Manager, Master Access) */}
+                {canSetUrgent && (
+                  <View style={[styles.remarksEditGroup, { marginTop: 4 }]}>
+                    <UrgentToggleInput
+                      isUrgent={localIsUrgent}
+                      onToggleUrgent={setLocalIsUrgent}
+                      urgentNote={localUrgentNote}
+                      onChangeUrgentNote={setLocalUrgentNote}
+                      title={APP_TERMINOLOGY.urgency.sectionTitle}
+                      placeholder={APP_TERMINOLOGY.urgency.placeholder}
+                    />
+                  </View>
+                )}
               </View>
             ) : (
               /* --- HIGH-TECH STEPPER TIMELINE STAGE AUDIT MODE --- */

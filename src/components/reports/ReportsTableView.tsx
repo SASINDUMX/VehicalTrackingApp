@@ -75,6 +75,12 @@ export const ReportsTableView: React.FC<ReportsTableViewProps> = ({
               <Text style={[styles.thCell, styles.colPlate, { color: colors.textSecondary }]}>
                 VEHICLE NO
               </Text>
+              <Text style={[styles.thCell, styles.colType, { color: colors.textSecondary }]}>
+                TYPE
+              </Text>
+              <Text style={[styles.thCell, styles.colAdvisor, { color: colors.textSecondary }]}>
+                ADVISOR
+              </Text>
               <Text style={[styles.thCell, styles.colStatus, { color: colors.textSecondary }]}>
                 STATUS
               </Text>
@@ -150,6 +156,8 @@ export const ReportsTableView: React.FC<ReportsTableViewProps> = ({
               ]}
             >
               <View style={styles.colPlate} />
+              <View style={styles.colType} />
+              <View style={styles.colAdvisor} />
               <View style={styles.colStatus} />
               {isMultiDate && <View style={styles.colDate} />}
               <View style={styles.colTime} />
@@ -370,6 +378,41 @@ export const ReportsTableView: React.FC<ReportsTableViewProps> = ({
                   <View style={[styles.tdCell, styles.colPlate]}>
                     <LicensePlate number={v.vehicle_no} size="sm" />
                   </View>
+                  <View style={[styles.tdCell, styles.colType, { alignItems: 'center' }]}>
+                    {v.vehicle_type ? (
+                      <View
+                        style={{
+                          paddingHorizontal: 6,
+                          paddingVertical: 2,
+                          borderRadius: 4,
+                          backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 10,
+                            fontWeight: '800',
+                            color: colors.textPrimary,
+                            textTransform: 'uppercase',
+                          }}
+                        >
+                          {v.vehicle_type}
+                        </Text>
+                      </View>
+                    ) : (
+                      <Text style={{ fontSize: 11, color: colors.textMuted }}>-</Text>
+                    )}
+                  </View>
+                  <Text
+                    style={[
+                      styles.tdText,
+                      styles.colAdvisor,
+                      { color: colors.primaryLight, fontWeight: '600' },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {v.assigned_advisor || '-'}
+                  </Text>
                   <View style={[styles.tdCell, styles.colStatus]}>
                     <StatusPill
                       variant={isHold ? 'IDLE' : isEffectiveDone ? 'DONE' : 'ACTIVE'}
@@ -692,6 +735,8 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
   },
   colPlate: { width: 130 },
+  colType: { width: 65, textAlign: 'center' },
+  colAdvisor: { width: 110 },
   colStatus: { width: 100 },
   colDate: { width: 72 },
   colTime: { width: 95 },

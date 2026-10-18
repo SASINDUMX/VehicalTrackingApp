@@ -59,6 +59,8 @@ export interface StageLog {
   is_dispatched?: boolean;
 }
 
+export type VehicleCategoryType = 'car' | 'suv' | 'lcv' | 'van';
+
 export interface Vehicle {
   id: string;
   vehicle_no: string;
@@ -66,6 +68,8 @@ export interface Vehicle {
   current_zone: BayZone;
   technician_name?: string | null;
   assigned_tech: string;
+  assigned_advisor?: string | null;
+  vehicle_type?: VehicleCategoryType | string | null;
   remarks: string;
   is_booking?: boolean;
   has_additional_repairs?: boolean;

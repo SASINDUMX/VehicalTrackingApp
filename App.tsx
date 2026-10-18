@@ -14,6 +14,7 @@ import { AddVehicleModal } from './src/components/supervisor/AddVehicleModal';
 import { VehicleDetailsModal } from './src/components/shared/VehicleDetailsModal';
 import { ServiceReportsModal } from './src/components/reports/ServiceReportsModal';
 import { VehicleNoteModal } from './src/components/shared/VehicleNoteModal';
+import { ErrorBoundary } from './src/components/shared/ErrorBoundary';
 import { UserRole, NavigationTab } from './src/types/vehicle';
 
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
@@ -53,7 +54,7 @@ const TabTransitionWrapper: React.FC<{ activeKey: string; children: React.ReactN
 
 const AppContent: React.FC = () => {
   const { userProfile } = useAuth();
-  const { activeTab, setActiveTab, setCurrentRole, isReportsModalOpen, vehicleNoteModalData, hideVehicleNotes } = useVehicles();
+  const { activeTab, setActiveTab, setCurrentRole, isReportsModalOpen, setIsReportsModalOpen, vehicleNoteModalData, hideVehicleNotes } = useVehicles();
   const { colors, isDark } = useTheme();
   const [touchStart, setTouchStart] = React.useState<{ x: number; y: number } | null>(null);
 
@@ -145,7 +146,14 @@ const AppContent: React.FC = () => {
         <SegmentedTabs />
         {isReportsModalOpen ? (
           <View style={styles.reportsContainer}>
-            <ServiceReportsModal />
+            <ErrorBoundary
+              fallbackTitle="Reports Encountered an Issue"
+              fallbackSubtitle="An unexpected issue occurred while rendering reports. Your floor tracking is uninterrupted."
+              showBackToFloor={true}
+              onBackToFloor={() => setIsReportsModalOpen(false)}
+            >
+              <ServiceReportsModal />
+            </ErrorBoundary>
           </View>
         ) : (
           <>
@@ -208,11 +216,13 @@ const AuthGate: React.FC = () => {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <ThemeProvider>
-        <AuthGate />
-      </ThemeProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <ThemeProvider>
+          <AuthGate />
+        </ThemeProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Modal, View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Platform } from 'react-native';
 import { useVehicles } from '../../context/VehicleContext';
 import { useUI } from '../../context/UIContext';
-import { BayZone, TaskType } from '../../types/vehicle';
+import { BayZone, TaskType, VehicleCategoryType } from '../../types/vehicle';
 import { X, Car, Wrench, Shield, Navigation, Send, CheckSquare, Square, AlertTriangle } from 'lucide-react-native';
 
 import { formatVehicleNoInput, isValidVehicleNo } from '../../utils/vehicleNumberUtils';
@@ -32,6 +32,8 @@ export const AddVehicleModal: React.FC = () => {
   const [isUrgent, setIsUrgent] = useState<boolean>(false);
   const [urgentNote, setUrgentNote] = useState<string>('');
   const [technicianName, setTechnicianName] = useState<string>('');
+  const [assignedAdvisor, setAssignedAdvisor] = useState<string>('');
+  const [vehicleType, setVehicleType] = useState<VehicleCategoryType | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   if (!isAddModalOpen) return null;
@@ -76,12 +78,16 @@ export const AddVehicleModal: React.FC = () => {
         urgentNote,
         technicianName.trim() || null,
         isBooking,
-        hasAdditionalRepairs
+        hasAdditionalRepairs,
+        assignedAdvisor.trim() || null,
+        vehicleType || null
       );
       setIsAddModalOpen(false);
       setVehicleNo('');
       setRemarks('');
       setTechnicianName('');
+      setAssignedAdvisor('');
+      setVehicleType(null);
       setIsBooking(false);
       setHasAdditionalRepairs(false);
       setIsUrgent(false);
@@ -252,28 +258,27 @@ export const AddVehicleModal: React.FC = () => {
               </View>
             </View>
 
+            {/* Service Advisor (Optional) */}
             <View style={styles.formGroup}>
-              <Text style={[styles.label, { color: colors.textSecondary }]}>REMARKS / INSTRUCTIONS:</Text>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>ASSIGNED SERVICE ADVISOR (OPTIONAL):</Text>
               <TextInput
                 style={[
                   styles.input,
-                  styles.textArea,
                   {
                     backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)',
                     borderColor: colors.borderGlass,
                     color: colors.textPrimary,
                   }
                 ]}
-                placeholder="Customer requests or issues..."
+                placeholder="e.g. Advisor Car 2, Kasun (leave blank to assign later)"
                 placeholderTextColor={colors.textMuted}
-                value={remarks}
-                onChangeText={setRemarks}
-                multiline
-                numberOfLines={2}
+                value={assignedAdvisor}
+                onChangeText={setAssignedAdvisor}
+                autoCapitalize="words"
               />
             </View>
 
-            {/* Technician Name */}
+            {/* Technician Name (Optional) */}
             <View style={styles.formGroup}>
               <Text style={[styles.label, { color: colors.textSecondary }]}>ASSIGNED TECHNICIAN (OPTIONAL):</Text>
               <TextInput
@@ -293,43 +298,104 @@ export const AddVehicleModal: React.FC = () => {
               />
             </View>
 
-            {/* Booking & Additional Repairs Checkboxes */}
-            <View style={[styles.formGroup, { flexDirection: 'row', gap: 12, flexWrap: 'wrap' }]}>
-              <TouchableOpacity
-                style={[
-                  styles.dispatchBtn,
-                  {
-                    flex: 1,
-                    minWidth: 200,
-                    backgroundColor: isBooking ? colors.primaryDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
-                    borderColor: isBooking ? colors.primary : colors.borderGlass,
-                  }
-                ]}
-                onPress={() => setIsBooking(!isBooking)}
-              >
-                {isBooking ? <CheckSquare size={16} color={colors.primary} /> : <Square size={16} color={colors.textMuted} />}
-                <Text style={[styles.dispatchText, { color: isBooking ? colors.textPrimary : colors.textSecondary }]}>
-                  PRIOR BOOKING
-                </Text>
-              </TouchableOpacity>
+            {/* Vehicle Type (Optional single-select) */}
+            <View style={styles.formGroup}>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>VEHICLE TYPE (OPTIONAL):</Text>
+              <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                {[
+                  { type: 'car' as const, label: 'CAR' },
+                  { type: 'suv' as const, label: 'SUV' },
+                  { type: 'lcv' as const, label: 'LCV' },
+                  { type: 'van' as const, label: 'VAN' },
+                ].map(item => {
+                  const isSelected = vehicleType === item.type;
+                  return (
+                    <TouchableOpacity
+                      key={item.type}
+                      style={[
+                        styles.dispatchBtn,
+                        {
+                          flex: 1,
+                          minWidth: 70,
+                          paddingVertical: 10,
+                          backgroundColor: isSelected ? colors.primaryDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
+                          borderColor: isSelected ? colors.primary : colors.borderGlass,
+                        }
+                      ]}
+                      onPress={() => setVehicleType(isSelected ? null : item.type)}
+                    >
+                      {isSelected ? <CheckSquare size={14} color={colors.primary} /> : <Square size={14} color={colors.textMuted} />}
+                      <Text style={[styles.dispatchText, { color: isSelected ? colors.textPrimary : colors.textSecondary, marginLeft: 6 }]}>
+                        {item.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
 
-              <TouchableOpacity
+            {/* Additional Flags (Booking & Additional Repairs) */}
+            <View style={styles.formGroup}>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>ADDITIONAL (OPTIONAL):</Text>
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <TouchableOpacity
+                  style={[
+                    styles.dispatchBtn,
+                    {
+                      flex: 1,
+                      minWidth: 0,
+                      backgroundColor: isBooking ? colors.primaryDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
+                      borderColor: isBooking ? colors.primary : colors.borderGlass,
+                    }
+                  ]}
+                  onPress={() => setIsBooking(!isBooking)}
+                >
+                  {isBooking ? <CheckSquare size={16} color={colors.primary} /> : <Square size={16} color={colors.textMuted} />}
+                  <Text style={[styles.dispatchText, { color: isBooking ? colors.textPrimary : colors.textSecondary }]}>
+                    PRIOR BOOKING
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.dispatchBtn,
+                    {
+                      flex: 1,
+                      minWidth: 0,
+                      backgroundColor: hasAdditionalRepairs ? colors.warningDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
+                      borderColor: hasAdditionalRepairs ? colors.warning : colors.borderGlass,
+                    }
+                  ]}
+                  onPress={() => setHasAdditionalRepairs(!hasAdditionalRepairs)}
+                >
+                  {hasAdditionalRepairs ? <CheckSquare size={16} color={colors.warning} /> : <Square size={16} color={colors.textMuted} />}
+                  <Text style={[styles.dispatchText, { color: hasAdditionalRepairs ? colors.textPrimary : colors.textSecondary }]}>
+                    ADDITIONAL REPAIRS
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Remarks / Instructions */}
+            <View style={styles.formGroup}>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>REMARKS / INSTRUCTIONS:</Text>
+              <TextInput
                 style={[
-                  styles.dispatchBtn,
+                  styles.input,
+                  styles.textArea,
                   {
-                    flex: 1,
-                    minWidth: 200,
-                    backgroundColor: hasAdditionalRepairs ? colors.warningDim : (isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'),
-                    borderColor: hasAdditionalRepairs ? colors.warning : colors.borderGlass,
+                    backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)',
+                    borderColor: colors.borderGlass,
+                    color: colors.textPrimary,
                   }
                 ]}
-                onPress={() => setHasAdditionalRepairs(!hasAdditionalRepairs)}
-              >
-                {hasAdditionalRepairs ? <CheckSquare size={16} color={colors.warning} /> : <Square size={16} color={colors.textMuted} />}
-                <Text style={[styles.dispatchText, { color: hasAdditionalRepairs ? colors.textPrimary : colors.textSecondary }]}>
-                  ADDITIONAL REPAIRS
-                </Text>
-              </TouchableOpacity>
+                placeholder="Customer requests or issues..."
+                placeholderTextColor={colors.textMuted}
+                value={remarks}
+                onChangeText={setRemarks}
+                multiline
+                numberOfLines={2}
+              />
             </View>
 
             {/* Urgent Toggle */}

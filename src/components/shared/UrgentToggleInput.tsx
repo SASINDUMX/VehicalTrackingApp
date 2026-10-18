@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
 import { AlertTriangle, CheckSquare, Square } from 'lucide-react-native';
 import { useTheme } from '../../context/ThemeContext';
@@ -22,6 +22,38 @@ export const UrgentToggleInput: React.FC<UrgentToggleInputProps> = ({
   placeholder = APP_TERMINOLOGY.urgency.placeholder,
 }) => {
   const { colors, isDark } = useTheme();
+  const manuallyToggledRef = useRef<boolean>(false);
+
+  // If vehicle initially loads with isUrgent true and empty note, preserve intent as manual
+  useEffect(() => {
+    if (isUrgent && (!urgentNote || urgentNote.trim().length === 0)) {
+      manuallyToggledRef.current = true;
+    }
+  }, [isUrgent]);
+
+  const handleTogglePress = () => {
+    const next = !isUrgent;
+    manuallyToggledRef.current = next;
+    onToggleUrgent(next);
+    if (!next) {
+      onChangeUrgentNote('');
+    }
+  };
+
+  const handleTextChange = (text: string) => {
+    onChangeUrgentNote(text);
+    if (text.trim().length > 0) {
+      if (!isUrgent) {
+        manuallyToggledRef.current = false;
+        onToggleUrgent(true);
+      }
+    } else {
+      // If user cleared all text and it was activated via typing, auto-revert
+      if (isUrgent && !manuallyToggledRef.current) {
+        onToggleUrgent(false);
+      }
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -41,7 +73,7 @@ export const UrgentToggleInput: React.FC<UrgentToggleInputProps> = ({
               : 'rgba(0, 0, 0, 0.02)',
           },
         ]}
-        onPress={() => onToggleUrgent(!isUrgent)}
+        onPress={handleTogglePress}
         activeOpacity={0.7}
       >
         <View style={styles.toggleRow}>
@@ -76,24 +108,24 @@ export const UrgentToggleInput: React.FC<UrgentToggleInputProps> = ({
         )}
       </TouchableOpacity>
 
-      {isUrgent && (
-        <TextInput
-          style={[
-            styles.textAreaInput,
-            {
-              backgroundColor: isDark ? 'rgba(0, 0, 0, 0.25)' : 'rgba(0, 0, 0, 0.04)',
-              borderColor: colors.dangerBorder,
-              color: colors.textPrimary,
-            },
-          ]}
-          value={urgentNote}
-          onChangeText={onChangeUrgentNote}
-          placeholder={placeholder}
-          placeholderTextColor={colors.textMuted}
-          multiline
-          numberOfLines={2}
-        />
-      )}
+      <TextInput
+        style={[
+          styles.textAreaInput,
+          {
+            backgroundColor: isUrgent
+              ? (isDark ? 'rgba(0, 0, 0, 0.25)' : 'rgba(0, 0, 0, 0.04)')
+              : (isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)'),
+            borderColor: isUrgent ? colors.dangerBorder : colors.borderGlass,
+            color: colors.textPrimary,
+          },
+        ]}
+        value={urgentNote}
+        onChangeText={handleTextChange}
+        placeholder={isUrgent ? placeholder : 'Urgency reason (typing auto-marks as urgent)...'}
+        placeholderTextColor={colors.textMuted}
+        multiline
+        numberOfLines={2}
+      />
     </View>
   );
 };

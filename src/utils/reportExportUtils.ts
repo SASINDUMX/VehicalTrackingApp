@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 import { Vehicle, BayZone } from '../types/vehicle';
-import { getBreakOverlap, getNetWorkingSeconds } from './workshopHoursUtils';
+import { getBreakOverlap, getNetWorkingSeconds, getSriLankaTodayString, getSriLankaDayStartISO, getSriLankaDayEndISO, getSriLankaDateString } from './workshopHoursUtils';
 import { getStageTiming, getTaskTypeForBay } from './vehicleUtils';
 
 export interface BayKPI {
@@ -44,6 +44,8 @@ export interface ServerReportRecord {
   has_additional_repairs: boolean;
   technician_name: string | null;
   assigned_tech: string | null;
+  assigned_advisor?: string | null;
+  vehicle_type?: string | null;
   remarks: string | null;
   intake_at: string | null;
   created_at: string;
@@ -137,11 +139,15 @@ export const filterVehiclesForReport = (
   customDateRange?: { start: string; end?: string }
 ): Vehicle[] => {
   const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const slTodayStr = getSriLankaTodayString(now);
+  const startOfToday = new Date(getSriLankaDayStartISO(slTodayStr));
   const startOfYesterday = new Date(startOfToday.getTime() - 24 * 60 * 60 * 1000);
   const startOf7Days = new Date(startOfToday.getTime() - 7 * 24 * 60 * 60 * 1000);
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const startOf3Months = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate());
+  const slParts = slTodayStr.split('-').map(Number);
+  const firstOfMonthStr = `${slParts[0]}-${String(slParts[1]).padStart(2, '0')}-01`;
+  const startOfMonth = new Date(getSriLankaDayStartISO(firstOfMonthStr));
+  const past3Mo = new Date(slParts[0], slParts[1] - 1 - 3, slParts[2]);
+  const startOf3Months = new Date(getSriLankaDayStartISO(getSriLankaDateString(past3Mo)));
 
   return vehicles.filter(v => {
     // 1. Date Filter
@@ -154,11 +160,17 @@ export const filterVehiclesForReport = (
     if (datePreset === 'month' && intakeDate < startOfMonth) return false;
     if (datePreset === '3months' && intakeDate < startOf3Months) return false;
     if (datePreset === 'custom' && customDateRange?.start) {
-      const customStart = new Date(customDateRange.start);
-      if (!Number.isNaN(customStart.getTime()) && intakeDate < customStart) return false;
+      const customStartIso = getSriLankaDayStartISO(customDateRange.start);
+      if (customStartIso) {
+        const customStart = new Date(customStartIso);
+        if (!Number.isNaN(customStart.getTime()) && intakeDate < customStart) return false;
+      }
       if (customDateRange.end) {
-        const customEnd = new Date(customDateRange.end);
-        if (!Number.isNaN(customEnd.getTime()) && intakeDate > customEnd) return false;
+        const customEndIso = getSriLankaDayEndISO(customDateRange.end);
+        if (customEndIso) {
+          const customEnd = new Date(customEndIso);
+          if (!Number.isNaN(customEnd.getTime()) && intakeDate > customEnd) return false;
+        }
       }
     }
 
@@ -202,12 +214,14 @@ export const getDatePresetRangeDescription = (
     }
 
     case 'month': {
-      const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const slParts = getSriLankaTodayString(now).split('-').map(Number);
+      const firstOfMonth = new Date(`${slParts[0]}-${String(slParts[1]).padStart(2, '0')}-01T00:00:00+05:30`);
       return { label: 'This Month', rangeStr: `${formatShortDate(firstOfMonth)} – ${todayStr}`, isMultiDate: true };
     }
 
     case '3months': {
-      const past3Mo = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate());
+      const slParts = getSriLankaTodayString(now).split('-').map(Number);
+      const past3Mo = new Date(slParts[0], slParts[1] - 1 - 3, slParts[2]);
       return { label: 'Last 3 Months', rangeStr: `${formatShortDate(past3Mo)} – ${todayStr}`, isMultiDate: true };
     }
 
@@ -538,6 +552,8 @@ export const exportServiceLogsToCSV = (
     '',
     '',
     '',
+    '',
+    '',
     'OVERALL EFFICIENCY',
     '',
     '',
@@ -563,6 +579,8 @@ export const exportServiceLogsToCSV = (
   // Row 2: Sub-headers (Metric Columns)
   const subHeaders = [
     'Vehicle Reg No',
+    'Vehicle Type',
+    'Assigned Advisor',
     'Status',
     'Current Station',
     'Booking',
@@ -734,8 +752,13 @@ export const exportServiceLogsToCSV = (
       finishedStr = effectiveCompletionDate ? effectiveCompletionDate.toLocaleString('en-US', { timeZone: 'Asia/Colombo' }) : 'Pending';
     }
 
+    const vehicleTypeStr = v.vehicle_type ? String(v.vehicle_type).toUpperCase() : '-';
+    const advisorStr = v.assigned_advisor || 'Unassigned';
+
     const row = [
       escapeCSV(vehicleNo),
+      escapeCSV(vehicleTypeStr),
+      escapeCSV(advisorStr),
       escapeCSV(statusLabel),
       escapeCSV(stationLabel),
       escapeCSV(isBookingStr),
@@ -785,7 +808,7 @@ export const exportServiceLogsToCSV = (
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `UnitedMotors_ServiceReport_${datePresetLabel.replace(/\s+/g, '_')}_${Date.now()}.csv`);
+    link.setAttribute('download', `${batchRefId}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -997,6 +1020,12 @@ export const exportServiceLogsToPDF = (
           <div>${bookingBadge}${extraRepairsBadge}</div>
           ${techName ? `<div style="font-size: 9px; color: #0284c7; font-weight: 600; margin-top: 2px;">🔧 ${techName}</div>` : ''}
         </td>
+        <td style="padding: 8px 6px; text-align: center; border-bottom: 1px solid #e2e8f0;">
+          ${v.vehicle_type ? `<span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 8.5px; font-weight: 800; background: #e2e8f0; color: #1e293b; text-transform: uppercase;">${v.vehicle_type}</span>` : '<span style="color: #94a3b8; font-size: 10px;">-</span>'}
+        </td>
+        <td style="padding: 8px 8px; font-size: 10px; font-weight: 700; color: #0284c7; border-bottom: 1px solid #e2e8f0;">
+          ${v.assigned_advisor ? v.assigned_advisor : '<span style="color: #94a3b8; font-weight: 400;">Unassigned</span>'}
+        </td>
         <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0;">
           <span style="display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: 800; background: ${statusBg}; color: ${statusColor};">
             ${statusLabel}
@@ -1078,9 +1107,56 @@ export const exportServiceLogsToPDF = (
     <html>
       <head>
         <meta charset="utf-8" />
-        <title>United Motors - Service Logs Report</title>
+        <title>${batchRefId}</title>
         <style>
-          @page { size: A4 landscape; margin: 10mm; }
+          @page {
+            size: A4 landscape !important;
+            margin: 6mm 8mm 12mm 8mm;
+            @bottom-left {
+              content: "UNITED MOTORS LANKA PLC — SERVICE AUDIT REPORT | BATCH: ${batchRefId}";
+              font-size: 8px;
+              font-weight: 700;
+              color: #64748b;
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            }
+            @bottom-right {
+              content: "Page " counter(page) " of " counter(pages);
+              font-size: 8.5px;
+              font-weight: 800;
+              color: #0284c7;
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            }
+          }
+          @media print {
+            @page {
+              size: A4 landscape !important;
+              margin: 6mm 8mm 12mm 8mm;
+              @bottom-left {
+                content: "UNITED MOTORS LANKA PLC — SERVICE AUDIT REPORT | BATCH: ${batchRefId}";
+                font-size: 8px;
+                font-weight: 700;
+                color: #64748b;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+              }
+              @bottom-right {
+                content: "Page " counter(page) " of " counter(pages);
+                font-size: 8.5px;
+                font-weight: 800;
+                color: #0284c7;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+              }
+            }
+            html, body {
+              width: 100%;
+              min-width: 280mm;
+              margin: 0;
+              padding: 0;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+            .table-container { width: 100% !important; }
+            .running-batch-header { display: table-row !important; }
+          }
           body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #0f172a; margin: 0; padding: 10px; }
           .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0284c7; padding-bottom: 12px; margin-bottom: 16px; }
           .brand-title { font-size: 22px; font-weight: 900; letter-spacing: 1px; color: #0284c7; margin: 0; }
@@ -1183,9 +1259,21 @@ export const exportServiceLogsToPDF = (
         </div>
 
         <table class="table-container">
-          <thead>
+          <thead style="display: table-header-group;">
+            <tr class="running-batch-header" style="background: #0284c7; color: #ffffff;">
+              <th colspan="25" style="padding: 5px 10px; text-align: left; font-size: 9px; font-weight: 700; border: none; letter-spacing: 0.3px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <span>UNITED MOTORS LANKA PLC — SERVICE AUDIT REPORT</span>
+                  <span style="font-family: monospace; font-size: 8.5px; font-weight: 800; background: rgba(255,255,255,0.25); padding: 2px 8px; border-radius: 4px;">
+                    BATCH REF: ${batchRefId}
+                  </span>
+                </div>
+              </th>
+            </tr>
             <tr style="background: #0f172a; color: #ffffff;">
               <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Vehicle No</th>
+              <th rowspan="2" style="padding: 8px 6px; text-align: center; border-right: 1px solid #334155;">Type</th>
+              <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Advisor</th>
               <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Status</th>
               <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Date</th>
               <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Intake</th>
@@ -1221,6 +1309,16 @@ export const exportServiceLogsToPDF = (
           <tbody>
             ${tableRowsHtml}
           </tbody>
+          <tfoot style="display: table-footer-group;">
+            <tr style="background: #f8fafc;">
+              <td colspan="25" style="padding: 4px 10px; font-size: 8px; font-weight: 600; color: #64748b; border-top: 1px solid #cbd5e1; border-bottom: none;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <span>UNITED MOTORS LANKA PLC — Service & Telemetry Audit Log (${datePresetLabel})</span>
+                  <span style="font-family: monospace; font-size: 8px; color: #94a3b8;">Batch Ref: ${batchRefId}</span>
+                </div>
+              </td>
+            </tr>
+          </tfoot>
         </table>
 
         <!-- Final Page Report Closing Block (Sign-off & Footnote) -->

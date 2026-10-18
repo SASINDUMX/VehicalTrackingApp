@@ -125,11 +125,28 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // Fetch workplaces for the branch switcher (runs once on mount)
     fetchWorkplaces();
 
+    const client = supabase;
     // Check existing session
-    supabase.auth.getSession()
+    client.auth.getSession()
       .then(async ({ data: { session } }) => {
         if (!isMounted) return;
         if (session?.user) {
+          // Verify with Supabase Auth server to detect if session was revoked on password reset
+          try {
+            const { data: { user: verifiedUser }, error: verifyError } = await client.auth.getUser();
+            if (verifyError || !verifiedUser) {
+              console.warn('[AuthContext] Session invalid or revoked on server, signing out:', verifyError?.message);
+              await client.auth.signOut();
+              if (isMounted) {
+                setUser(null);
+                setUserProfile(null);
+              }
+              return;
+            }
+          } catch (verifyErr) {
+            console.warn('[AuthContext] Session verification check error:', verifyErr);
+          }
+
           setUser(session.user);
           try {
             const profile = await Promise.race([

@@ -8,6 +8,7 @@ import { chimeService } from '../lib/chime';
 import { hapticService } from '../lib/haptics';
 import { useAuth } from './AuthContext';
 import { deduplicateTasks } from '../utils/vehicleUtils';
+import { getSriLankaTodayString } from '../utils/workshopHoursUtils';
 
 export interface VehicleStateContextType {
   vehicles: Vehicle[];
@@ -38,6 +39,23 @@ export interface VehicleInternalContextType {
 export const VehicleStateContext = createContext<VehicleStateContextType | undefined>(undefined);
 export const VehicleInternalContext = createContext<VehicleInternalContextType | undefined>(undefined);
 
+const getVehicleCacheKey = (branchId?: string) => `um_cached_vehicles_${branchId || 'orugodawatta_sec5'}`;
+
+const loadCachedVehicles = (branchId?: string): Vehicle[] => {
+  try {
+    const key = getVehicleCacheKey(branchId);
+    let cached = safeStorage.getItem(key);
+    // Backward-compatibility: migrate legacy un-scoped cache if branch is orugodawatta_sec5
+    if (!cached && (!branchId || branchId === 'orugodawatta_sec5')) {
+      cached = safeStorage.getItem('um_cached_vehicles');
+    }
+    if (cached) return JSON.parse(cached);
+  } catch {
+    /* ignore cache read error */
+  }
+  return [];
+};
+
 export const VehicleStateProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { activeBranchId } = useAuth();
   const [currentRole, setCurrentRole] = useState<UserRole>('service_executive');
@@ -59,16 +77,14 @@ export const VehicleStateProvider: React.FC<{ children: ReactNode }> = ({ childr
     selectedVehicleStateRef.current = selectedVehicleState;
   }, [selectedVehicleState]);
 
-  // Vehicles Domain State with Offline Cache Hydration
-  const [vehicles, setVehicles] = useState<Vehicle[]>(() => {
-    try {
-      const cached = safeStorage.getItem('um_cached_vehicles');
-      if (cached) return JSON.parse(cached);
-    } catch {
-      /* ignore cache read error */
-    }
-    return [];
-  });
+  // Vehicles Domain State with Branch-Scoped Offline Cache Hydration
+  const [vehicles, setVehicles] = useState<Vehicle[]>(() => loadCachedVehicles(activeBranchId));
+
+  // Re-hydrate from branch-specific cache whenever activeBranchId switches
+  useEffect(() => {
+    const branchVehicles = loadCachedVehicles(activeBranchId);
+    setVehicles(branchVehicles);
+  }, [activeBranchId]);
 
   const vehiclesRef = useRef<Vehicle[]>(vehicles);
   useEffect(() => {
@@ -127,7 +143,7 @@ export const VehicleStateProvider: React.FC<{ children: ReactNode }> = ({ childr
               return v;
             })
             .filter((v): v is Vehicle => v !== null);
-          safeStorage.setItem('um_cached_vehicles', JSON.stringify(cleaned));
+          safeStorage.setItem(getVehicleCacheKey(activeBranchId), JSON.stringify(cleaned));
           return cleaned;
         });
       }
@@ -139,7 +155,7 @@ export const VehicleStateProvider: React.FC<{ children: ReactNode }> = ({ childr
       const formatted = await vehicleService.fetchLiveVehicles(activeBranchId);
       if (isMountedRef.current) {
         setVehicles(formatted);
-        safeStorage.setItem('um_cached_vehicles', JSON.stringify(formatted));
+        safeStorage.setItem(getVehicleCacheKey(activeBranchId), JSON.stringify(formatted));
         setIsRealtimeConnected(true);
       }
     } catch (err) {
@@ -224,6 +240,8 @@ export const VehicleStateProvider: React.FC<{ children: ReactNode }> = ({ childr
               current_zone: targetZone,
               technician_name: (updated.technician_name as string | null) ?? v.technician_name,
               assigned_tech: (updated.assigned_tech as string) || v.assigned_tech,
+              assigned_advisor: (updated.assigned_advisor as string | null) ?? v.assigned_advisor,
+              vehicle_type: (updated.vehicle_type as any) ?? v.vehicle_type,
               remarks: (updated.remarks as string) ?? v.remarks,
               is_booking: (updated.is_booking as boolean) ?? v.is_booking,
               has_additional_repairs: (updated.has_additional_repairs as boolean) ?? v.has_additional_repairs,
@@ -348,20 +366,28 @@ export const VehicleStateProvider: React.FC<{ children: ReactNode }> = ({ childr
   // Midnight Rollover & Day Boundary Reconciliation (Asia/Colombo UTC+05:30)
   useEffect(() => {
     let timer: NodeJS.Timeout;
+    const lastCheckedDateRef = { current: getSriLankaTodayString() };
+    const lastHiddenAtRef = { current: Date.now() };
+
+    const runDayReconciliationAndRefresh = async () => {
+      try {
+        await vehicleService.reconcileDailyVehicles(activeBranchId);
+      } catch (err) {
+        console.warn('[VehicleStateContext] Day reconciliation error:', err);
+      }
+      fetchSupabaseData(false);
+    };
+
     const scheduleMidnightRefresh = () => {
       const now = new Date();
-      const slDateStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Colombo' });
+      const slDateStr = getSriLankaTodayString(now);
       const todayMidnight = new Date(`${slDateStr}T00:00:05+05:30`);
       const nextMidnight = new Date(todayMidnight.getTime() + 24 * 60 * 60 * 1000);
       const msUntilMidnight = Math.max(1000, nextMidnight.getTime() - now.getTime());
 
       timer = setTimeout(async () => {
-        try {
-          await vehicleService.reconcileDailyVehicles(activeBranchId);
-        } catch (err) {
-          console.warn('[VehicleStateContext] Midnight reconciliation error:', err);
-        }
-        fetchSupabaseData(false);
+        lastCheckedDateRef.current = getSriLankaTodayString();
+        await runDayReconciliationAndRefresh();
         scheduleMidnightRefresh();
       }, msUntilMidnight);
     };
@@ -369,10 +395,29 @@ export const VehicleStateProvider: React.FC<{ children: ReactNode }> = ({ childr
     scheduleMidnightRefresh();
 
     const handleVisibilityDayCheck = () => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        fetchSupabaseData(false);
+      if (typeof document === 'undefined') return;
+
+      if (document.visibilityState === 'hidden') {
+        lastHiddenAtRef.current = Date.now();
+        return;
+      }
+
+      if (document.visibilityState === 'visible') {
+        const currentDate = getSriLankaTodayString();
+        const isDayRollover = currentDate !== lastCheckedDateRef.current;
+        const hiddenDurationMs = Date.now() - lastHiddenAtRef.current;
+
+        if (isDayRollover) {
+          // Calendar date rolled over while device was asleep / tab backgrounded overnight
+          lastCheckedDateRef.current = currentDate;
+          runDayReconciliationAndRefresh();
+        } else if (hiddenDurationMs > 10 * 60 * 1000) {
+          // Backgrounded for more than 10 minutes: refresh live vehicles without reconciliation
+          fetchSupabaseData(false);
+        }
       }
     };
+
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', handleVisibilityDayCheck);
     }

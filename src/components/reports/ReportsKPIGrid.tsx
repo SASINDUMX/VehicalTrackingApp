@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useRef, useEffect } from 'react';
+import { View, Text, StyleSheet, Animated } from 'react-native';
 import {
   Car,
   Clock,
@@ -14,10 +14,26 @@ import { ReportKPIs, formatDuration } from '../../utils/reportExportUtils';
 
 export interface ReportsKPIGridProps {
   kpis: ReportKPIs | null;
+  isLoading?: boolean;
 }
 
-export const ReportsKPIGrid: React.FC<ReportsKPIGridProps> = ({ kpis }) => {
+export const ReportsKPIGrid: React.FC<ReportsKPIGridProps> = ({ kpis, isLoading = false }) => {
   const { colors, isDark } = useTheme();
+
+  const shimmerAnim = useRef(new Animated.Value(0.35)).current;
+  useEffect(() => {
+    if (!isLoading) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmerAnim, { toValue: 0.75, duration: 650, useNativeDriver: true }),
+        Animated.timing(shimmerAnim, { toValue: 0.35, duration: 650, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [isLoading]);
+
+  const skeletonBg = isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)';
 
   const completionRate =
     (kpis?.totalVehicles ?? 0) > 0
@@ -38,18 +54,36 @@ export const ReportsKPIGrid: React.FC<ReportsKPIGridProps> = ({ kpis }) => {
       >
         <View style={styles.kpiCardHeaderRow}>
           <Text style={[styles.kpiLabel, { color: colors.textMuted }]}>SERVICE OVERVIEW</Text>
-          <Text style={[styles.kpiBottomText, { color: colors.textMuted }]}>
-            {completionRate}% COMPLETION RATE
-          </Text>
+          {isLoading ? (
+            <Animated.View
+              style={[
+                styles.skeletonPill,
+                { width: 110, height: 12, opacity: shimmerAnim, backgroundColor: skeletonBg },
+              ]}
+            />
+          ) : (
+            <Text style={[styles.kpiBottomText, { color: colors.textMuted }]}>
+              {completionRate}% COMPLETION RATE
+            </Text>
+          )}
         </View>
         <View style={styles.kpiThreeColRow}>
           {/* Pillar 1: Total Fleet */}
           <View style={styles.kpiCol}>
             <View style={styles.kpiValRow}>
               <Car size={16} color={colors.primaryLight} />
-              <Text style={[styles.kpiBigVal, { color: colors.textPrimary }]}>
-                {kpis?.totalVehicles ?? 0}
-              </Text>
+              {isLoading ? (
+                <Animated.View
+                  style={[
+                    styles.skeletonPill,
+                    { width: 34, height: 20, opacity: shimmerAnim, backgroundColor: skeletonBg },
+                  ]}
+                />
+              ) : (
+                <Text style={[styles.kpiBigVal, { color: colors.textPrimary }]}>
+                  {kpis?.totalVehicles ?? 0}
+                </Text>
+              )}
             </View>
             <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>TOTAL FLEET</Text>
           </View>
@@ -58,9 +92,18 @@ export const ReportsKPIGrid: React.FC<ReportsKPIGridProps> = ({ kpis }) => {
           <View style={styles.kpiCol}>
             <View style={styles.kpiValRow}>
               <Clock size={16} color={colors.primaryLight} />
-              <Text style={[styles.kpiBigVal, { color: colors.primaryLight }]}>
-                {kpis?.inProgressCount ?? 0}
-              </Text>
+              {isLoading ? (
+                <Animated.View
+                  style={[
+                    styles.skeletonPill,
+                    { width: 34, height: 20, opacity: shimmerAnim, backgroundColor: skeletonBg },
+                  ]}
+                />
+              ) : (
+                <Text style={[styles.kpiBigVal, { color: colors.primaryLight }]}>
+                  {kpis?.inProgressCount ?? 0}
+                </Text>
+              )}
             </View>
             <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>ACTIVE</Text>
           </View>
@@ -69,9 +112,18 @@ export const ReportsKPIGrid: React.FC<ReportsKPIGridProps> = ({ kpis }) => {
           <View style={styles.kpiCol}>
             <View style={styles.kpiValRow}>
               <CheckCircle2 size={16} color={colors.success} />
-              <Text style={[styles.kpiBigVal, { color: colors.success }]}>
-                {kpis?.completedCount ?? 0}
-              </Text>
+              {isLoading ? (
+                <Animated.View
+                  style={[
+                    styles.skeletonPill,
+                    { width: 34, height: 20, opacity: shimmerAnim, backgroundColor: skeletonBg },
+                  ]}
+                />
+              ) : (
+                <Text style={[styles.kpiBigVal, { color: colors.success }]}>
+                  {kpis?.completedCount ?? 0}
+                </Text>
+              )}
             </View>
             <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>COMPLETED</Text>
           </View>
@@ -80,9 +132,18 @@ export const ReportsKPIGrid: React.FC<ReportsKPIGridProps> = ({ kpis }) => {
           <View style={styles.kpiCol}>
             <View style={styles.kpiValRow}>
               <Calendar size={16} color={colors.primaryLight} />
-              <Text style={[styles.kpiBigVal, { color: colors.primaryLight }]}>
-                {kpis?.bookingCount ?? 0}
-              </Text>
+              {isLoading ? (
+                <Animated.View
+                  style={[
+                    styles.skeletonPill,
+                    { width: 34, height: 20, opacity: shimmerAnim, backgroundColor: skeletonBg },
+                  ]}
+                />
+              ) : (
+                <Text style={[styles.kpiBigVal, { color: colors.primaryLight }]}>
+                  {kpis?.bookingCount ?? 0}
+                </Text>
+              )}
             </View>
             <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>BOOKINGS</Text>
           </View>
@@ -91,9 +152,18 @@ export const ReportsKPIGrid: React.FC<ReportsKPIGridProps> = ({ kpis }) => {
           <View style={styles.kpiCol}>
             <View style={styles.kpiValRow}>
               <Wrench size={16} color={colors.warning} />
-              <Text style={[styles.kpiBigVal, { color: colors.warning }]}>
-                {kpis?.additionalRepairsCount ?? 0}
-              </Text>
+              {isLoading ? (
+                <Animated.View
+                  style={[
+                    styles.skeletonPill,
+                    { width: 34, height: 20, opacity: shimmerAnim, backgroundColor: skeletonBg },
+                  ]}
+                />
+              ) : (
+                <Text style={[styles.kpiBigVal, { color: colors.warning }]}>
+                  {kpis?.additionalRepairsCount ?? 0}
+                </Text>
+              )}
             </View>
             <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>EXTRA REPAIRS</Text>
           </View>
@@ -103,9 +173,18 @@ export const ReportsKPIGrid: React.FC<ReportsKPIGridProps> = ({ kpis }) => {
             <View style={styles.kpiCol}>
               <View style={styles.kpiValRow}>
                 <Clock size={16} color={colors.warningLight} />
-                <Text style={[styles.kpiBigVal, { color: colors.warningLight }]}>
-                  {kpis.onHoldCount}
-                </Text>
+                {isLoading ? (
+                  <Animated.View
+                    style={[
+                      styles.skeletonPill,
+                      { width: 34, height: 20, opacity: shimmerAnim, backgroundColor: skeletonBg },
+                    ]}
+                  />
+                ) : (
+                  <Text style={[styles.kpiBigVal, { color: colors.warningLight }]}>
+                    {kpis.onHoldCount}
+                  </Text>
+                )}
               </View>
               <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>ON HOLD</Text>
             </View>
@@ -129,9 +208,18 @@ export const ReportsKPIGrid: React.FC<ReportsKPIGridProps> = ({ kpis }) => {
           <View style={styles.kpiValRow}>
             <Wrench size={15} color={colors.bayWorkshopLight} />
             <View style={styles.kpiMetricCol}>
-              <Text style={[styles.kpiVal, { color: colors.bayWorkshopLight }]}>
-                {formatDuration(kpis?.workshopBay?.avgStageSec ?? 0)}
-              </Text>
+              {isLoading ? (
+                <Animated.View
+                  style={[
+                    styles.skeletonPill,
+                    { width: 60, height: 16, opacity: shimmerAnim, backgroundColor: skeletonBg, marginVertical: 2 },
+                  ]}
+                />
+              ) : (
+                <Text style={[styles.kpiVal, { color: colors.bayWorkshopLight }]}>
+                  {formatDuration(kpis?.workshopBay?.avgStageSec ?? 0)}
+                </Text>
+              )}
               <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>
                 BAY GROSS AVG STAY TIME
               </Text>
@@ -140,18 +228,36 @@ export const ReportsKPIGrid: React.FC<ReportsKPIGridProps> = ({ kpis }) => {
           <View style={[styles.kpiValRow, styles.kpiActiveRow]}>
             <Clock size={13} color={colors.primaryLight} />
             <View style={styles.kpiMetricCol}>
-              <Text style={[styles.kpiActiveVal, { color: colors.primaryLight }]}>
-                {formatDuration(kpis?.workshopBay?.avgActiveSec ?? 0)}
-              </Text>
+              {isLoading ? (
+                <Animated.View
+                  style={[
+                    styles.skeletonPill,
+                    { width: 52, height: 13, opacity: shimmerAnim, backgroundColor: skeletonBg, marginVertical: 2 },
+                  ]}
+                />
+              ) : (
+                <Text style={[styles.kpiActiveVal, { color: colors.primaryLight }]}>
+                  {formatDuration(kpis?.workshopBay?.avgActiveSec ?? 0)}
+                </Text>
+              )}
               <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>
                 BAY AVG ACTIVE TIME
               </Text>
             </View>
           </View>
           <View style={styles.kpiBottomRow}>
-            <Text style={[styles.kpiBottomText, { color: colors.textMuted }]}>
-              {kpis?.workshopBay?.vehicleCount ?? 0} vehicles
-            </Text>
+            {isLoading ? (
+              <Animated.View
+                style={[
+                  styles.skeletonPill,
+                  { width: 68, height: 11, opacity: shimmerAnim, backgroundColor: skeletonBg },
+                ]}
+              />
+            ) : (
+              <Text style={[styles.kpiBottomText, { color: colors.textMuted }]}>
+                {kpis?.workshopBay?.vehicleCount ?? 0} vehicles
+              </Text>
+            )}
           </View>
         </View>
 
@@ -169,9 +275,18 @@ export const ReportsKPIGrid: React.FC<ReportsKPIGridProps> = ({ kpis }) => {
           <View style={styles.kpiValRow}>
             <Navigation size={15} color={colors.bayAlignmentLight} />
             <View style={styles.kpiMetricCol}>
-              <Text style={[styles.kpiVal, { color: colors.bayAlignmentLight }]}>
-                {formatDuration(kpis?.alignmentBay?.avgStageSec ?? 0)}
-              </Text>
+              {isLoading ? (
+                <Animated.View
+                  style={[
+                    styles.skeletonPill,
+                    { width: 60, height: 16, opacity: shimmerAnim, backgroundColor: skeletonBg, marginVertical: 2 },
+                  ]}
+                />
+              ) : (
+                <Text style={[styles.kpiVal, { color: colors.bayAlignmentLight }]}>
+                  {formatDuration(kpis?.alignmentBay?.avgStageSec ?? 0)}
+                </Text>
+              )}
               <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>
                 BAY GROSS AVG STAY TIME
               </Text>
@@ -180,18 +295,36 @@ export const ReportsKPIGrid: React.FC<ReportsKPIGridProps> = ({ kpis }) => {
           <View style={[styles.kpiValRow, styles.kpiActiveRow]}>
             <Clock size={13} color={colors.primaryLight} />
             <View style={styles.kpiMetricCol}>
-              <Text style={[styles.kpiActiveVal, { color: colors.primaryLight }]}>
-                {formatDuration(kpis?.alignmentBay?.avgActiveSec ?? 0)}
-              </Text>
+              {isLoading ? (
+                <Animated.View
+                  style={[
+                    styles.skeletonPill,
+                    { width: 52, height: 13, opacity: shimmerAnim, backgroundColor: skeletonBg, marginVertical: 2 },
+                  ]}
+                />
+              ) : (
+                <Text style={[styles.kpiActiveVal, { color: colors.primaryLight }]}>
+                  {formatDuration(kpis?.alignmentBay?.avgActiveSec ?? 0)}
+                </Text>
+              )}
               <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>
                 BAY AVG ACTIVE TIME
               </Text>
             </View>
           </View>
           <View style={styles.kpiBottomRow}>
-            <Text style={[styles.kpiBottomText, { color: colors.textMuted }]}>
-              {kpis?.alignmentBay?.vehicleCount ?? 0} vehicles
-            </Text>
+            {isLoading ? (
+              <Animated.View
+                style={[
+                  styles.skeletonPill,
+                  { width: 68, height: 11, opacity: shimmerAnim, backgroundColor: skeletonBg },
+                ]}
+              />
+            ) : (
+              <Text style={[styles.kpiBottomText, { color: colors.textMuted }]}>
+                {kpis?.alignmentBay?.vehicleCount ?? 0} vehicles
+              </Text>
+            )}
           </View>
         </View>
 
@@ -209,9 +342,18 @@ export const ReportsKPIGrid: React.FC<ReportsKPIGridProps> = ({ kpis }) => {
           <View style={styles.kpiValRow}>
             <Droplets size={15} color={colors.bayHoistLight} />
             <View style={styles.kpiMetricCol}>
-              <Text style={[styles.kpiVal, { color: colors.bayHoistLight }]}>
-                {formatDuration(kpis?.hoistBay?.avgStageSec ?? 0)}
-              </Text>
+              {isLoading ? (
+                <Animated.View
+                  style={[
+                    styles.skeletonPill,
+                    { width: 60, height: 16, opacity: shimmerAnim, backgroundColor: skeletonBg, marginVertical: 2 },
+                  ]}
+                />
+              ) : (
+                <Text style={[styles.kpiVal, { color: colors.bayHoistLight }]}>
+                  {formatDuration(kpis?.hoistBay?.avgStageSec ?? 0)}
+                </Text>
+              )}
               <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>
                 BAY GROSS AVG STAY TIME
               </Text>
@@ -220,18 +362,36 @@ export const ReportsKPIGrid: React.FC<ReportsKPIGridProps> = ({ kpis }) => {
           <View style={[styles.kpiValRow, styles.kpiActiveRow]}>
             <Clock size={13} color={colors.success} />
             <View style={styles.kpiMetricCol}>
-              <Text style={[styles.kpiActiveVal, { color: colors.success }]}>
-                {formatDuration(kpis?.hoistBay?.avgActiveSec ?? 0)}
-              </Text>
+              {isLoading ? (
+                <Animated.View
+                  style={[
+                    styles.skeletonPill,
+                    { width: 52, height: 13, opacity: shimmerAnim, backgroundColor: skeletonBg, marginVertical: 2 },
+                  ]}
+                />
+              ) : (
+                <Text style={[styles.kpiActiveVal, { color: colors.success }]}>
+                  {formatDuration(kpis?.hoistBay?.avgActiveSec ?? 0)}
+                </Text>
+              )}
               <Text style={[styles.kpiSubLabel, { color: colors.textMuted }]}>
                 BAY AVG ACTIVE TIME
               </Text>
             </View>
           </View>
           <View style={styles.kpiBottomRow}>
-            <Text style={[styles.kpiBottomText, { color: colors.textMuted }]}>
-              {kpis?.hoistBay?.vehicleCount ?? 0} vehicles
-            </Text>
+            {isLoading ? (
+              <Animated.View
+                style={[
+                  styles.skeletonPill,
+                  { width: 68, height: 11, opacity: shimmerAnim, backgroundColor: skeletonBg },
+                ]}
+              />
+            ) : (
+              <Text style={[styles.kpiBottomText, { color: colors.textMuted }]}>
+                {kpis?.hoistBay?.vehicleCount ?? 0} vehicles
+              </Text>
+            )}
           </View>
         </View>
       </View>
@@ -320,5 +480,8 @@ const styles = StyleSheet.create({
   },
   kpiBottomRow: {
     marginTop: 4,
+  },
+  skeletonPill: {
+    borderRadius: 6,
   },
 });

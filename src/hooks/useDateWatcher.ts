@@ -1,16 +1,17 @@
 import { useEffect, useRef } from 'react';
+import { getSriLankaTodayString } from '../utils/workshopHoursUtils';
 
 /**
  * useDateWatcher
- * Fires a callback when the calendar date changes (i.e., midnight crosses).
+ * Fires a callback when the calendar date changes (i.e., midnight crosses in Sri Lanka).
  * Polls every 30 seconds — efficient enough for a floor app running all day.
  */
 export const useDateWatcher = (onDateChange: () => void) => {
-  const lastDateRef = useRef<string>(new Date().toISOString().split('T')[0]);
+  const lastDateRef = useRef<string>(getSriLankaTodayString());
 
   useEffect(() => {
     const checkDate = () => {
-      const today = new Date().toISOString().split('T')[0];
+      const today = getSriLankaTodayString();
       if (today !== lastDateRef.current) {
         lastDateRef.current = today;
         onDateChange();

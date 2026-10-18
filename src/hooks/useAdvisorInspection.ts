@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useVehicles } from "../context/VehicleContext";
 import { usePermissions } from "./usePermissions";
 import { matchesVehicleSearch } from "../utils/searchUtils";
+import { getSriLankaTodayString, getSriLankaDayStartISO } from "../utils/workshopHoursUtils";
 
 export const useAdvisorInspection = () => {
   const { vehicles, finishVehicleJobSheet, setSelectedVehicle, searchQuery, showMyVehiclesOnly, isLoading } = useVehicles();
@@ -13,8 +14,8 @@ export const useAdvisorInspection = () => {
   };
 
   const readyVehicles = useMemo(() => {
-    const slDateStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Colombo' });
-    const startOfToday = new Date(`${slDateStr}T00:00:00+05:30`);
+    const startOfTodayISO = getSriLankaDayStartISO(getSriLankaTodayString());
+    const startOfToday = new Date(startOfTodayISO);
 
     return vehicles.filter(v => {
       const isReady = v.current_zone === "inspection" && !v.is_finished;
