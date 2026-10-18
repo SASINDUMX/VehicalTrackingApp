@@ -244,7 +244,7 @@ export const AuditTrailView: React.FC = () => {
     <View style={styles.container}>
       {/* Filter Section */}
       <View style={[styles.filterCard, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)', borderColor: colors.borderGlass }]}>
-        {/* Date Filter Row */}
+        {/* Timeframe & Date Filter Row */}
         <View style={styles.filterRow}>
           <View style={styles.filterLabelGroup}>
             <Calendar size={13} color={colors.primaryLight} />
@@ -275,23 +275,23 @@ export const AuditTrailView: React.FC = () => {
               </TouchableOpacity>
             ))}
           </View>
-        </View>
 
-        {/* Permanent Theme Date Pickers (From / To) */}
-        <View style={[styles.datePickerRow, { borderTopColor: colors.borderGlass }]}>
-          <ThemeDatePicker
-            label="FROM:"
-            value={customDate}
-            onChange={handleCustomDateChange}
-            maxDate={customEndDate || undefined}
-          />
+          {/* Theme Date Pickers (From / To) */}
+          <View style={styles.datePickerRow}>
+            <ThemeDatePicker
+              label="FROM:"
+              value={customDate}
+              onChange={handleCustomDateChange}
+              maxDate={customEndDate || undefined}
+            />
 
-          <ThemeDatePicker
-            label="TO:"
-            value={customEndDate}
-            onChange={handleCustomEndDateChange}
-            minDate={customDate || undefined}
-          />
+            <ThemeDatePicker
+              label="TO:"
+              value={customEndDate}
+              onChange={handleCustomEndDateChange}
+              minDate={customDate || undefined}
+            />
+          </View>
         </View>
 
         {/* Facility Filter Row */}
@@ -695,9 +695,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     alignItems: 'center',
     gap: 12,
-    marginTop: 10,
-    paddingTop: 10,
-    borderTopWidth: 1,
+    marginTop: 4,
   },
   facilityFilterRow: {
     gap: 8,
