@@ -94,6 +94,9 @@ BEGIN
           raw_user_meta_data = jsonb_build_object('display_name', account.name, 'role', account.role, 'section', account.section),
           updated_at = NOW()
       WHERE id = v_user_id;
+
+      -- Revoke all active sessions for this user so they must log in with the new password
+      DELETE FROM auth.sessions WHERE user_id = v_user_id;
     END IF;
 
     -- Upsert profile into public.user_profiles
@@ -118,6 +121,9 @@ BEGIN
           section = EXCLUDED.section,
           branch_id = EXCLUDED.branch_id;
   END LOOP;
+
+  -- Clean up any orphaned refresh tokens whose sessions were revoked
+  DELETE FROM auth.refresh_tokens WHERE session_id NOT IN (SELECT id FROM auth.sessions);
 END $seed$;
 
 SELECT 

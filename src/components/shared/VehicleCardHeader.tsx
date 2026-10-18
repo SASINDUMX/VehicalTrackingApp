@@ -47,6 +47,7 @@ export const VehicleCardHeader: React.FC<VehicleCardHeaderProps> = ({
 
   const hasBadges = Boolean(
     vehicle.is_paused ||
+    vehicle.vehicle_type ||
     vehicle.is_booking ||
     vehicle.has_additional_repairs ||
     vehicle.is_urgent ||
@@ -63,6 +64,9 @@ export const VehicleCardHeader: React.FC<VehicleCardHeaderProps> = ({
           {/* Inline Badges (flows seamlessly right after the license plate) */}
           {vehicle.is_paused && (
             <StatusPill variant="warning" label="⏸ ON HOLD" size={size === 'sm' ? 'sm' : 'md'} />
+          )}
+          {Boolean(vehicle.vehicle_type) && (
+            <StatusPill variant="neutral" label={String(vehicle.vehicle_type).toUpperCase()} size={size === 'sm' ? 'sm' : 'md'} />
           )}
           {vehicle.is_booking && (
             <StatusPill variant="neutral" label="📅 BOOKED" size={size === 'sm' ? 'sm' : 'md'} />
