@@ -7,9 +7,10 @@ export type UserRole =
   | 'job_controller'
   | 'workshop_manager'
   | 'foreman'
-  | 'advisor';
+  | 'advisor'
+  | 'viewer';
 
-export type ForemanSection = 'car' | 'suv' | 'lcv' | 'hoist' | 'alignment' | 'workshop' | 'general';
+export type ForemanSection = 'car' | 'suv' | 'lcv' | 'hoist' | 'alignment' | 'workshop' | 'general' | 'workshop_alignment';
 
 export type NavigationTab = 'overview' | 'waiting' | 'workshop' | 'alignment' | 'hoist' | 'inspection';
 
