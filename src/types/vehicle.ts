@@ -9,7 +9,7 @@ export type UserRole =
   | 'foreman'
   | 'advisor';
 
-export type ForemanSection = 'car' | 'suv' | 'lcv' | 'hoist' | 'alignment';
+export type ForemanSection = 'car' | 'suv' | 'lcv' | 'hoist' | 'alignment' | 'workshop' | 'general';
 
 export type NavigationTab = 'overview' | 'waiting' | 'workshop' | 'alignment' | 'hoist' | 'inspection';
 
