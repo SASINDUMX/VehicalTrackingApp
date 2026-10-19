@@ -12,6 +12,7 @@ export const usePermissions = () => {
   const isWorkshopManager = role === 'workshop_manager';
   const isForeman = role === 'foreman';
   const isAdvisor = role === 'advisor';
+  const isViewer = role === 'viewer';
   const isMasterAccess = ['super_admin', 'service_executive', 'agm', 'job_controller'].includes(role);
 
   // 2. Generic capability checker
@@ -24,6 +25,7 @@ export const usePermissions = () => {
     isWorkshopManager,
     isForeman,
     isAdvisor,
+    isViewer,
     section,
 
     // Core Permissions (driven 100% by src/constants/permissions.ts)

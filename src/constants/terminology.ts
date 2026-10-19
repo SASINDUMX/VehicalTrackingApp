@@ -142,6 +142,13 @@ export const APP_TERMINOLOGY = {
       shortCode: 'ADV',
       stationId: 'inspection',
     },
+    viewer: {
+      role: 'viewer',
+      title: 'Display / View Only',
+      badge: 'Viewer',
+      shortCode: 'VIEW',
+      stationId: 'workshop',
+    },
   } as Record<UserRole, RoleTerminology>,
 
   tasks: {

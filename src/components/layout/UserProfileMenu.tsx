@@ -48,7 +48,13 @@ export interface UserProfileMenuProps {
 
 const getRoleBadge = (role: string, section?: string | null): string => {
   if (role === 'super_admin') return 'Super Admin · HQ';
-  if (role === 'foreman' && section) return `Foreman · ${section.toUpperCase()}`;
+  if (role === 'viewer') return 'View Only · Monitor';
+  if (role === 'foreman' && section) {
+    if (section === 'workshop_alignment' || section === 'general_alignment') {
+      return 'Foreman · General + Alignment';
+    }
+    return `Foreman · ${section.toUpperCase()}`;
+  }
   return (APP_TERMINOLOGY.roles as any)[role]?.badge || role;
 };
 
