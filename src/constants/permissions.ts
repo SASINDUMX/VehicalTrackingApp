@@ -64,14 +64,19 @@ export const canForemanWorkInZone = (
     return false;
   }
 
-  // Hoist foreman can ONLY work in Hoist bay
+  // 1. Hoist foreman can ONLY work in Hoist bay
   if (section === 'hoist') {
     return bayZone === 'hoist';
   }
 
-  // CAR, SUV, LCV, and Alignment foremen can work in both Workshop and Alignment
-  if (section === 'car' || section === 'suv' || section === 'lcv' || section === 'alignment') {
-    return bayZone === 'workshop' || bayZone === 'alignment';
+  // 2. Alignment foreman can ONLY work in Wheel Alignment bay
+  if (section === 'alignment') {
+    return bayZone === 'alignment';
+  }
+
+  // 3. General Service foremen can ONLY work in General Service bay (workshop)
+  if (section === 'workshop' || section === 'general' || section === 'car' || section === 'suv' || section === 'lcv') {
+    return bayZone === 'workshop';
   }
 
   return false;
