@@ -23,6 +23,8 @@ export interface UserProfile {
   is_trial?: boolean;
   trial_expires_at?: string | null;
   active_session_token?: string | null;
+  max_parallel_sessions?: number;
+  active_session_tokens?: string[] | null;
 }
 
 interface AuthContextType {
@@ -294,9 +296,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             if (isMounted && profile) {
               // Verify session exclusivity on startup
               const storedToken = getDeviceSessionToken();
-              if (profile.active_session_token) {
-                if (storedToken && storedToken !== profile.active_session_token) {
-                  console.warn('[AuthContext] Stale session on startup (remote token differs). Evicting.');
+              const validTokens: string[] = Array.isArray(profile.active_session_tokens)
+                ? profile.active_session_tokens
+                : profile.active_session_token ? [profile.active_session_token] : [];
+
+              if (validTokens.length > 0) {
+                if (storedToken && !validTokens.includes(storedToken)) {
+                  console.warn('[AuthContext] Stale session on startup (local token not in active list). Evicting.');
                   await client.auth.signOut({ scope: 'local' });
                   if (isMounted) {
                     setUser(null);
@@ -304,17 +310,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                   }
                   return;
                 } else if (!storedToken) {
-                  // If this device had no local token recorded, adopt the active one
-                  setDeviceSessionToken(profile.active_session_token);
-                  currentSessionTokenRef.current = profile.active_session_token;
+                  // Adopt the newest active token if available
+                  const tokenToAdopt = validTokens[0] || rotateDeviceSessionToken();
+                  setDeviceSessionToken(tokenToAdopt);
+                  currentSessionTokenRef.current = tokenToAdopt;
                 } else {
                   currentSessionTokenRef.current = storedToken;
                 }
               } else {
-                // First session setup: claim DB token if not yet set
+                // First session setup: register fresh token
                 const freshToken = rotateDeviceSessionToken();
                 currentSessionTokenRef.current = freshToken;
-                await client.from('user_profiles').update({ active_session_token: freshToken }).eq('id', session.user.id);
+                try {
+                  await client.rpc('register_active_session', { p_token: freshToken });
+                } catch (_) {
+                  await client.from('user_profiles').update({ active_session_token: freshToken }).eq('id', session.user.id);
+                }
               }
 
               setUserProfile(profile);
@@ -384,11 +395,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           filter: `id=eq.${user.id}`,
         },
         (payload: any) => {
-          const remoteToken = payload.new?.active_session_token;
           const myToken = currentSessionTokenRef.current;
-          if (remoteToken && myToken && remoteToken !== myToken) {
-            console.warn('[AuthContext] Active session overtaken by newer login. Remote:', remoteToken, 'Local:', myToken);
-            evictSession('You have been logged out because this account was logged into from another window or device.');
+          if (!myToken) return;
+
+          const updatedTokens: string[] = Array.isArray(payload.new?.active_session_tokens)
+            ? payload.new.active_session_tokens
+            : payload.new?.active_session_token ? [payload.new.active_session_token] : [];
+
+          // If the profile has active tokens registered and my token was evicted/popped off
+          if (updatedTokens.length > 0 && !updatedTokens.includes(myToken)) {
+            console.warn('[AuthContext] Session evicted (limit exceeded by newer logins). Active tokens:', updatedTokens, 'My token:', myToken);
+            evictSession('You have been logged out because the maximum number of parallel logins for this account was reached on newer devices.');
           }
         }
       )
@@ -405,13 +422,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       try {
         const { data, error } = await client
           .from('user_profiles')
-          .select('active_session_token')
+          .select('active_session_token, active_session_tokens')
           .eq('id', user.id)
           .single();
 
-        if (!error && data?.active_session_token && data.active_session_token !== myToken) {
-          console.warn('[AuthContext] Focus check: Session invalidated by newer login.');
-          evictSession('You have been logged out because this account was logged into from another window or device.');
+        if (!error && data) {
+          const currentTokens: string[] = Array.isArray(data.active_session_tokens)
+            ? data.active_session_tokens
+            : data.active_session_token ? [data.active_session_token] : [];
+
+          if (currentTokens.length > 0 && !currentTokens.includes(myToken)) {
+            console.warn('[AuthContext] Focus check: Session evicted by newer logins.');
+            evictSession('You have been logged out because the maximum number of parallel logins for this account was reached on newer devices.');
+          }
         }
       } catch (err) {
         console.warn('[AuthContext] Session focus verification error:', err);
@@ -464,15 +487,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       if (res.data.user) {
-        // 1. Generate new session token for this window/tab and claim in DB
+        // 1. Generate new session token for this window/tab and claim via RPC
         const freshToken = rotateDeviceSessionToken();
         currentSessionTokenRef.current = freshToken;
 
         try {
-          await supabase
-            .from('user_profiles')
-            .update({ active_session_token: freshToken })
-            .eq('id', res.data.user.id);
+          const { error: rpcErr } = await supabase.rpc('register_active_session', { p_token: freshToken });
+          if (rpcErr) {
+            // Fallback direct update if RPC not present
+            await supabase
+              .from('user_profiles')
+              .update({ active_session_token: freshToken })
+              .eq('id', res.data.user.id);
+          }
         } catch (claimErr) {
           console.warn('[AuthContext] Failed to claim active_session_token in DB:', claimErr);
         }
