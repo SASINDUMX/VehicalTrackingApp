@@ -458,38 +458,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return { error: 'Supabase is not connected. Check your configuration.' };
     }
 
-    const rawEmail = emailInput.trim().toLowerCase();
-    let email = rawEmail;
-    let password = passwordInput;
-
-    // Alias mapping for common typo patterns & renamed accounts
-    if (rawEmail === 'advisor.car@unitedmotors.com') email = 'advisor.car1@unitedmotors.com';
-    if (rawEmail === 'advisor.suv@unitedmotors.com') email = 'advisor.suv1@unitedmotors.com';
-    if (rawEmail === 'advisor.lcv@unitedmotors.com') email = 'advisor.lcv1@unitedmotors.com';
-    if (rawEmail === 'advisor.sec2@unitedmotors.com') email = 'advisor1.sec2@unitedmotors.com';
-    if (rawEmail === 'foreman.general.sec2@unitedmotors.com') email = 'foreman1.sec2@unitedmotors.com';
-    if (rawEmail === 'foreman.alignment.sec2@unitedmotors.com') email = 'foreman2.sec2@unitedmotors.com';
+    const email = emailInput.trim().toLowerCase();
+    const password = passwordInput;
 
     try {
-      // If foreman enters legacy password, normalize
-      if (email.startsWith('foreman.') && !email.includes('.sec2') && password === 'UMForeman@2026') {
-        password = 'Foreman@123';
-      }
-
-      // 1. Direct Supabase authentication with the user's real credentials
-      let res = await supabase.auth.signInWithPassword({ email, password });
-
-      // Fallback for Section 2 users if old role-specific password was entered
-      if (res.error && email.includes('.sec2')) {
-        const fallbackRes = await supabase.auth.signInWithPassword({ email, password: 'Sec2User@123' });
-        if (!fallbackRes.error) res = fallbackRes;
-      }
-
-      // Fallback for Section 5 foreman if password was entered differently
-      if (res.error && email.startsWith('foreman.') && !email.includes('.sec2') && password !== 'Foreman@123') {
-        const fallbackRes = await supabase.auth.signInWithPassword({ email, password: 'Foreman@123' });
-        if (!fallbackRes.error) res = fallbackRes;
-      }
+      // Direct Supabase authentication with the exact credentials entered
+      const res = await supabase.auth.signInWithPassword({ email, password });
 
       if (res.error) {
         return { error: res.error.message };
