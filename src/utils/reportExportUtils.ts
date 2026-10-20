@@ -556,6 +556,7 @@ export const exportServiceLogsToCSV = (
     '',
     '',
     '',
+    '',
     'OVERALL EFFICIENCY',
     '',
     '',
@@ -584,6 +585,7 @@ export const exportServiceLogsToCSV = (
     'Vehicle Reg No',
     'Vehicle Type',
     'Assigned Advisor',
+    'Assigned Technician',
     'Status',
     'Current Station',
     'Booking',
@@ -647,7 +649,7 @@ export const exportServiceLogsToCSV = (
     let hsFirstIn: string | null = null;
     let hsIdle = 0, hsActive = 0, hsBreak = 0;
     let completedTasksStr = '';
-    let techName = v.technician_name || '-';
+    let techName = v.technician_name || (v.assigned_tech && v.assigned_tech !== 'Workshop' && v.assigned_tech !== 'Unassigned' ? v.assigned_tech : null) || '-';
     let assignedLead = v.assigned_tech || 'Unassigned';
     let remarks = v.remarks || '';
 
@@ -766,11 +768,13 @@ export const exportServiceLogsToCSV = (
 
     const vehicleTypeStr = v.vehicle_type ? String(v.vehicle_type).toUpperCase() : '-';
     const advisorStr = v.assigned_advisor || 'Unassigned';
+    const techStr = techName !== '-' ? techName : 'Unassigned';
 
     const row = [
       escapeCSV(vehicleNo),
       escapeCSV(vehicleTypeStr),
       escapeCSV(advisorStr),
+      escapeCSV(techStr),
       escapeCSV(statusLabel),
       escapeCSV(stationLabel),
       escapeCSV(isBookingStr),
@@ -893,7 +897,7 @@ export const exportServiceLogsToPDF = (
     let hsFirstIn: string | null = null;
     let hsIdle = 0, hsActive = 0, hsBreak = 0;
     let taskProgressStr = '';
-    let techName = v.technician_name || null;
+    let techName = v.technician_name || (v.assigned_tech && v.assigned_tech !== 'Workshop' && v.assigned_tech !== 'Unassigned' ? v.assigned_tech : null) || null;
     let remarks = v.remarks ? String(v.remarks).trim() : '';
     let isUrgent = false;
     let urgentNote: string | null = null;
@@ -1072,6 +1076,9 @@ export const exportServiceLogsToPDF = (
         </td>
         <td style="padding: 8px 8px; font-size: 10px; font-weight: 700; color: #0284c7; border-bottom: 1px solid #e2e8f0;">
           ${v.assigned_advisor ? v.assigned_advisor : '<span style="color: #94a3b8; font-weight: 400;">Unassigned</span>'}
+        </td>
+        <td style="padding: 8px 8px; font-size: 10px; font-weight: 600; color: #475569; border-bottom: 1px solid #e2e8f0;">
+          ${techName ? techName : '<span style="color: #94a3b8; font-weight: 400;">Unassigned</span>'}
         </td>
         <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0;">
           <span style="display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: 800; background: ${statusBg}; color: ${statusColor};">
@@ -1312,7 +1319,7 @@ export const exportServiceLogsToPDF = (
         <table class="table-container">
           <thead style="display: table-header-group;">
             <tr class="running-batch-header" style="background: #0284c7; color: #ffffff;">
-              <th colspan="26" style="padding: 5px 10px; text-align: left; font-size: 9px; font-weight: 700; border: none; letter-spacing: 0.3px;">
+              <th colspan="27" style="padding: 5px 10px; text-align: left; font-size: 9px; font-weight: 700; border: none; letter-spacing: 0.3px;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                   <span>UNITED MOTORS LANKA PLC — SERVICE AUDIT REPORT</span>
                   <span style="font-family: monospace; font-size: 8.5px; font-weight: 800; background: rgba(255,255,255,0.25); padding: 2px 8px; border-radius: 4px;">
@@ -1325,6 +1332,7 @@ export const exportServiceLogsToPDF = (
               <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Vehicle No</th>
               <th rowspan="2" style="padding: 8px 6px; text-align: center; border-right: 1px solid #334155;">Type</th>
               <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Advisor</th>
+              <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Assignee</th>
               <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Status</th>
               <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Date</th>
               <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Intake</th>

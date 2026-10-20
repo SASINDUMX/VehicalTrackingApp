@@ -81,6 +81,9 @@ export const ReportsTableView: React.FC<ReportsTableViewProps> = ({
               <Text style={[styles.thCell, styles.colAdvisor, { color: colors.textSecondary }]}>
                 ADVISOR
               </Text>
+              <Text style={[styles.thCell, styles.colAssignee, { color: colors.textSecondary }]}>
+                ASSIGNEE
+              </Text>
               <Text style={[styles.thCell, styles.colStatus, { color: colors.textSecondary }]}>
                 STATUS
               </Text>
@@ -168,6 +171,7 @@ export const ReportsTableView: React.FC<ReportsTableViewProps> = ({
               <View style={styles.colPlate} />
               <View style={styles.colType} />
               <View style={styles.colAdvisor} />
+              <View style={styles.colAssignee} />
               <View style={styles.colStatus} />
               {isMultiDate && <View style={styles.colDate} />}
               <View style={styles.colTime} />
@@ -433,6 +437,16 @@ export const ReportsTableView: React.FC<ReportsTableViewProps> = ({
                     numberOfLines={1}
                   >
                     {v.assigned_advisor || '-'}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.tdText,
+                      styles.colAssignee,
+                      { color: colors.textSecondary, fontWeight: '600' },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {v.technician_name || (v.assigned_tech && v.assigned_tech !== 'Workshop' && v.assigned_tech !== 'Unassigned' ? v.assigned_tech : null) || '-'}
                   </Text>
                   <View style={[styles.tdCell, styles.colStatus]}>
                     <StatusPill
@@ -771,6 +785,7 @@ const styles = StyleSheet.create({
   colPlate: { width: 130 },
   colType: { width: 65, textAlign: 'center' },
   colAdvisor: { width: 110 },
+  colAssignee: { width: 110 },
   colStatus: { width: 100 },
   colDate: { width: 72 },
   colTime: { width: 95 },
