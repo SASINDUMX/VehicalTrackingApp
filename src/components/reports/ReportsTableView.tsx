@@ -82,7 +82,7 @@ export const ReportsTableView: React.FC<ReportsTableViewProps> = ({
                 ADVISOR
               </Text>
               <Text style={[styles.thCell, styles.colAssignee, { color: colors.textSecondary }]}>
-                ASSIGNEE
+                TECHNICIAN
               </Text>
               <Text style={[styles.thCell, styles.colStatus, { color: colors.textSecondary }]}>
                 STATUS
