@@ -577,7 +577,6 @@ export const exportServiceLogsToCSV = (
     'AUDIT DETAILS',
     '',
     '',
-    '',
   ];
 
   // Row 2: Sub-headers (Metric Columns)
@@ -615,7 +614,6 @@ export const exportServiceLogsToCSV = (
     'Active',
     'Breaks',
     'Tasks Completed',
-    'Mechanic Name',
     'Assigned Lead',
     'Remarks / Notes',
   ];
@@ -805,7 +803,6 @@ export const exportServiceLogsToCSV = (
       escapeCSV(hsBreak > 0 ? formatDuration(hsBreak) : '-'),
       // Audit Details
       escapeCSV(completedTasksStr || 'None'),
-      escapeCSV(techName),
       escapeCSV(assignedLead),
       escapeCSV(remarks),
     ];
@@ -1331,7 +1328,7 @@ export const exportServiceLogsToPDF = (
               <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Vehicle No</th>
               <th rowspan="2" style="padding: 8px 6px; text-align: center; border-right: 1px solid #334155;">Type</th>
               <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Advisor</th>
-              <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Assignee</th>
+              <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Technician</th>
               <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Status</th>
               <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Date</th>
               <th rowspan="2" style="padding: 8px 6px; text-align: left; border-right: 1px solid #334155;">Intake</th>
