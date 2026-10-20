@@ -35,7 +35,7 @@ export const TrialExpiredScreen: React.FC = () => {
     const text = encodeURIComponent(
       `Hello United Motors Team, our trial evaluation period for "${activeBranchName}" has concluded. We would like to upgrade to a permanent workshop license.`
     );
-    const url = `https://wa.me/94770000000?text=${text}`;
+    const url = `https://wa.me/94757656427?text=${text}`;
     if (Platform.OS === 'web') {
       window.open(url, '_blank');
     } else {
@@ -48,7 +48,7 @@ export const TrialExpiredScreen: React.FC = () => {
     const body = encodeURIComponent(
       `Hello United Motors Team,\n\nOur evaluation trial has concluded at branch "${activeBranchName}" (${activeBranchCode}).\nPlease contact us with commercial license and deployment details.\n\nThank you.`
     );
-    const url = `mailto:info@unitedmotors.com?subject=${subject}&body=${body}`;
+    const url = `mailto:mxsasindushalika@gmail.com?subject=${subject}&body=${body}`;
     if (Platform.OS === 'web') {
       window.open(url, '_blank');
     } else {
