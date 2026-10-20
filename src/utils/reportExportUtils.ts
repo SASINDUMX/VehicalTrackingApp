@@ -1069,7 +1069,6 @@ export const exportServiceLogsToPDF = (
         <td style="padding: 8px 10px; font-weight: 700; font-family: monospace; font-size: 13px; color: #0f172a; border-bottom: 1px solid #e2e8f0;">
           <div>${vehicleNo}</div>
           <div>${bookingBadge}${extraRepairsBadge}</div>
-          ${techName ? `<div style="font-size: 9px; color: #0284c7; font-weight: 600; margin-top: 2px;">🔧 ${techName}</div>` : ''}
         </td>
         <td style="padding: 8px 6px; text-align: center; border-bottom: 1px solid #e2e8f0;">
           ${v.vehicle_type ? `<span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 8.5px; font-weight: 800; background: #e2e8f0; color: #1e293b; text-transform: uppercase;">${v.vehicle_type}</span>` : '<span style="color: #94a3b8; font-size: 10px;">-</span>'}
