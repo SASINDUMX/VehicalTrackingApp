@@ -973,10 +973,13 @@ export const vehicleService = {
       if (activeLogId && !activeLogId.startsWith('log-')) {
         const entered = enteredAt ? new Date(enteredAt).getTime() : new Date(now).getTime();
         const duration = Math.max(0, Math.floor((new Date(now).getTime() - entered) / 1000));
-        const idle = workStartedAt
+        const isNonWorkingBay = fromZone === 'waiting' || fromZone === 'inspection';
+        const idle = isNonWorkingBay
+          ? 0
+          : workStartedAt
           ? (existingIdleSec ?? Math.max(0, Math.floor((new Date(workStartedAt).getTime() - entered) / 1000)))
           : duration;
-        const active = workStartedAt ? Math.max(0, duration - idle) : 0;
+        const active = !isNonWorkingBay && workStartedAt ? Math.max(0, duration - idle) : 0;
         const { breakSeconds } = getBreakOverlap(new Date(entered), new Date(now));
 
         const { error: updateErr } = await client
@@ -1004,10 +1007,13 @@ export const vehicleService = {
           const activeLog = dbLogs[0];
           const entered = new Date(activeLog.entered_at).getTime();
           const duration = Math.max(0, Math.floor((new Date(now).getTime() - entered) / 1000));
-          const idle = activeLog.work_started_at
+          const isNonWorkingBay = fromZone === 'waiting' || fromZone === 'inspection';
+          const idle = isNonWorkingBay
+            ? 0
+            : activeLog.work_started_at
             ? (existingIdleSec ?? activeLog.idle_seconds ?? Math.max(0, Math.floor((new Date(activeLog.work_started_at).getTime() - entered) / 1000)))
             : duration;
-          const active = activeLog.work_started_at ? Math.max(0, duration - idle) : 0;
+          const active = !isNonWorkingBay && activeLog.work_started_at ? Math.max(0, duration - idle) : 0;
           const { breakSeconds } = getBreakOverlap(new Date(entered), new Date(now));
           const { error: updateActiveErr } = await client
             .from('stage_logs')
@@ -1161,9 +1167,8 @@ export const vehicleService = {
       if (activeLogId && !activeLogId.startsWith('log-')) {
         const entered = enteredAt ? new Date(enteredAt).getTime() : new Date(now).getTime();
         const duration = Math.max(0, Math.floor((new Date(now).getTime() - entered) / 1000));
-        const idle = workStartedAt
-          ? (existingIdleSec || Math.max(0, Math.floor((new Date(workStartedAt).getTime() - entered) / 1000)))
-          : duration;
+        // Inspection zone is handover staging, never bay idle
+        const idle = 0;
         const { breakSeconds } = getBreakOverlap(new Date(entered), new Date(now));
         const { error: updateErr } = await client
           .from('stage_logs')
@@ -1183,9 +1188,8 @@ export const vehicleService = {
           const activeLog = dbLogs[0];
           const entered = new Date(activeLog.entered_at).getTime();
           const duration = Math.max(0, Math.floor((new Date(now).getTime() - entered) / 1000));
-          const idle = activeLog.work_started_at
-            ? (activeLog.idle_seconds || Math.max(0, Math.floor((new Date(activeLog.work_started_at).getTime() - entered) / 1000)))
-            : duration;
+          // Inspection zone is handover staging, never bay idle
+          const idle = 0;
           const { breakSeconds } = getBreakOverlap(new Date(entered), new Date(now));
           const { error: updateActiveErr } = await client
             .from('stage_logs')

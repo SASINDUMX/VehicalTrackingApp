@@ -960,7 +960,11 @@ BEGIN
   IF v_old_log_id IS NOT NULL THEN
     v_duration := GREATEST(0, EXTRACT(EPOCH FROM (v_now - v_old_entered))::INT);
     v_break := public.calculate_break_overlap_seconds(v_old_entered, v_now);
-    IF v_old_started IS NOT NULL THEN
+    -- If transferring out of waiting yard or inspection area, bay idle/active is strictly 0
+    IF v_old_zone IN ('waiting', 'inspection') THEN
+      v_idle := 0;
+      v_active := 0;
+    ELSIF v_old_started IS NOT NULL THEN
       IF v_old_completed IS NOT NULL THEN
         v_active := GREATEST(0, EXTRACT(EPOCH FROM (v_old_completed - v_old_started))::INT);
         v_idle := GREATEST(0, v_duration - v_active);
@@ -1054,7 +1058,7 @@ BEGIN
     UPDATE public.stage_logs
     SET exited_at = v_now,
         duration_seconds = v_duration,
-        idle_seconds = v_duration,
+        idle_seconds = 0,
         break_seconds = v_break,
         is_dispatched = TRUE
     WHERE id = v_old_log_id;
